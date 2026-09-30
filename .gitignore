@@ -1,3 +1,8 @@
 # Godot 4+ specific ignores
 .godot/
 /android/
+# Saidas do GERAR_APK_PRO_ULTRA.bat
+/build/
+/APK-Pronto/
+*.apk
+*.idsig

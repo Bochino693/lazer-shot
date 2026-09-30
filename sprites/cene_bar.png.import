@@ -3,19 +3,21 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://8dsjgtb6i6y4"
-path="res://.godot/imported/cene_bar.png-36f417c5ce5a499d3758d8b46c70d6b9.ctex"
+path.s3tc="res://.godot/imported/cene_bar.png-36f417c5ce5a499d3758d8b46c70d6b9.s3tc.ctex"
+path.etc2="res://.godot/imported/cene_bar.png-36f417c5ce5a499d3758d8b46c70d6b9.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 
 [deps]
 
 source_file="res://sprites/cene_bar.png"
-dest_files=["res://.godot/imported/cene_bar.png-36f417c5ce5a499d3758d8b46c70d6b9.ctex"]
+dest_files=["res://.godot/imported/cene_bar.png-36f417c5ce5a499d3758d8b46c70d6b9.s3tc.ctex", "res://.godot/imported/cene_bar.png-36f417c5ce5a499d3758d8b46c70d6b9.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

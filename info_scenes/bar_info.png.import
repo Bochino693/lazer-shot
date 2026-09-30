@@ -3,19 +3,21 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://c8xan878e47d8"
-path="res://.godot/imported/bar_info.png-f4d326c8a23603a3d530af5eed6cc08b.ctex"
+path.s3tc="res://.godot/imported/bar_info.png-f4d326c8a23603a3d530af5eed6cc08b.s3tc.ctex"
+path.etc2="res://.godot/imported/bar_info.png-f4d326c8a23603a3d530af5eed6cc08b.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 
 [deps]
 
 source_file="res://info_scenes/bar_info.png"
-dest_files=["res://.godot/imported/bar_info.png-f4d326c8a23603a3d530af5eed6cc08b.ctex"]
+dest_files=["res://.godot/imported/bar_info.png-f4d326c8a23603a3d530af5eed6cc08b.s3tc.ctex", "res://.godot/imported/bar_info.png-f4d326c8a23603a3d530af5eed6cc08b.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

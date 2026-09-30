@@ -3,19 +3,21 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://faclb2bma8xn"
-path="res://.godot/imported/sprites_vaso.png-cc1ad3bc97adfc2ff1e2d84db61758a4.ctex"
+path.s3tc="res://.godot/imported/sprites_vaso.png-cc1ad3bc97adfc2ff1e2d84db61758a4.s3tc.ctex"
+path.etc2="res://.godot/imported/sprites_vaso.png-cc1ad3bc97adfc2ff1e2d84db61758a4.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 
 [deps]
 
 source_file="res://sprites/sprites_vaso.png"
-dest_files=["res://.godot/imported/sprites_vaso.png-cc1ad3bc97adfc2ff1e2d84db61758a4.ctex"]
+dest_files=["res://.godot/imported/sprites_vaso.png-cc1ad3bc97adfc2ff1e2d84db61758a4.s3tc.ctex", "res://.godot/imported/sprites_vaso.png-cc1ad3bc97adfc2ff1e2d84db61758a4.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

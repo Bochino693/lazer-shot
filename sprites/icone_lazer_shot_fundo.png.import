@@ -2,22 +2,20 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dr6vxolh26n0e"
-path.s3tc="res://.godot/imported/back_new.png-619f0df1ea712a0d388bf52cb5ec87bb.s3tc.ctex"
-path.etc2="res://.godot/imported/back_new.png-619f0df1ea712a0d388bf52cb5ec87bb.etc2.ctex"
+uid="uid://b7hnk4kbwtict"
+path="res://.godot/imported/icone_lazer_shot_fundo.png-3f5982d8059d517d2057c17b3ed847a3.ctex"
 metadata={
-"imported_formats": ["s3tc_bptc", "etc2_astc"],
-"vram_texture": true
+"vram_texture": false
 }
 
 [deps]
 
-source_file="res://sprites/back_new.png"
-dest_files=["res://.godot/imported/back_new.png-619f0df1ea712a0d388bf52cb5ec87bb.s3tc.ctex", "res://.godot/imported/back_new.png-619f0df1ea712a0d388bf52cb5ec87bb.etc2.ctex"]
+source_file="res://sprites/icone_lazer_shot_fundo.png"
+dest_files=["res://.godot/imported/icone_lazer_shot_fundo.png-3f5982d8059d517d2057c17b3ed847a3.ctex"]
 
 [params]
 
-compress/mode=2
+compress/mode=0
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

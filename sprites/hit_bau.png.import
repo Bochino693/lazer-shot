@@ -3,19 +3,21 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://sqo0psejhs7b"
-path="res://.godot/imported/hit_bau.png-dd507f9770df693b2fbb692345be6f78.ctex"
+path.s3tc="res://.godot/imported/hit_bau.png-dd507f9770df693b2fbb692345be6f78.s3tc.ctex"
+path.etc2="res://.godot/imported/hit_bau.png-dd507f9770df693b2fbb692345be6f78.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 
 [deps]
 
 source_file="res://sprites/hit_bau.png"
-dest_files=["res://.godot/imported/hit_bau.png-dd507f9770df693b2fbb692345be6f78.ctex"]
+dest_files=["res://.godot/imported/hit_bau.png-dd507f9770df693b2fbb692345be6f78.s3tc.ctex", "res://.godot/imported/hit_bau.png-dd507f9770df693b2fbb692345be6f78.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

@@ -7,7 +7,7 @@ const CENA_CENARIO_4: String = "res://scenes/arena.tscn"
 const CENA_RANKING: String = "res://scenes/ranking.tscn"
 
 const CAMINHO_SOM_TIRO: String = "res://songs/tiro-de-pistola.mp3"
-const CAMINHO_THEME: String = "res://songs/theme.wav"
+const CAMINHO_THEME: String = "res://songs/theme.ogg"
 const CAMINHO_SOM_CHOICE: String = "res://songs/choice.mp3"
 const ACAO_TIRO_MENU: String = "input_shot"
 
@@ -326,15 +326,15 @@ func _aplicar_fonte_label(
 		return
 
 	if fonte_google != null:
-		lbl.add_theme_font_override("font", fonte_google)
+		Leve.font(lbl, "font", fonte_google)
 
-	lbl.add_theme_font_size_override("font_size", tamanho)
-	lbl.add_theme_color_override("font_color", cor)
-	lbl.add_theme_color_override("font_outline_color", Color.BLACK)
-	lbl.add_theme_constant_override("outline_size", outline)
-	lbl.add_theme_color_override("font_shadow_color", Color(1.0, 0.0, 0.0, 0.65))
-	lbl.add_theme_constant_override("shadow_offset_x", 0)
-	lbl.add_theme_constant_override("shadow_offset_y", 0)
+	Leve.font_size(lbl, "font_size", tamanho)
+	Leve.color(lbl, "font_color", cor)
+	Leve.color(lbl, "font_outline_color", Color.BLACK)
+	Leve.constant(lbl, "outline_size", outline)
+	Leve.color(lbl, "font_shadow_color", Color(1.0, 0.0, 0.0, 0.65))
+	Leve.constant(lbl, "shadow_offset_x", 0)
+	Leve.constant(lbl, "shadow_offset_y", 0)
 
 
 func _aplicar_fonte_botao(
@@ -346,14 +346,14 @@ func _aplicar_fonte_botao(
 		return
 
 	if fonte_google != null:
-		btn.add_theme_font_override("font", fonte_google)
+		Leve.font(btn, "font", fonte_google)
 
-	btn.add_theme_font_size_override("font_size", tamanho)
-	btn.add_theme_color_override("font_color", cor)
-	btn.add_theme_color_override("font_hover_color", Color.WHITE)
-	btn.add_theme_color_override("font_pressed_color", Color.WHITE)
-	btn.add_theme_color_override("font_outline_color", Color.BLACK)
-	btn.add_theme_constant_override("outline_size", 7)
+	Leve.font_size(btn, "font_size", tamanho)
+	Leve.color(btn, "font_color", cor)
+	Leve.color(btn, "font_hover_color", Color.WHITE)
+	Leve.color(btn, "font_pressed_color", Color.WHITE)
+	Leve.color(btn, "font_outline_color", Color.BLACK)
+	Leve.constant(btn, "outline_size", 7)
 
 
 func _aplicar_sensibilidade_menu() -> void:
@@ -399,7 +399,7 @@ func _process(delta: float) -> void:
 			# Ao entrar no modal, teleporta o cursor OS para onde a mira já está.
 			# Sem isso o cursor reaparece no último ponto do sistema e o hover
 			# dos botões fica deslocado em relação à mira desenhada.
-			get_viewport().warp_mouse(alvo_pos)
+			Tela.warp_mouse(alvo_pos)
 	else:
 		if Input.get_mouse_mode() != Input.MOUSE_MODE_CAPTURED:
 			Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
@@ -412,7 +412,7 @@ func _process(delta: float) -> void:
 	# precisamos corrigir aqui para manter mira e hover perfeitamente alinhados.
 	if modal_sens_ativo:
 		var tela := get_viewport_rect().size
-		alvo_pos = get_viewport().get_mouse_position()
+		alvo_pos = Tela.mouse()
 		alvo_pos.x = clampf(alvo_pos.x, 0.0, tela.x)
 		alvo_pos.y = clampf(alvo_pos.y, 0.0, tela.y)
  
@@ -863,8 +863,8 @@ func _configurar_layout() -> void:
 		floor((altura_tela - altura_total_grid) * 0.5 + 105.0)
 	)
 	grid.size = Vector2(ceil(largura_total_grid), ceil(altura_total_grid))
-	grid.add_theme_constant_override("h_separation", int(espacamento_h))
-	grid.add_theme_constant_override("v_separation", int(espacamento_v))
+	Leve.constant(grid, "h_separation", int(espacamento_h))
+	Leve.constant(grid, "v_separation", int(espacamento_v))
 
 	botao_ranking.position = Vector2(
 		floor(largura_tela * 0.5 - 370.0),
@@ -988,7 +988,7 @@ func _configurar_imagens_e_estrelas() -> void:
 		molde.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		molde.position = Vector2.ZERO
 		molde.size = Vector2(larg, alt)
-		molde.add_theme_stylebox_override("panel", molde_estilo)
+		Leve.stylebox(molde, "panel", molde_estilo)
 		card.add_child(molde)
 
 		var faixa_estilo := StyleBoxFlat.new()
@@ -1009,32 +1009,32 @@ func _configurar_imagens_e_estrelas() -> void:
 		var faixa := Panel.new()
 		faixa.name = "FaixaEstrelas" + str(i + 1)
 		faixa.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		faixa.add_theme_stylebox_override("panel", faixa_estilo)
+		Leve.stylebox(faixa, "panel", faixa_estilo)
 		card.add_child(faixa)
 
 		var hbox := HBoxContainer.new()
 		hbox.name = "Estrelas" + str(i + 1)
 		hbox.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		hbox.alignment = BoxContainer.ALIGNMENT_CENTER
-		hbox.add_theme_constant_override("separation", 3)
+		Leve.constant(hbox, "separation", 3)
 
 		for s in range(3):
 			var lbl := Label.new()
 			lbl.text = "★"
 			lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			lbl.add_theme_font_size_override("font_size", 30)
-			lbl.add_theme_color_override("font_outline_color", Color.BLACK)
-			lbl.add_theme_constant_override("outline_size", 6)
+			Leve.font_size(lbl, "font_size", 30)
+			Leve.color(lbl, "font_outline_color", Color.BLACK)
+			Leve.constant(lbl, "outline_size", 6)
 
 			if s < DIFICULDADES[i]:
-				lbl.add_theme_color_override("font_color", cor_card)
-				lbl.add_theme_color_override("font_shadow_color", Color(cor_card.r, cor_card.g, cor_card.b, 0.95))
+				Leve.color(lbl, "font_color", cor_card)
+				Leve.color(lbl, "font_shadow_color", Color(cor_card.r, cor_card.g, cor_card.b, 0.95))
 			else:
-				lbl.add_theme_color_override("font_color", Color(0.28, 0.28, 0.28, 0.86))
-				lbl.add_theme_color_override("font_shadow_color", Color.BLACK)
+				Leve.color(lbl, "font_color", Color(0.28, 0.28, 0.28, 0.86))
+				Leve.color(lbl, "font_shadow_color", Color.BLACK)
 
-			lbl.add_theme_constant_override("shadow_offset_x", 0)
-			lbl.add_theme_constant_override("shadow_offset_y", 0)
+			Leve.constant(lbl, "shadow_offset_x", 0)
+			Leve.constant(lbl, "shadow_offset_y", 0)
 			hbox.add_child(lbl)
 
 		card.add_child(hbox)
@@ -1118,13 +1118,13 @@ func _configurar_textos() -> void:
 		nome.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		nome.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		nome.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		nome.add_theme_font_size_override("font_size", 25)
-		nome.add_theme_color_override("font_color", Color(1.0, 1.0, 1.0, 1.0))
-		nome.add_theme_color_override("font_outline_color", Color(0.0, 0.0, 0.0, 1.0))
-		nome.add_theme_constant_override("outline_size", 8)
-		nome.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.95))
-		nome.add_theme_constant_override("shadow_offset_x", 2)
-		nome.add_theme_constant_override("shadow_offset_y", 2)
+		Leve.font_size(nome, "font_size", 25)
+		Leve.color(nome, "font_color", Color(1.0, 1.0, 1.0, 1.0))
+		Leve.color(nome, "font_outline_color", Color(0.0, 0.0, 0.0, 1.0))
+		Leve.constant(nome, "outline_size", 8)
+		Leve.color(nome, "font_shadow_color", Color(0.0, 0.0, 0.0, 0.95))
+		Leve.constant(nome, "shadow_offset_x", 2)
+		Leve.constant(nome, "shadow_offset_y", 2)
 
 
 func _configurar_botao_ranking() -> void:
@@ -1163,15 +1163,15 @@ func _configurar_botao_ranking() -> void:
 	botao_ranking.mouse_filter = Control.MOUSE_FILTER_STOP
 	botao_ranking.text = "🏆 RANKING"
 	botao_ranking.modulate = Color.WHITE
-	botao_ranking.add_theme_color_override("font_color", Color.WHITE)
-	botao_ranking.add_theme_color_override("font_hover_color", Color.WHITE)
-	botao_ranking.add_theme_color_override("font_pressed_color", Color.WHITE)
-	botao_ranking.add_theme_color_override("font_outline_color", Color.BLACK)
-	botao_ranking.add_theme_font_size_override("font_size", 42)
-	botao_ranking.add_theme_constant_override("outline_size", 6)
-	botao_ranking.add_theme_stylebox_override("normal", estilo_ranking_normal)
-	botao_ranking.add_theme_stylebox_override("hover", estilo_ranking_hover)
-	botao_ranking.add_theme_stylebox_override("pressed", estilo_ranking_hover)
+	Leve.color(botao_ranking, "font_color", Color.WHITE)
+	Leve.color(botao_ranking, "font_hover_color", Color.WHITE)
+	Leve.color(botao_ranking, "font_pressed_color", Color.WHITE)
+	Leve.color(botao_ranking, "font_outline_color", Color.BLACK)
+	Leve.font_size(botao_ranking, "font_size", 42)
+	Leve.constant(botao_ranking, "outline_size", 6)
+	Leve.stylebox(botao_ranking, "normal", estilo_ranking_normal)
+	Leve.stylebox(botao_ranking, "hover", estilo_ranking_hover)
+	Leve.stylebox(botao_ranking, "pressed", estilo_ranking_hover)
 
 	if not botao_ranking.mouse_entered.is_connected(_on_hover_ranking):
 		botao_ranking.mouse_entered.connect(_on_hover_ranking)
@@ -1247,15 +1247,15 @@ func _criar_botao_sensibilidade() -> void:
 	botao_sensibilidade.mouse_filter = Control.MOUSE_FILTER_STOP
 
 	botao_sensibilidade.text = "⚙ MIRA"
-	botao_sensibilidade.add_theme_color_override("font_color", Color.WHITE)
-	botao_sensibilidade.add_theme_color_override("font_hover_color", Color.WHITE)
-	botao_sensibilidade.add_theme_color_override("font_pressed_color", Color.WHITE)
-	botao_sensibilidade.add_theme_color_override("font_outline_color", Color.BLACK)
-	botao_sensibilidade.add_theme_font_size_override("font_size", 32)
-	botao_sensibilidade.add_theme_constant_override("outline_size", 6)
-	botao_sensibilidade.add_theme_stylebox_override("normal", estilo_botao_sens_normal)
-	botao_sensibilidade.add_theme_stylebox_override("hover", estilo_botao_sens_hover)
-	botao_sensibilidade.add_theme_stylebox_override("pressed", estilo_botao_sens_hover)
+	Leve.color(botao_sensibilidade, "font_color", Color.WHITE)
+	Leve.color(botao_sensibilidade, "font_hover_color", Color.WHITE)
+	Leve.color(botao_sensibilidade, "font_pressed_color", Color.WHITE)
+	Leve.color(botao_sensibilidade, "font_outline_color", Color.BLACK)
+	Leve.font_size(botao_sensibilidade, "font_size", 32)
+	Leve.constant(botao_sensibilidade, "outline_size", 6)
+	Leve.stylebox(botao_sensibilidade, "normal", estilo_botao_sens_normal)
+	Leve.stylebox(botao_sensibilidade, "hover", estilo_botao_sens_hover)
+	Leve.stylebox(botao_sensibilidade, "pressed", estilo_botao_sens_hover)
 
 	if not botao_sensibilidade.mouse_entered.is_connected(_on_hover_sensibilidade):
 		botao_sensibilidade.mouse_entered.connect(_on_hover_sensibilidade)
@@ -1317,7 +1317,7 @@ func _configurar_contador() -> void:
 	estilo.shadow_color = Color(1.0, 0.0, 0.08, 0.70)
 	estilo.shadow_size = 58
 	estilo.shadow_offset = Vector2.ZERO
-	contador_panel.add_theme_stylebox_override("panel", estilo)
+	Leve.stylebox(contador_panel, "panel", estilo)
 
 	if contador_linha == null:
 		contador_linha = ColorRect.new()
@@ -1377,11 +1377,11 @@ func _atualizar_contador() -> void:
 	var segundos: int = max(0, int(ceil(tempo_restante_auto)))
 	contador_label.text = str(segundos)
 	if segundos <= 5:
-		contador_label.add_theme_color_override("font_color", Color(1.0, 0.05, 0.05, 1.0))
+		Leve.color(contador_label, "font_color", Color(1.0, 0.05, 0.05, 1.0))
 		if contador_linha != null:
 			contador_linha.color = Color(1.0, 0.02, 0.02, 1.0)
 	else:
-		contador_label.add_theme_color_override("font_color", Color.WHITE)
+		Leve.color(contador_label, "font_color", Color.WHITE)
 		if contador_linha != null:
 			contador_linha.color = Color(1.0, 0.02, 0.02, 0.95)
 
@@ -1896,21 +1896,21 @@ func _modo_aleatorio_async() -> void:
 	for i in range(voltas):
 		indice_atual = randi() % cards.size()
 		for c in cards:
-			c.add_theme_stylebox_override("panel", estilo_card_normal)
+			Leve.stylebox(c, "panel", estilo_card_normal)
 			c.scale = Vector2.ONE
 		var card_atual: Panel = cards[indice_atual]
-		card_atual.add_theme_stylebox_override("panel", estilo_card_destaque)
+		Leve.stylebox(card_atual, "panel", estilo_card_destaque)
 		card_atual.scale = Vector2(1.04, 1.04)
 		_tocar_choice()
 		var espera: float = 0.055 + float(i) * 0.012
 		await get_tree().create_timer(espera).timeout
 
 	for c in cards:
-		c.add_theme_stylebox_override("panel", estilo_card_normal)
+		Leve.stylebox(c, "panel", estilo_card_normal)
 		c.scale = Vector2.ONE
 
 	var card_final: Panel = cards[indice_final]
-	card_final.add_theme_stylebox_override("panel", estilo_card_destaque)
+	Leve.stylebox(card_final, "panel", estilo_card_destaque)
 	card_final.scale = Vector2(1.08, 1.08)
 	_tocar_choice()
 	await get_tree().create_timer(0.35).timeout
@@ -2003,7 +2003,7 @@ func _criar_modal() -> void:
 	modal_panel = Panel.new()
 	modal_panel.name = "ModalPanel"
 	modal_panel.mouse_filter = Control.MOUSE_FILTER_STOP
-	modal_panel.add_theme_stylebox_override("panel", estilo_painel)
+	Leve.stylebox(modal_panel, "panel", estilo_painel)
 	modal_panel.position = Vector2(floor((vp_size.x - painel_w) * 0.5), floor((vp_size.y - painel_h) * 0.5))
 	modal_panel.size = Vector2(painel_w, painel_h)
 	modal_panel.pivot_offset = Vector2(painel_w * 0.5, painel_h * 0.5)
@@ -2015,13 +2015,13 @@ func _criar_modal() -> void:
 	modal_titulo_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	modal_titulo_label.position = Vector2(0.0, 26.0)
 	modal_titulo_label.size = Vector2(painel_w, 50.0)
-	modal_titulo_label.add_theme_font_size_override("font_size", 36)
-	modal_titulo_label.add_theme_color_override("font_color", Color(1.0, 0.94, 0.74))
-	modal_titulo_label.add_theme_color_override("font_outline_color", Color.BLACK)
-	modal_titulo_label.add_theme_constant_override("outline_size", 8)
-	modal_titulo_label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.9))
-	modal_titulo_label.add_theme_constant_override("shadow_offset_x", 3)
-	modal_titulo_label.add_theme_constant_override("shadow_offset_y", 3)
+	Leve.font_size(modal_titulo_label, "font_size", 36)
+	Leve.color(modal_titulo_label, "font_color", Color(1.0, 0.94, 0.74))
+	Leve.color(modal_titulo_label, "font_outline_color", Color.BLACK)
+	Leve.constant(modal_titulo_label, "outline_size", 8)
+	Leve.color(modal_titulo_label, "font_shadow_color", Color(0.0, 0.0, 0.0, 0.9))
+	Leve.constant(modal_titulo_label, "shadow_offset_x", 3)
+	Leve.constant(modal_titulo_label, "shadow_offset_y", 3)
 	modal_panel.add_child(modal_titulo_label)
 
 	modal_subtitulo = Label.new()
@@ -2030,10 +2030,10 @@ func _criar_modal() -> void:
 	modal_subtitulo.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	modal_subtitulo.position = Vector2(0.0, 76.0)
 	modal_subtitulo.size = Vector2(painel_w, 34.0)
-	modal_subtitulo.add_theme_font_size_override("font_size", 19)
-	modal_subtitulo.add_theme_color_override("font_color", Color(0.78, 0.78, 0.78, 1.0))
-	modal_subtitulo.add_theme_color_override("font_outline_color", Color.BLACK)
-	modal_subtitulo.add_theme_constant_override("outline_size", 5)
+	Leve.font_size(modal_subtitulo, "font_size", 19)
+	Leve.color(modal_subtitulo, "font_color", Color(0.78, 0.78, 0.78, 1.0))
+	Leve.color(modal_subtitulo, "font_outline_color", Color.BLACK)
+	Leve.constant(modal_subtitulo, "outline_size", 5)
 	modal_panel.add_child(modal_subtitulo)
 
 	var estilo_facil_normal := StyleBoxFlat.new()
@@ -2062,15 +2062,15 @@ func _criar_modal() -> void:
 	modal_botao_facil.position = Vector2(40.0, 130.0)
 	modal_botao_facil.size = Vector2(220.0, 90.0)
 	modal_botao_facil.pivot_offset = Vector2(110.0, 45.0)
-	modal_botao_facil.add_theme_font_size_override("font_size", 22)
-	modal_botao_facil.add_theme_color_override("font_color", Color(0.8, 1.0, 0.82))
-	modal_botao_facil.add_theme_color_override("font_hover_color", Color(1.0, 1.0, 1.0))
-	modal_botao_facil.add_theme_color_override("font_pressed_color", Color(1.0, 1.0, 1.0))
-	modal_botao_facil.add_theme_color_override("font_outline_color", Color.BLACK)
-	modal_botao_facil.add_theme_constant_override("outline_size", 4)
-	modal_botao_facil.add_theme_stylebox_override("normal", estilo_facil_normal)
-	modal_botao_facil.add_theme_stylebox_override("hover", estilo_facil_hover)
-	modal_botao_facil.add_theme_stylebox_override("pressed", estilo_facil_hover)
+	Leve.font_size(modal_botao_facil, "font_size", 22)
+	Leve.color(modal_botao_facil, "font_color", Color(0.8, 1.0, 0.82))
+	Leve.color(modal_botao_facil, "font_hover_color", Color(1.0, 1.0, 1.0))
+	Leve.color(modal_botao_facil, "font_pressed_color", Color(1.0, 1.0, 1.0))
+	Leve.color(modal_botao_facil, "font_outline_color", Color.BLACK)
+	Leve.constant(modal_botao_facil, "outline_size", 4)
+	Leve.stylebox(modal_botao_facil, "normal", estilo_facil_normal)
+	Leve.stylebox(modal_botao_facil, "hover", estilo_facil_hover)
+	Leve.stylebox(modal_botao_facil, "pressed", estilo_facil_hover)
 	modal_botao_facil.pressed.connect(_on_modal_escolheu_facil)
 	modal_panel.add_child(modal_botao_facil)
 
@@ -2100,15 +2100,15 @@ func _criar_modal() -> void:
 	modal_botao_dificil.position = Vector2(300.0, 130.0)
 	modal_botao_dificil.size = Vector2(220.0, 90.0)
 	modal_botao_dificil.pivot_offset = Vector2(110.0, 45.0)
-	modal_botao_dificil.add_theme_font_size_override("font_size", 22)
-	modal_botao_dificil.add_theme_color_override("font_color", Color(1.0, 0.78, 0.78))
-	modal_botao_dificil.add_theme_color_override("font_hover_color", Color(1.0, 1.0, 1.0))
-	modal_botao_dificil.add_theme_color_override("font_pressed_color", Color(1.0, 1.0, 1.0))
-	modal_botao_dificil.add_theme_color_override("font_outline_color", Color.BLACK)
-	modal_botao_dificil.add_theme_constant_override("outline_size", 4)
-	modal_botao_dificil.add_theme_stylebox_override("normal", estilo_dificil_normal)
-	modal_botao_dificil.add_theme_stylebox_override("hover", estilo_dificil_hover)
-	modal_botao_dificil.add_theme_stylebox_override("pressed", estilo_dificil_hover)
+	Leve.font_size(modal_botao_dificil, "font_size", 22)
+	Leve.color(modal_botao_dificil, "font_color", Color(1.0, 0.78, 0.78))
+	Leve.color(modal_botao_dificil, "font_hover_color", Color(1.0, 1.0, 1.0))
+	Leve.color(modal_botao_dificil, "font_pressed_color", Color(1.0, 1.0, 1.0))
+	Leve.color(modal_botao_dificil, "font_outline_color", Color.BLACK)
+	Leve.constant(modal_botao_dificil, "outline_size", 4)
+	Leve.stylebox(modal_botao_dificil, "normal", estilo_dificil_normal)
+	Leve.stylebox(modal_botao_dificil, "hover", estilo_dificil_hover)
+	Leve.stylebox(modal_botao_dificil, "pressed", estilo_dificil_hover)
 	modal_botao_dificil.pressed.connect(_on_modal_escolheu_dificil)
 	modal_panel.add_child(modal_botao_dificil)
 
@@ -2123,7 +2123,7 @@ func _criar_modal() -> void:
 	fundo_barra.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	fundo_barra.position = Vector2(40.0, 248.0)
 	fundo_barra.size = Vector2(480.0, 12.0)
-	fundo_barra.add_theme_stylebox_override("panel", estilo_fundo_barra)
+	Leve.stylebox(fundo_barra, "panel", estilo_fundo_barra)
 	modal_panel.add_child(fundo_barra)
 
 	modal_barra_progresso = ColorRect.new()
@@ -2140,10 +2140,10 @@ func _criar_modal() -> void:
 	modal_contador.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	modal_contador.position = Vector2(0.0, 268.0)
 	modal_contador.size = Vector2(painel_w, 44.0)
-	modal_contador.add_theme_font_size_override("font_size", 18)
-	modal_contador.add_theme_color_override("font_color", Color(0.72, 0.72, 0.72, 1.0))
-	modal_contador.add_theme_color_override("font_outline_color", Color.BLACK)
-	modal_contador.add_theme_constant_override("outline_size", 5)
+	Leve.font_size(modal_contador, "font_size", 18)
+	Leve.color(modal_contador, "font_color", Color(0.72, 0.72, 0.72, 1.0))
+	Leve.color(modal_contador, "font_outline_color", Color.BLACK)
+	Leve.constant(modal_contador, "outline_size", 5)
 	modal_panel.add_child(modal_contador)
 
 	_atualizar_modal_contador()
@@ -2170,10 +2170,10 @@ func _atualizar_modal_contador() -> void:
 	modal_barra_progresso.size.x = 480.0 * clamp(progresso, 0.0, 1.0)
 	if segundos <= 5:
 		modal_barra_progresso.color = Color(1.0, 0.3, 0.05, 1.0)
-		modal_contador.add_theme_color_override("font_color", Color(1.0, 0.4, 0.4, 1.0))
+		Leve.color(modal_contador, "font_color", Color(1.0, 0.4, 0.4, 1.0))
 	else:
 		modal_barra_progresso.color = Color(0.95, 0.06, 0.06, 1.0)
-		modal_contador.add_theme_color_override("font_color", Color(0.72, 0.72, 0.72, 1.0))
+		Leve.color(modal_contador, "font_color", Color(0.72, 0.72, 0.72, 1.0))
 
 
 func _fechar_modal_e_ir() -> void:
@@ -2230,7 +2230,7 @@ func _abrir_modal_sensibilidade() -> void:
 	# mouse livre, mas ponteiro invisível
 	Input.set_mouse_mode(Input.MOUSE_MODE_HIDDEN)
 
-	Input.warp_mouse(get_viewport_rect().size * 0.5)
+	Tela.warp_mouse(get_viewport_rect().size * 0.5)
 	alvo_pos = get_viewport_rect().size * 0.5
 
 	_criar_modal_sensibilidade()
@@ -2288,7 +2288,7 @@ func _criar_modal_sensibilidade() -> void:
 	modal_sens_panel = Panel.new()
 	modal_sens_panel.name = "ModalSensPanel"
 	modal_sens_panel.mouse_filter = Control.MOUSE_FILTER_STOP
-	modal_sens_panel.add_theme_stylebox_override("panel", estilo_painel)
+	Leve.stylebox(modal_sens_panel, "panel", estilo_painel)
 	modal_sens_panel.position = Vector2(floor((vp.x - pw) * 0.5), floor((vp.y - ph) * 0.5))
 	modal_sens_panel.size = Vector2(pw, ph)
 	modal_sens_panel.pivot_offset = Vector2(pw * 0.5, ph * 0.5)
@@ -2301,13 +2301,13 @@ func _criar_modal_sensibilidade() -> void:
 	titulo_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	titulo_lbl.position = Vector2(0.0, 22.0)
 	titulo_lbl.size = Vector2(pw, 50.0)
-	titulo_lbl.add_theme_font_size_override("font_size", 34)
-	titulo_lbl.add_theme_color_override("font_color", Color(1.0, 0.94, 0.74))
-	titulo_lbl.add_theme_color_override("font_outline_color", Color.BLACK)
-	titulo_lbl.add_theme_constant_override("outline_size", 8)
-	titulo_lbl.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.9))
-	titulo_lbl.add_theme_constant_override("shadow_offset_x", 3)
-	titulo_lbl.add_theme_constant_override("shadow_offset_y", 3)
+	Leve.font_size(titulo_lbl, "font_size", 34)
+	Leve.color(titulo_lbl, "font_color", Color(1.0, 0.94, 0.74))
+	Leve.color(titulo_lbl, "font_outline_color", Color.BLACK)
+	Leve.constant(titulo_lbl, "outline_size", 8)
+	Leve.color(titulo_lbl, "font_shadow_color", Color(0.0, 0.0, 0.0, 0.9))
+	Leve.constant(titulo_lbl, "shadow_offset_x", 3)
+	Leve.constant(titulo_lbl, "shadow_offset_y", 3)
 	modal_sens_panel.add_child(titulo_lbl)
 
 	# Divisor
@@ -2322,10 +2322,10 @@ func _criar_modal_sensibilidade() -> void:
 	lbl_xbox.text = "🎮  Controle (Xbox / Joystick)"
 	lbl_xbox.position = Vector2(32.0, 88.0)
 	lbl_xbox.size = Vector2(pw - 64.0, 30.0)
-	lbl_xbox.add_theme_font_size_override("font_size", 18)
-	lbl_xbox.add_theme_color_override("font_color", Color(0.85, 0.85, 0.85))
-	lbl_xbox.add_theme_color_override("font_outline_color", Color.BLACK)
-	lbl_xbox.add_theme_constant_override("outline_size", 5)
+	Leve.font_size(lbl_xbox, "font_size", 18)
+	Leve.color(lbl_xbox, "font_color", Color(0.85, 0.85, 0.85))
+	Leve.color(lbl_xbox, "font_outline_color", Color.BLACK)
+	Leve.constant(lbl_xbox, "outline_size", 5)
 	modal_sens_panel.add_child(lbl_xbox)
 
 	slider_xbox = _criar_slider(modal_sens_panel, Vector2(32.0, 122.0), pw - 180.0,
@@ -2347,10 +2347,10 @@ func _criar_modal_sensibilidade() -> void:
 	lbl_mouse.text = "🖱  Mouse"
 	lbl_mouse.position = Vector2(32.0, 186.0)
 	lbl_mouse.size = Vector2(pw - 64.0, 30.0)
-	lbl_mouse.add_theme_font_size_override("font_size", 18)
-	lbl_mouse.add_theme_color_override("font_color", Color(0.85, 0.85, 0.85))
-	lbl_mouse.add_theme_color_override("font_outline_color", Color.BLACK)
-	lbl_mouse.add_theme_constant_override("outline_size", 5)
+	Leve.font_size(lbl_mouse, "font_size", 18)
+	Leve.color(lbl_mouse, "font_color", Color(0.85, 0.85, 0.85))
+	Leve.color(lbl_mouse, "font_outline_color", Color.BLACK)
+	Leve.constant(lbl_mouse, "outline_size", 5)
 	modal_sens_panel.add_child(lbl_mouse)
 
 	var sens_mouse_atual: float = SENS_MOUSE_PADRAO
@@ -2372,10 +2372,10 @@ func _criar_modal_sensibilidade() -> void:
 	nota.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	nota.position = Vector2(0.0, 270.0)
 	nota.size = Vector2(pw, 28.0)
-	nota.add_theme_font_size_override("font_size", 14)
-	nota.add_theme_color_override("font_color", Color(0.55, 0.55, 0.55, 1.0))
-	nota.add_theme_color_override("font_outline_color", Color.BLACK)
-	nota.add_theme_constant_override("outline_size", 4)
+	Leve.font_size(nota, "font_size", 14)
+	Leve.color(nota, "font_color", Color(0.55, 0.55, 0.55, 1.0))
+	Leve.color(nota, "font_outline_color", Color.BLACK)
+	Leve.constant(nota, "outline_size", 4)
 	modal_sens_panel.add_child(nota)
 
 	# Botão Fechar
@@ -2401,15 +2401,15 @@ func _criar_modal_sensibilidade() -> void:
 	btn_fechar.position = Vector2(floor((pw - 220.0) * 0.5), 308.0)
 	btn_fechar.size = Vector2(220.0, 48.0)
 	btn_fechar.pivot_offset = Vector2(110.0, 24.0)
-	btn_fechar.add_theme_font_size_override("font_size", 22)
-	btn_fechar.add_theme_color_override("font_color", Color(1.0, 0.78, 0.78))
-	btn_fechar.add_theme_color_override("font_hover_color", Color.WHITE)
-	btn_fechar.add_theme_color_override("font_pressed_color", Color.WHITE)
-	btn_fechar.add_theme_color_override("font_outline_color", Color.BLACK)
-	btn_fechar.add_theme_constant_override("outline_size", 4)
-	btn_fechar.add_theme_stylebox_override("normal", estilo_fechar)
-	btn_fechar.add_theme_stylebox_override("hover", estilo_fechar_hover)
-	btn_fechar.add_theme_stylebox_override("pressed", estilo_fechar_hover)
+	Leve.font_size(btn_fechar, "font_size", 22)
+	Leve.color(btn_fechar, "font_color", Color(1.0, 0.78, 0.78))
+	Leve.color(btn_fechar, "font_hover_color", Color.WHITE)
+	Leve.color(btn_fechar, "font_pressed_color", Color.WHITE)
+	Leve.color(btn_fechar, "font_outline_color", Color.BLACK)
+	Leve.constant(btn_fechar, "outline_size", 4)
+	Leve.stylebox(btn_fechar, "normal", estilo_fechar)
+	Leve.stylebox(btn_fechar, "hover", estilo_fechar_hover)
+	Leve.stylebox(btn_fechar, "pressed", estilo_fechar_hover)
 	btn_fechar.pressed.connect(_fechar_modal_sensibilidade)
 	modal_sens_panel.add_child(btn_fechar)
 
@@ -2450,10 +2450,10 @@ func _criar_label_valor(pai: Control, pos: Vector2) -> Label:
 	lbl.size = Vector2(134.0, 40.0)
 	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	lbl.add_theme_font_size_override("font_size", 22)
-	lbl.add_theme_color_override("font_color", Color(1.0, 0.92, 0.72))
-	lbl.add_theme_color_override("font_outline_color", Color.BLACK)
-	lbl.add_theme_constant_override("outline_size", 6)
+	Leve.font_size(lbl, "font_size", 22)
+	Leve.color(lbl, "font_color", Color(1.0, 0.92, 0.72))
+	Leve.color(lbl, "font_outline_color", Color.BLACK)
+	Leve.constant(lbl, "outline_size", 6)
 	pai.add_child(lbl)
 	return lbl
 
@@ -2696,7 +2696,7 @@ func _aplicar_estilo_card_por_indice(card: Panel, indice: int, hover: bool = fal
 	estilo.shadow_size = 12
 	estilo.shadow_offset = Vector2(0, 6)
 
-	card.add_theme_stylebox_override("panel", estilo)
+	Leve.stylebox(card, "panel", estilo)
 
 
 func _evento_input_shot_menu(event: InputEvent) -> bool:
