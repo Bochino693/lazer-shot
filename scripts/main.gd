@@ -257,10 +257,10 @@ func _configurar_canvas() -> void:
 	pressione.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	pressione.text = "INSERT COIN"
 	pressione.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	pressione.add_theme_font_size_override("font_size", 34)
-	pressione.add_theme_color_override("font_color", Color(1, 1, 1, 1))
-	pressione.add_theme_color_override("font_outline_color", Color(0, 0, 0, 1))
-	pressione.add_theme_constant_override("outline_size", 5)
+	Leve.font_size(pressione, "font_size", 34)
+	Leve.color(pressione, "font_color", Color(1, 1, 1, 1))
+	Leve.color(pressione, "font_outline_color", Color(0, 0, 0, 1))
+	Leve.constant(pressione, "outline_size", 5)
 	pressione.modulate = Color(1, 1, 1, 0)
 	pressione.scale = Vector2(0.96, 0.96)
 
@@ -725,13 +725,12 @@ func _notification(what: int) -> void:
 #  MOUSE / MIRA
 # ─────────────────────────────────────────────
 func _ocultar_ponteiro_mouse() -> void:
-	Input.set_mouse_mode(Input.MOUSE_MODE_HIDDEN)
-
-	if DisplayServer.get_name() != "":
-		DisplayServer.mouse_set_mode(DisplayServer.MOUSE_MODE_HIDDEN)
+	# Chamada em todo quadro: só troca quando precisa (no Android cada troca
+	# passa pela ponte Java). Input e DisplayServer são o mesmo modo.
+	if Input.get_mouse_mode() != Input.MOUSE_MODE_HIDDEN:
+		Input.set_mouse_mode(Input.MOUSE_MODE_HIDDEN)
 
 
 
 func _mostrar_ponteiro_mouse() -> void:
 	Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
-	DisplayServer.mouse_set_mode(DisplayServer.MOUSE_MODE_VISIBLE)

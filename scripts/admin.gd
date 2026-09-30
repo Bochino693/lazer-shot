@@ -222,7 +222,7 @@ func _criar_interface() -> void:
 	estilo.corner_radius_top_right = 28
 	estilo.corner_radius_bottom_left = 28
 	estilo.corner_radius_bottom_right = 28
-	root_panel.add_theme_stylebox_override("panel", estilo)
+	Leve.stylebox(root_panel, "panel", estilo)
 
 	titulo = Label.new()
 	titulo.text = "ADMINISTRAÇÃO DO JOGO"
@@ -230,17 +230,17 @@ func _criar_interface() -> void:
 	titulo.size = Vector2(900, 70)
 	titulo.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	titulo.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	titulo.add_theme_font_size_override("font_size", 44)
-	titulo.add_theme_color_override("font_color", Color.WHITE)
-	titulo.add_theme_color_override("font_outline_color", Color(0.9, 0.0, 0.0))
-	titulo.add_theme_constant_override("outline_size", 7)
+	Leve.font_size(titulo, "font_size", 44)
+	Leve.color(titulo, "font_color", Color.WHITE)
+	Leve.color(titulo, "font_outline_color", Color(0.9, 0.0, 0.0))
+	Leve.constant(titulo, "outline_size", 7)
 	root_panel.add_child(titulo)
 
 	grid = GridContainer.new()
 	grid.columns = 1
 	grid.position = Vector2(60, 130)
 	grid.size = Vector2(860, 890)
-	grid.add_theme_constant_override("v_separation", 15)
+	Leve.constant(grid, "v_separation", 15)
 	root_panel.add_child(grid)
 
 	campo_tempo_partida = _add_linha_numero("TEMPO DA PARTIDA", tempo_partida, 30, 300, 10, func(v): tempo_partida = v)
@@ -278,8 +278,8 @@ func _criar_interface() -> void:
 	status_label.size = Vector2(860, 38)
 	status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	status_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	status_label.add_theme_font_size_override("font_size", 22)
-	status_label.add_theme_color_override("font_color", Color(0.25, 1.0, 0.45))
+	Leve.font_size(status_label, "font_size", 22)
+	Leve.color(status_label, "font_color", Color(0.25, 1.0, 0.45))
 	root_panel.add_child(status_label)
 
 	_criar_toast()
@@ -288,7 +288,7 @@ func _criar_interface() -> void:
 func _add_linha_numero(nome: String, valor: int, minimo: int, maximo: int, passo: int, callback: Callable) -> SpinBox:
 	var linha := HBoxContainer.new()
 	linha.custom_minimum_size = Vector2(860, 60)
-	linha.add_theme_constant_override("separation", 18)
+	Leve.constant(linha, "separation", 18)
 	grid.add_child(linha)
 
 	var lbl := _criar_label(nome)
@@ -300,7 +300,7 @@ func _add_linha_numero(nome: String, valor: int, minimo: int, maximo: int, passo
 	spin.step = passo
 	spin.value = valor
 	spin.custom_minimum_size = Vector2(210, 54)
-	spin.add_theme_font_size_override("font_size", 24)
+	Leve.font_size(spin, "font_size", 24)
 	spin.value_changed.connect(func(v): callback.call(int(v)))
 	linha.add_child(spin)
 
@@ -310,7 +310,7 @@ func _add_linha_numero(nome: String, valor: int, minimo: int, maximo: int, passo
 func _add_linha_float(nome: String, valor: float, minimo: float, maximo: float, passo: float, callback: Callable) -> SpinBox:
 	var linha := HBoxContainer.new()
 	linha.custom_minimum_size = Vector2(860, 60)
-	linha.add_theme_constant_override("separation", 18)
+	Leve.constant(linha, "separation", 18)
 	grid.add_child(linha)
 
 	var lbl := _criar_label(nome)
@@ -322,7 +322,7 @@ func _add_linha_float(nome: String, valor: float, minimo: float, maximo: float, 
 	spin.step = passo
 	spin.value = valor
 	spin.custom_minimum_size = Vector2(210, 54)
-	spin.add_theme_font_size_override("font_size", 24)
+	Leve.font_size(spin, "font_size", 24)
 	spin.value_changed.connect(func(v): callback.call(float(v)))
 	linha.add_child(spin)
 
@@ -332,7 +332,7 @@ func _add_linha_float(nome: String, valor: float, minimo: float, maximo: float, 
 func _add_linha_bool(nome: String, valor: bool, callback: Callable) -> CheckButton:
 	var linha := HBoxContainer.new()
 	linha.custom_minimum_size = Vector2(860, 60)
-	linha.add_theme_constant_override("separation", 18)
+	Leve.constant(linha, "separation", 18)
 	grid.add_child(linha)
 
 	var lbl := _criar_label(nome)
@@ -342,7 +342,7 @@ func _add_linha_bool(nome: String, valor: bool, callback: Callable) -> CheckButt
 	check.button_pressed = valor
 	check.text = "ATIVO"
 	check.custom_minimum_size = Vector2(210, 54)
-	check.add_theme_font_size_override("font_size", 24)
+	Leve.font_size(check, "font_size", 24)
 	check.toggled.connect(func(v): callback.call(v))
 	linha.add_child(check)
 
@@ -352,7 +352,7 @@ func _add_linha_bool(nome: String, valor: bool, callback: Callable) -> CheckButt
 func _add_linha_dificuldade() -> OptionButton:
 	var linha := HBoxContainer.new()
 	linha.custom_minimum_size = Vector2(860, 60)
-	linha.add_theme_constant_override("separation", 18)
+	Leve.constant(linha, "separation", 18)
 	grid.add_child(linha)
 
 	var lbl := _criar_label("DIFICULDADE PADRÃO")
@@ -360,7 +360,7 @@ func _add_linha_dificuldade() -> OptionButton:
 
 	var opt := OptionButton.new()
 	opt.custom_minimum_size = Vector2(210, 54)
-	opt.add_theme_font_size_override("font_size", 24)
+	Leve.font_size(opt, "font_size", 24)
 	opt.add_item("FÁCIL")
 	opt.add_item("DIFÍCIL")
 
@@ -378,7 +378,7 @@ func _add_linha_dificuldade() -> OptionButton:
 func _add_linha_idioma() -> OptionButton:
 	var linha := HBoxContainer.new()
 	linha.custom_minimum_size = Vector2(860, 60)
-	linha.add_theme_constant_override("separation", 18)
+	Leve.constant(linha, "separation", 18)
 	grid.add_child(linha)
 
 	var lbl := _criar_label("IDIOMA")
@@ -386,7 +386,7 @@ func _add_linha_idioma() -> OptionButton:
 
 	var opt := OptionButton.new()
 	opt.custom_minimum_size = Vector2(210, 54)
-	opt.add_theme_font_size_override("font_size", 22)
+	Leve.font_size(opt, "font_size", 22)
 
 	opt.add_item("PORTUGUÊS BR")
 	opt.add_item("ENGLISH")
@@ -419,10 +419,10 @@ func _criar_label(texto: String) -> Label:
 	lbl.custom_minimum_size = Vector2(610, 54)
 	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	lbl.add_theme_font_size_override("font_size", 25)
-	lbl.add_theme_color_override("font_color", Color.WHITE)
-	lbl.add_theme_color_override("font_outline_color", Color.BLACK)
-	lbl.add_theme_constant_override("outline_size", 4)
+	Leve.font_size(lbl, "font_size", 25)
+	Leve.color(lbl, "font_color", Color.WHITE)
+	Leve.color(lbl, "font_outline_color", Color.BLACK)
+	Leve.constant(lbl, "outline_size", 4)
 	return lbl
 
 
@@ -430,12 +430,12 @@ func _criar_botao(texto: String, cor: Color) -> Button:
 	var btn := Button.new()
 	btn.text = texto
 	btn.focus_mode = Control.FOCUS_NONE
-	btn.add_theme_font_size_override("font_size", 28)
-	btn.add_theme_color_override("font_color", Color.WHITE)
-	btn.add_theme_color_override("font_hover_color", Color.WHITE)
-	btn.add_theme_color_override("font_pressed_color", Color.WHITE)
-	btn.add_theme_color_override("font_outline_color", Color.BLACK)
-	btn.add_theme_constant_override("outline_size", 5)
+	Leve.font_size(btn, "font_size", 28)
+	Leve.color(btn, "font_color", Color.WHITE)
+	Leve.color(btn, "font_hover_color", Color.WHITE)
+	Leve.color(btn, "font_pressed_color", Color.WHITE)
+	Leve.color(btn, "font_outline_color", Color.BLACK)
+	Leve.constant(btn, "outline_size", 5)
 
 	var normal := StyleBoxFlat.new()
 	normal.bg_color = cor
@@ -453,9 +453,9 @@ func _criar_botao(texto: String, cor: Color) -> Button:
 	hover.bg_color = Color(1.0, 0.02, 0.02, 1.0)
 	hover.border_color = Color.WHITE
 
-	btn.add_theme_stylebox_override("normal", normal)
-	btn.add_theme_stylebox_override("hover", hover)
-	btn.add_theme_stylebox_override("pressed", hover)
+	Leve.stylebox(btn, "normal", normal)
+	Leve.stylebox(btn, "hover", hover)
+	Leve.stylebox(btn, "pressed", hover)
 
 	return btn
 
@@ -469,10 +469,10 @@ func _criar_toast() -> void:
 	toast_label.size = Vector2(600, 60)
 	toast_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	toast_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	toast_label.add_theme_font_size_override("font_size", 26)
-	toast_label.add_theme_color_override("font_color", Color.WHITE)
-	toast_label.add_theme_color_override("font_outline_color", Color.BLACK)
-	toast_label.add_theme_constant_override("outline_size", 5)
+	Leve.font_size(toast_label, "font_size", 26)
+	Leve.color(toast_label, "font_color", Color.WHITE)
+	Leve.color(toast_label, "font_outline_color", Color.BLACK)
+	Leve.constant(toast_label, "outline_size", 5)
 
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color(0.0, 0.42, 0.16, 0.94)
@@ -485,7 +485,7 @@ func _criar_toast() -> void:
 	style.corner_radius_top_right = 22
 	style.corner_radius_bottom_left = 22
 	style.corner_radius_bottom_right = 22
-	toast_label.add_theme_stylebox_override("normal", style)
+	Leve.stylebox(toast_label, "normal", style)
 
 	root_panel.add_child(toast_label)
 

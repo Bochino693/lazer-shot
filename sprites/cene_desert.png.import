@@ -3,19 +3,21 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://bshtffydgt8g5"
-path="res://.godot/imported/cene_desert.png-9fec2501dd8014c4b9eb299e9c8b3018.ctex"
+path.s3tc="res://.godot/imported/cene_desert.png-9fec2501dd8014c4b9eb299e9c8b3018.s3tc.ctex"
+path.etc2="res://.godot/imported/cene_desert.png-9fec2501dd8014c4b9eb299e9c8b3018.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 
 [deps]
 
 source_file="res://sprites/cene_desert.png"
-dest_files=["res://.godot/imported/cene_desert.png-9fec2501dd8014c4b9eb299e9c8b3018.ctex"]
+dest_files=["res://.godot/imported/cene_desert.png-9fec2501dd8014c4b9eb299e9c8b3018.s3tc.ctex", "res://.godot/imported/cene_desert.png-9fec2501dd8014c4b9eb299e9c8b3018.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

@@ -2,4 +2,9 @@
 * text=auto eol=lf
 *.webm filter=lfs diff=lfs merge=lfs -text
 *.mp4 filter=lfs diff=lfs merge=lfs -text
-*.ogv filter=lfs diff=lfs merge=lfs -text
+# Branch TV Box: os vídeos .ogv (reduzidos, ~34 MB no total) ficam no git
+# normal, sem Git LFS, para a pasta baixada já vir completa.
+*.ogv binary
+# Arquivos do Windows (geram o APK no PC).
+*.bat text eol=crlf
+*.ps1 text eol=crlf

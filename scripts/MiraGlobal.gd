@@ -46,6 +46,14 @@ func _ready() -> void:
 
 
 func _forcar_120_fps() -> void:
+	# TV Box (Android): a TV é de 60 Hz e o Android sempre sincroniza com ela;
+	# pedir 120 só gastaria processador e bateria de CPU sem quadro a mais.
+	if OS.get_name() == "Android":
+		Engine.max_fps = 60
+		DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_ENABLED)
+		print("MiraGlobal: TV Box -> 60 FPS com vsync")
+		return
+
 	# Max FPS: teto interno do motor -- vale pro jogo inteiro, todas as cenas,
 	# já que Engine.max_fps é uma propriedade global do motor, não da cena.
 	Engine.max_fps = FPS_ALVO
@@ -90,7 +98,7 @@ func _process(delta: float) -> void:
 		if modo_xbox:
 			pass
 		else:
-			posicao = vp.get_mouse_position()
+			posicao = Tela.mouse()
 
 	posicao.x = clampf(posicao.x, 0.0, tela.x)
 	posicao.y = clampf(posicao.y, 0.0, tela.y)

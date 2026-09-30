@@ -180,10 +180,10 @@ func _criar_insert_coin_atrativo() -> void:
 		insert_coin_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		insert_coin_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		insert_coin_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		insert_coin_label.add_theme_font_size_override("font_size", 34)
-		insert_coin_label.add_theme_color_override("font_color", Color.WHITE)
-		insert_coin_label.add_theme_color_override("font_outline_color", Color.BLACK)
-		insert_coin_label.add_theme_constant_override("outline_size", 5)
+		Leve.font_size(insert_coin_label, "font_size", 34)
+		Leve.color(insert_coin_label, "font_color", Color.WHITE)
+		Leve.color(insert_coin_label, "font_outline_color", Color.BLACK)
+		Leve.constant(insert_coin_label, "outline_size", 5)
 		insert_coin_layer.add_child(insert_coin_label)
 
 	var tela: Vector2 = get_viewport_rect().size
@@ -241,7 +241,7 @@ func _atualizar_mira_xbox(delta: float) -> void:
 	var tela: Vector2 = get_viewport_rect().size
 
 	if not xbox_mira_iniciada:
-		alvo_pos = get_viewport().get_mouse_position()
+		alvo_pos = Tela.mouse()
 
 		if alvo_pos == Vector2.ZERO:
 			alvo_pos = tela * 0.5
@@ -355,7 +355,7 @@ func _criar_painel() -> void:
 	estilo.shadow_color = Color(1.0, 0.0, 0.0, 0.26)
 	estilo.shadow_size = 30
 	estilo.shadow_offset = Vector2(0, 10)
-	painel.add_theme_stylebox_override("panel", estilo)
+	Leve.stylebox(painel, "panel", estilo)
 
 
 func _criar_titulo() -> void:
@@ -365,10 +365,10 @@ func _criar_titulo() -> void:
 	titulo.size = Vector2(painel.size.x, 58)
 	titulo.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	titulo.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	titulo.add_theme_font_size_override("font_size", 38)
-	titulo.add_theme_color_override("font_color", Color.WHITE)
-	titulo.add_theme_color_override("font_outline_color", Color.BLACK)
-	titulo.add_theme_constant_override("outline_size", 8)
+	Leve.font_size(titulo, "font_size", 38)
+	Leve.color(titulo, "font_color", Color.WHITE)
+	Leve.color(titulo, "font_outline_color", Color.BLACK)
+	Leve.constant(titulo, "outline_size", 8)
 	painel.add_child(titulo)
 
 
@@ -376,7 +376,7 @@ func _criar_cabecalho() -> void:
 	var cab := HBoxContainer.new()
 	cab.position = Vector2(26, 148)
 	cab.size = Vector2(painel.size.x - 52, 42)
-	cab.add_theme_constant_override("separation", 0)
+	Leve.constant(cab, "separation", 0)
 	painel.add_child(cab)
 
 	var textos := ["POS", "PLAYER", "CENÁRIO", "MODO", "PONTOS", "ACERTO"]
@@ -390,10 +390,10 @@ func _criar_cabecalho() -> void:
 		lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		lbl.clip_text = true
-		lbl.add_theme_font_size_override("font_size", 19)
-		lbl.add_theme_color_override("font_color", Color(1.0, 0.05, 0.05))
-		lbl.add_theme_color_override("font_outline_color", Color.BLACK)
-		lbl.add_theme_constant_override("outline_size", 4)
+		Leve.font_size(lbl, "font_size", 19)
+		Leve.color(lbl, "font_color", Color(1.0, 0.05, 0.05))
+		Leve.color(lbl, "font_outline_color", Color.BLACK)
+		Leve.constant(lbl, "outline_size", 4)
 		cab.add_child(lbl)
 
 
@@ -417,7 +417,7 @@ func _criar_scroll() -> void:
 	lista = VBoxContainer.new()
 	lista.custom_minimum_size = Vector2(scroll.size.x - 12, 0)
 	lista.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	lista.add_theme_constant_override("separation", 8)
+	Leve.constant(lista, "separation", 8)
 	scroll.add_child(lista)
 
 
@@ -484,7 +484,7 @@ func _criar_filtros_cenarios() -> void:
 	filtros_box.position = Vector2(24, 82)
 	filtros_box.size = Vector2(painel.size.x - 48, 54)
 	filtros_box.alignment = BoxContainer.ALIGNMENT_CENTER
-	filtros_box.add_theme_constant_override("separation", 8)
+	Leve.constant(filtros_box, "separation", 8)
 	painel.add_child(filtros_box)
 
 	botao_todos = _criar_botao_filtro("TODOS")
@@ -507,7 +507,7 @@ func _criar_botao_filtro(texto: String) -> Button:
 	btn.text = texto
 	btn.custom_minimum_size = Vector2(142, 46)
 	btn.focus_mode = Control.FOCUS_NONE
-	btn.add_theme_font_size_override("font_size", 18)
+	Leve.font_size(btn, "font_size", 18)
 
 	btn.pressed.connect(func():
 		filtro_atual = texto
@@ -545,12 +545,12 @@ func _atualizar_visual_filtros() -> void:
 			estilo.bg_color = Color(0.0, 0.0, 0.0, 0.88)
 			estilo.border_color = Color(1.0, 0.02, 0.02, 0.85)
 
-		btn.add_theme_color_override("font_color", Color.WHITE)
-		btn.add_theme_color_override("font_outline_color", Color.BLACK)
-		btn.add_theme_constant_override("outline_size", 4)
-		btn.add_theme_stylebox_override("normal", estilo)
-		btn.add_theme_stylebox_override("hover", estilo)
-		btn.add_theme_stylebox_override("pressed", estilo)
+		Leve.color(btn, "font_color", Color.WHITE)
+		Leve.color(btn, "font_outline_color", Color.BLACK)
+		Leve.constant(btn, "outline_size", 4)
+		Leve.stylebox(btn, "normal", estilo)
+		Leve.stylebox(btn, "hover", estilo)
+		Leve.stylebox(btn, "pressed", estilo)
 
 
 
@@ -604,11 +604,11 @@ func _estilizar_botao_rolagem(btn: Button) -> void:
 	normal.corner_radius_bottom_left = 20
 	normal.corner_radius_bottom_right = 20
 
-	btn.add_theme_stylebox_override("normal", normal)
-	btn.add_theme_stylebox_override("hover", normal)
-	btn.add_theme_stylebox_override("pressed", normal)
-	btn.add_theme_font_size_override("font_size", 20)
-	btn.add_theme_color_override("font_color", Color.WHITE)
+	Leve.stylebox(btn, "normal", normal)
+	Leve.stylebox(btn, "hover", normal)
+	Leve.stylebox(btn, "pressed", normal)
+	Leve.font_size(btn, "font_size", 20)
+	Leve.color(btn, "font_color", Color.WHITE)
 
 
 
@@ -673,12 +673,12 @@ func _criar_linha_ranking(posicao: int, nome: String, cenario: String, modo: Str
 	estilo.corner_radius_bottom_left = 18
 	estilo.corner_radius_bottom_right = 18
 
-	linha.add_theme_stylebox_override("panel", estilo)
+	Leve.stylebox(linha, "panel", estilo)
 
 	var hbox := HBoxContainer.new()
 	hbox.position = Vector2(8, 7)
 	hbox.size = Vector2(linha.custom_minimum_size.x - 16, 48)
-	hbox.add_theme_constant_override("separation", 0)
+	Leve.constant(hbox, "separation", 0)
 	linha.add_child(hbox)
 
 	var medalha := ""
@@ -730,10 +730,10 @@ func _adicionar_campo(pai: HBoxContainer, texto: String, largura: float, fonte: 
 	lbl.clip_text = true
 	lbl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 
-	lbl.add_theme_font_size_override("font_size", fonte)
-	lbl.add_theme_color_override("font_color", cor)
-	lbl.add_theme_color_override("font_outline_color", Color.BLACK)
-	lbl.add_theme_constant_override("outline_size", 4)
+	Leve.font_size(lbl, "font_size", fonte)
+	Leve.color(lbl, "font_color", cor)
+	Leve.color(lbl, "font_outline_color", Color.BLACK)
+	Leve.constant(lbl, "outline_size", 4)
 
 	pai.add_child(lbl)
 
@@ -786,16 +786,16 @@ func _criar_botao_voltar() -> void:
 	hover.shadow_color = Color(1.0, 0.0, 0.0, 0.72)
 	hover.shadow_size = 38
 
-	botao_voltar.add_theme_stylebox_override("normal", normal)
-	botao_voltar.add_theme_stylebox_override("hover", hover)
-	botao_voltar.add_theme_stylebox_override("pressed", hover)
+	Leve.stylebox(botao_voltar, "normal", normal)
+	Leve.stylebox(botao_voltar, "hover", hover)
+	Leve.stylebox(botao_voltar, "pressed", hover)
 
-	botao_voltar.add_theme_font_size_override("font_size", 24)
-	botao_voltar.add_theme_color_override("font_color", Color.WHITE)
-	botao_voltar.add_theme_color_override("font_hover_color", Color.WHITE)
-	botao_voltar.add_theme_color_override("font_pressed_color", Color.WHITE)
-	botao_voltar.add_theme_color_override("font_outline_color", Color.BLACK)
-	botao_voltar.add_theme_constant_override("outline_size", 5)
+	Leve.font_size(botao_voltar, "font_size", 24)
+	Leve.color(botao_voltar, "font_color", Color.WHITE)
+	Leve.color(botao_voltar, "font_hover_color", Color.WHITE)
+	Leve.color(botao_voltar, "font_pressed_color", Color.WHITE)
+	Leve.color(botao_voltar, "font_outline_color", Color.BLACK)
+	Leve.constant(botao_voltar, "outline_size", 5)
 
 	# Hover mouse
 	botao_voltar.mouse_entered.connect(func():
@@ -830,18 +830,18 @@ func _animar_hover_voltar(hover: bool) -> void:
 		estilo.shadow_color = Color(1.0, 0.0, 0.0, 0.85)
 		estilo.shadow_size = 42
 
-		botao_voltar.add_theme_color_override("font_color", Color.WHITE)
+		Leve.color(botao_voltar, "font_color", Color.WHITE)
 	else:
 		estilo.bg_color = Color(0.0, 0.0, 0.0, 0.96)
 		estilo.border_color = Color(1.0, 0.02, 0.02, 0.95)
 		estilo.shadow_color = Color(1.0, 0.0, 0.0, 0.18)
 		estilo.shadow_size = 12
 
-		botao_voltar.add_theme_color_override("font_color", Color.WHITE)
+		Leve.color(botao_voltar, "font_color", Color.WHITE)
 
-	botao_voltar.add_theme_stylebox_override("normal", estilo)
-	botao_voltar.add_theme_stylebox_override("hover", estilo)
-	botao_voltar.add_theme_stylebox_override("pressed", estilo)
+	Leve.stylebox(botao_voltar, "normal", estilo)
+	Leve.stylebox(botao_voltar, "hover", estilo)
+	Leve.stylebox(botao_voltar, "pressed", estilo)
 
 	var tween := create_tween()
 	tween.set_parallel(true)
@@ -967,7 +967,7 @@ func _abrir_modal_limpar_ranking() -> void:
 	estilo.corner_radius_top_right = 28
 	estilo.corner_radius_bottom_left = 28
 	estilo.corner_radius_bottom_right = 28
-	modal.add_theme_stylebox_override("panel", estilo)
+	Leve.stylebox(modal, "panel", estilo)
 
 	var titulo := Label.new()
 	titulo.text = "⚠ LIMPAR RANKING?"
@@ -975,10 +975,10 @@ func _abrir_modal_limpar_ranking() -> void:
 	titulo.size = Vector2(580, 58)
 	titulo.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	titulo.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	titulo.add_theme_font_size_override("font_size", 36)
-	titulo.add_theme_color_override("font_color", Color(1.0, 0.25, 0.18))
-	titulo.add_theme_color_override("font_outline_color", Color.BLACK)
-	titulo.add_theme_constant_override("outline_size", 7)
+	Leve.font_size(titulo, "font_size", 36)
+	Leve.color(titulo, "font_color", Color(1.0, 0.25, 0.18))
+	Leve.color(titulo, "font_outline_color", Color.BLACK)
+	Leve.constant(titulo, "outline_size", 7)
 	modal.add_child(titulo)
 
 	var msg := Label.new()
@@ -987,24 +987,24 @@ func _abrir_modal_limpar_ranking() -> void:
 	msg.size = Vector2(540, 80)
 	msg.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	msg.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	msg.add_theme_font_size_override("font_size", 23)
-	msg.add_theme_color_override("font_color", Color.WHITE)
-	msg.add_theme_color_override("font_outline_color", Color.BLACK)
-	msg.add_theme_constant_override("outline_size", 5)
+	Leve.font_size(msg, "font_size", 23)
+	Leve.color(msg, "font_color", Color.WHITE)
+	Leve.color(msg, "font_outline_color", Color.BLACK)
+	Leve.constant(msg, "outline_size", 5)
 	modal.add_child(msg)
 
 	var btn_sim := Button.new()
 	btn_sim.text = "SIM, LIMPAR"
 	btn_sim.position = Vector2(70, 215)
 	btn_sim.size = Vector2(210, 58)
-	btn_sim.add_theme_font_size_override("font_size", 22)
+	Leve.font_size(btn_sim, "font_size", 22)
 	modal.add_child(btn_sim)
 
 	var btn_nao := Button.new()
 	btn_nao.text = "CANCELAR"
 	btn_nao.position = Vector2(340, 215)
 	btn_nao.size = Vector2(210, 58)
-	btn_nao.add_theme_font_size_override("font_size", 22)
+	Leve.font_size(btn_nao, "font_size", 22)
 	modal.add_child(btn_nao)
 
 	btn_sim.pressed.connect(_confirmar_limpar_ranking)
@@ -1039,7 +1039,7 @@ func _criar_lista_vazia() -> void:
 	estilo.corner_radius_top_right = 22
 	estilo.corner_radius_bottom_left = 22
 	estilo.corner_radius_bottom_right = 22
-	painel_vazio.add_theme_stylebox_override("panel", estilo)
+	Leve.stylebox(painel_vazio, "panel", estilo)
 
 	var lbl := Label.new()
 	lbl.text = "🏆 RANKING VAZIO\n\nJogue uma partida para registrar os melhores jogadores."
@@ -1047,10 +1047,10 @@ func _criar_lista_vazia() -> void:
 	lbl.size = Vector2(painel_vazio.custom_minimum_size.x - 40, 150)
 	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	lbl.add_theme_font_size_override("font_size", 28)
-	lbl.add_theme_color_override("font_color", Color.WHITE)
-	lbl.add_theme_color_override("font_outline_color", Color.BLACK)
-	lbl.add_theme_constant_override("outline_size", 6)
+	Leve.font_size(lbl, "font_size", 28)
+	Leve.color(lbl, "font_color", Color.WHITE)
+	Leve.color(lbl, "font_outline_color", Color.BLACK)
+	Leve.constant(lbl, "outline_size", 6)
 	painel_vazio.add_child(lbl)
 
 	lista.add_child(painel_vazio)

@@ -119,7 +119,7 @@ func _set_estilo_panel_arena(panel: Panel, bg: Color, borda: Color = COR_NEON_AR
 	var estilo := panel.get_theme_stylebox("panel") as StyleBoxFlat
 	if estilo == null:
 		estilo = _estilo_card_arena()
-		panel.add_theme_stylebox_override("panel", estilo)
+		Leve.stylebox(panel, "panel", estilo)
 	estilo.bg_color     = bg
 	estilo.border_color = borda
 	estilo.shadow_color = Color(borda.r, borda.g, borda.b, sombra_alpha)
@@ -845,10 +845,10 @@ func _estilizar_botao_modal_final(btn: Label, texto: String, destaque: bool = fa
 	btn.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	btn.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 
-	btn.add_theme_font_size_override("font_size", 32)
-	btn.add_theme_color_override("font_color", Color.WHITE)
-	btn.add_theme_color_override("font_outline_color", Color(0.85, 0.0, 0.0))
-	btn.add_theme_constant_override("outline_size", 6)
+	Leve.font_size(btn, "font_size", 32)
+	Leve.color(btn, "font_color", Color.WHITE)
+	Leve.color(btn, "font_outline_color", Color(0.85, 0.0, 0.0))
+	Leve.constant(btn, "outline_size", 6)
 
 
 
@@ -1570,7 +1570,7 @@ func _configurar_modal_fim() -> void:
 	fim_root.add_child(fim_bg)
 
 	fim_panel = Panel.new()
-	fim_panel.add_theme_stylebox_override("panel", _estilo_card_arena())
+	Leve.stylebox(fim_panel, "panel", _estilo_card_arena())
 	fim_root.add_child(fim_panel)
 
 	var linha_topo := ColorRect.new()
@@ -1586,29 +1586,29 @@ func _configurar_modal_fim() -> void:
 	fim_titulo = Label.new()
 	fim_titulo.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	fim_titulo.vertical_alignment   = VERTICAL_ALIGNMENT_CENTER
-	fim_titulo.add_theme_font_size_override("font_size", 58)
-	fim_titulo.add_theme_color_override("font_color", COR_NEON_ARENA_CLARO)
-	fim_titulo.add_theme_color_override("font_outline_color", Color.BLACK)
-	fim_titulo.add_theme_constant_override("outline_size", 9)
+	Leve.font_size(fim_titulo, "font_size", 58)
+	Leve.color(fim_titulo, "font_color", COR_NEON_ARENA_CLARO)
+	Leve.color(fim_titulo, "font_outline_color", Color.BLACK)
+	Leve.constant(fim_titulo, "outline_size", 9)
 	fim_panel.add_child(fim_titulo)
 
 	fim_score_label = Label.new()
 	fim_score_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	fim_score_label.vertical_alignment   = VERTICAL_ALIGNMENT_CENTER
-	fim_score_label.add_theme_font_size_override("font_size", 78)
-	fim_score_label.add_theme_color_override("font_color", Color.WHITE)
-	fim_score_label.add_theme_color_override("font_outline_color", Color(0.90, 0.0, 0.0))
-	fim_score_label.add_theme_constant_override("outline_size", 10)
+	Leve.font_size(fim_score_label, "font_size", 78)
+	Leve.color(fim_score_label, "font_color", Color.WHITE)
+	Leve.color(fim_score_label, "font_outline_color", Color(0.90, 0.0, 0.0))
+	Leve.constant(fim_score_label, "outline_size", 10)
 	fim_panel.add_child(fim_score_label)
 
 	fim_stats_label = Label.new()
 	fim_stats_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	fim_stats_label.vertical_alignment   = VERTICAL_ALIGNMENT_CENTER
 	fim_stats_label.autowrap_mode        = TextServer.AUTOWRAP_WORD_SMART
-	fim_stats_label.add_theme_font_size_override("font_size", 34)
-	fim_stats_label.add_theme_color_override("font_color", Color(1.0, 0.88, 0.88, 1.0))
-	fim_stats_label.add_theme_color_override("font_outline_color", Color.BLACK)
-	fim_stats_label.add_theme_constant_override("outline_size", 6)
+	Leve.font_size(fim_stats_label, "font_size", 34)
+	Leve.color(fim_stats_label, "font_color", Color(1.0, 0.88, 0.88, 1.0))
+	Leve.color(fim_stats_label, "font_outline_color", Color.BLACK)
+	Leve.constant(fim_stats_label, "outline_size", 6)
 	fim_panel.add_child(fim_stats_label)
 
 	fim_footer = Label.new()
@@ -1618,10 +1618,10 @@ func _configurar_modal_fim() -> void:
 	fim_contagem_label = Label.new()
 	fim_contagem_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	fim_contagem_label.vertical_alignment   = VERTICAL_ALIGNMENT_CENTER
-	fim_contagem_label.add_theme_font_size_override("font_size", 28)
-	fim_contagem_label.add_theme_color_override("font_color", COR_NEON_ARENA_CLARO)
-	fim_contagem_label.add_theme_color_override("font_outline_color", Color.BLACK)
-	fim_contagem_label.add_theme_constant_override("outline_size", 5)
+	Leve.font_size(fim_contagem_label, "font_size", 28)
+	Leve.color(fim_contagem_label, "font_color", COR_NEON_ARENA_CLARO)
+	Leve.color(fim_contagem_label, "font_outline_color", Color.BLACK)
+	Leve.constant(fim_contagem_label, "outline_size", 5)
 	fim_panel.add_child(fim_contagem_label)
 
 	_configurar_modal_nome_ranking()
@@ -1716,10 +1716,10 @@ func _mostrar_modal_fim() -> void:
 	if fim_titulo != null:
 		if entrou_ranking:
 			fim_titulo.text = "🏆 NOVO RECORDE!"
-			fim_titulo.add_theme_color_override("font_color", Color(1.0, 0.86, 0.18))
+			Leve.color(fim_titulo, "font_color", Color(1.0, 0.86, 0.18))
 		else:
 			fim_titulo.text = "FIM DE JOGO"
-			fim_titulo.add_theme_color_override("font_color", Color(1.0, 0.06, 0.06))
+			Leve.color(fim_titulo, "font_color", Color(1.0, 0.06, 0.06))
 
 	if fim_score_label != null:
 		fim_score_label.text = "PONTUAÇÃO\n%d" % pontuacao
@@ -2075,21 +2075,21 @@ func _atualizar_status_labels() -> void:
 			lbl.scale = Vector2.ONE
 			lbl.modulate = Color(cor.r, cor.g, cor.b, 1.0)
 
-			lbl.add_theme_font_size_override("font_size", 40)
-			lbl.add_theme_color_override("font_color", Color.WHITE)
-			lbl.add_theme_color_override("font_outline_color", Color.BLACK)
-			lbl.add_theme_constant_override("outline_size", 8)
+			Leve.font_size(lbl, "font_size", 40)
+			Leve.color(lbl, "font_color", Color.WHITE)
+			Leve.color(lbl, "font_outline_color", Color.BLACK)
+			Leve.constant(lbl, "outline_size", 8)
 
 			if chat_rodape_panel != null:
 				var estilo := chat_rodape_panel.get_theme_stylebox("panel") as StyleBoxFlat
 				if estilo == null:
 					estilo = _estilo_card_arena()
-					chat_rodape_panel.add_theme_stylebox_override("panel", estilo)
+					Leve.stylebox(chat_rodape_panel, "panel", estilo)
 
-				estilo.bg_color = Color(0.025, 0.0, 0.0, 0.86)
-				estilo.border_color = cor
-				estilo.shadow_color = Color(cor.r, cor.g, cor.b, 0.72)
-				estilo.shadow_size = 34
+				Leve.prop(estilo, "bg_color", Color(0.025, 0.0, 0.0, 0.86))
+				Leve.prop(estilo, "border_color", cor)
+				Leve.prop(estilo, "shadow_color", Color(cor.r, cor.g, cor.b, 0.72))
+				Leve.prop(estilo, "shadow_size", 34)
 
 				chat_rodape_panel.modulate = Color.WHITE
 
@@ -2337,7 +2337,7 @@ func _configurar_hud_bar_padrao() -> void:
 	hud_root.add_child(top_bar_sombra)
 
 	top_bar = Panel.new()
-	top_bar.add_theme_stylebox_override("panel", _estilo_card_arena())
+	Leve.stylebox(top_bar, "panel", _estilo_card_arena())
 	hud_root.add_child(top_bar)
 
 	top_bar_linha         = ColorRect.new()
@@ -2350,7 +2350,7 @@ func _configurar_hud_bar_padrao() -> void:
 	municao_panel = _criar_painel_bar()
 
 	stats_arena_panel = Panel.new()
-	stats_arena_panel.add_theme_stylebox_override("panel", _estilo_card_arena())
+	Leve.stylebox(stats_arena_panel, "panel", _estilo_card_arena())
 	stats_arena_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hud_root.add_child(stats_arena_panel)
  
@@ -2388,7 +2388,7 @@ func _configurar_hud_bar_padrao() -> void:
 	
 	chat_rodape_panel = Panel.new()
 	chat_rodape_panel.name = "ChatRodapePanel"
-	chat_rodape_panel.add_theme_stylebox_override("panel", _estilo_card_arena())
+	Leve.stylebox(chat_rodape_panel, "panel", _estilo_card_arena())
 	chat_rodape_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	chat_rodape_panel.visible = false
 	hud_root.add_child(chat_rodape_panel)
@@ -2402,10 +2402,10 @@ func _configurar_hud_bar_padrao() -> void:
 		var lbl := Label.new()
 		lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		lbl.vertical_alignment   = VERTICAL_ALIGNMENT_CENTER
-		lbl.add_theme_font_size_override("font_size", 34 - (i * 4))
-		lbl.add_theme_color_override("font_color", Color.WHITE)
-		lbl.add_theme_color_override("font_outline_color", Color.BLACK)
-		lbl.add_theme_constant_override("outline_size", 7)
+		Leve.font_size(lbl, "font_size", 34 - (i * 4))
+		Leve.color(lbl, "font_color", Color.WHITE)
+		Leve.color(lbl, "font_outline_color", Color.BLACK)
+		Leve.constant(lbl, "outline_size", 7)
 		lbl.visible = false
 		hud_root.add_child(lbl)
 		status_labels.append(lbl)
@@ -2417,7 +2417,7 @@ func _configurar_hud_bar_padrao() -> void:
  
 func _criar_painel_bar() -> Panel:
 	var painel := Panel.new()
-	painel.add_theme_stylebox_override("panel", _estilo_card_arena())
+	Leve.stylebox(painel, "panel", _estilo_card_arena())
 	painel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hud_root.add_child(painel)
 	return painel
@@ -2428,10 +2428,10 @@ func _criar_label_hud(texto: String, tamanho: int, cor: Color) -> Label:
 	lbl.text = texto
 	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	lbl.vertical_alignment   = VERTICAL_ALIGNMENT_CENTER
-	lbl.add_theme_font_size_override("font_size", tamanho)
-	lbl.add_theme_color_override("font_color", cor)
-	lbl.add_theme_color_override("font_outline_color", Color.BLACK)
-	lbl.add_theme_constant_override("outline_size", 4)
+	Leve.font_size(lbl, "font_size", tamanho)
+	Leve.color(lbl, "font_color", cor)
+	Leve.color(lbl, "font_outline_color", Color.BLACK)
+	Leve.constant(lbl, "outline_size", 4)
 	return lbl
  
  
@@ -2718,15 +2718,15 @@ func _criar_intro_comeco() -> void:
 	countdown_label.text = "3"
 	countdown_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	countdown_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	countdown_label.add_theme_font_size_override("font_size", 156)
-	countdown_label.add_theme_color_override("font_color", COR_NEON_ARENA_CLARO)
-	countdown_label.add_theme_color_override("font_outline_color", Color(0.18, 0.0, 0.0, 1.0))
-	countdown_label.add_theme_constant_override("outline_size", 16)
+	Leve.font_size(countdown_label, "font_size", 156)
+	Leve.color(countdown_label, "font_color", COR_NEON_ARENA_CLARO)
+	Leve.color(countdown_label, "font_outline_color", Color(0.18, 0.0, 0.0, 1.0))
+	Leve.constant(countdown_label, "outline_size", 16)
 	countdown_label.self_modulate = Color(1.0, 0.90, 0.90, 1.0)
 
 	var fonte_luckies := load("res://fonts/LuckiestGuy-Regular.ttf")
 	if fonte_luckies:
-		countdown_label.add_theme_font_override("font", fonte_luckies)
+		Leve.font(countdown_label, "font", fonte_luckies)
 
 	countdown_label.visible = false
 	countdown_root.add_child(countdown_label)
@@ -2787,15 +2787,15 @@ func _contagem_intro_async() -> void:
 			countdown_label.text = v
 			countdown_label.visible = true
 			countdown_label.modulate = Color(1, 1, 1, 0.0)
-			countdown_label.add_theme_color_override("font_color", COR_NEON_ARENA_CLARO)
-			countdown_label.add_theme_color_override("font_outline_color", Color(0.18, 0.0, 0.0, 1.0))
-			countdown_label.add_theme_constant_override("outline_size", 16)
+			Leve.color(countdown_label, "font_color", COR_NEON_ARENA_CLARO)
+			Leve.color(countdown_label, "font_outline_color", Color(0.18, 0.0, 0.0, 1.0))
+			Leve.constant(countdown_label, "outline_size", 16)
 
 			if v == "COMEÇOU!":
-				countdown_label.add_theme_font_size_override("font_size", 88)
+				Leve.font_size(countdown_label, "font_size", 88)
 				countdown_label.scale = Vector2.ONE * 0.82
 			else:
-				countdown_label.add_theme_font_size_override("font_size", 156)
+				Leve.font_size(countdown_label, "font_size", 156)
 				countdown_label.scale = Vector2.ONE * 0.62
 
 		var tw := create_tween()
@@ -2834,7 +2834,7 @@ func _rodar_intro_comeco_async() -> void:
 			countdown_label.visible  = true
 			countdown_label.modulate = Color(1, 1, 1, 0.0)
 			countdown_label.scale    = Vector2.ONE * 0.62
-			countdown_label.add_theme_font_size_override("font_size", 120)
+			Leve.font_size(countdown_label, "font_size", 120)
  
 		var tw_num := create_tween()
 		tw_num.set_parallel(true)
@@ -2861,7 +2861,7 @@ func _rodar_intro_comeco_async() -> void:
 		countdown_label.visible  = true
 		countdown_label.modulate = Color(1, 1, 1, 0.0)
 		countdown_label.scale    = Vector2.ONE * 0.82
-		countdown_label.add_theme_font_size_override("font_size", 76)
+		Leve.font_size(countdown_label, "font_size", 76)
  
 	var tw_go := create_tween()
 	tw_go.set_parallel(true)
@@ -2960,15 +2960,15 @@ func _criar_modal_inicio() -> void:
 	modal_atire_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	modal_atire_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	modal_atire_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	modal_atire_label.add_theme_font_size_override("font_size", 50)
-	modal_atire_label.add_theme_color_override("font_color", COR_NEON_ARENA_CLARO)
-	modal_atire_label.add_theme_color_override("font_outline_color", Color(0.18, 0.0, 0.0, 1.0))
-	modal_atire_label.add_theme_constant_override("outline_size", 12)
+	Leve.font_size(modal_atire_label, "font_size", 50)
+	Leve.color(modal_atire_label, "font_color", COR_NEON_ARENA_CLARO)
+	Leve.color(modal_atire_label, "font_outline_color", Color(0.18, 0.0, 0.0, 1.0))
+	Leve.constant(modal_atire_label, "outline_size", 12)
 	modal_atire_label.self_modulate = Color(1.0, 0.88, 0.88, 1.0)
 
 	var fonte_luckies := load("res://fonts/LuckiestGuy-Regular.ttf")
 	if fonte_luckies:
-		modal_atire_label.add_theme_font_override("font", fonte_luckies)
+		Leve.font(modal_atire_label, "font", fonte_luckies)
 
 	modal_atire_label.modulate.a = 0.78
 	modal_root.add_child(modal_atire_label)
@@ -3003,10 +3003,10 @@ func _criar_label_preview(texto: String) -> Label:
 	lbl.text = texto
 	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	lbl.vertical_alignment   = VERTICAL_ALIGNMENT_CENTER
-	lbl.add_theme_font_size_override("font_size", 16)
-	lbl.add_theme_color_override("font_color", Color(1.0, 0.88, 0.25))
-	lbl.add_theme_color_override("font_outline_color", Color(0.0, 0.0, 0.0))
-	lbl.add_theme_constant_override("outline_size", 4)
+	Leve.font_size(lbl, "font_size", 16)
+	Leve.color(lbl, "font_color", Color(1.0, 0.88, 0.25))
+	Leve.color(lbl, "font_outline_color", Color(0.0, 0.0, 0.0))
+	Leve.constant(lbl, "outline_size", 4)
 	return lbl
  
 
@@ -3274,42 +3274,42 @@ func _configurar_modal_nome_ranking() -> void:
 
 	ranking_nome_panel = Panel.new()
 	ranking_nome_root.add_child(ranking_nome_panel)
-	ranking_nome_panel.add_theme_stylebox_override("panel", _estilo_card_arena())
+	Leve.stylebox(ranking_nome_panel, "panel", _estilo_card_arena())
 
 	ranking_nome_titulo = Label.new()
 	ranking_nome_titulo.text = "🏆 NOVO RECORDE!"
 	ranking_nome_titulo.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	ranking_nome_titulo.vertical_alignment   = VERTICAL_ALIGNMENT_CENTER
-	ranking_nome_titulo.add_theme_font_size_override("font_size", 46)
-	ranking_nome_titulo.add_theme_color_override("font_color", Color(1.0, 0.86, 0.20, 1.0))
-	ranking_nome_titulo.add_theme_color_override("font_outline_color", Color.BLACK)
-	ranking_nome_titulo.add_theme_constant_override("outline_size", 8)
+	Leve.font_size(ranking_nome_titulo, "font_size", 46)
+	Leve.color(ranking_nome_titulo, "font_color", Color(1.0, 0.86, 0.20, 1.0))
+	Leve.color(ranking_nome_titulo, "font_outline_color", Color.BLACK)
+	Leve.constant(ranking_nome_titulo, "outline_size", 8)
 	ranking_nome_panel.add_child(ranking_nome_titulo)
 
 	ranking_nome_texto = Label.new()
 	ranking_nome_texto.text = "CLIQUE NAS LETRAS PARA ESCREVER SEU NOME\nMÁXIMO 9 LETRAS"
 	ranking_nome_texto.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	ranking_nome_texto.vertical_alignment   = VERTICAL_ALIGNMENT_CENTER
-	ranking_nome_texto.add_theme_font_size_override("font_size", 24)
-	ranking_nome_texto.add_theme_color_override("font_color", Color.WHITE)
-	ranking_nome_texto.add_theme_color_override("font_outline_color", Color.BLACK)
-	ranking_nome_texto.add_theme_constant_override("outline_size", 5)
+	Leve.font_size(ranking_nome_texto, "font_size", 24)
+	Leve.color(ranking_nome_texto, "font_color", Color.WHITE)
+	Leve.color(ranking_nome_texto, "font_outline_color", Color.BLACK)
+	Leve.constant(ranking_nome_texto, "outline_size", 5)
 	ranking_nome_panel.add_child(ranking_nome_texto)
 
 	ranking_nome_display = Label.new()
 	ranking_nome_display.text = "---------"
 	ranking_nome_display.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	ranking_nome_display.vertical_alignment   = VERTICAL_ALIGNMENT_CENTER
-	ranking_nome_display.add_theme_font_size_override("font_size", 64)
-	ranking_nome_display.add_theme_color_override("font_color", Color.WHITE)
-	ranking_nome_display.add_theme_color_override("font_outline_color", COR_NEON_ARENA)
-	ranking_nome_display.add_theme_constant_override("outline_size", 10)
+	Leve.font_size(ranking_nome_display, "font_size", 64)
+	Leve.color(ranking_nome_display, "font_color", Color.WHITE)
+	Leve.color(ranking_nome_display, "font_outline_color", COR_NEON_ARENA)
+	Leve.constant(ranking_nome_display, "outline_size", 10)
 	ranking_nome_panel.add_child(ranking_nome_display)
 
 	ranking_nome_teclado = GridContainer.new()
 	ranking_nome_teclado.columns = 9
-	ranking_nome_teclado.add_theme_constant_override("h_separation", 8)
-	ranking_nome_teclado.add_theme_constant_override("v_separation", 8)
+	Leve.constant(ranking_nome_teclado, "h_separation", 8)
+	Leve.constant(ranking_nome_teclado, "v_separation", 8)
 	ranking_nome_panel.add_child(ranking_nome_teclado)
 
 	var letras := "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
@@ -3328,10 +3328,10 @@ func _configurar_modal_nome_ranking() -> void:
 	ranking_nome_timer_label.text = "SALVA COMO ANONIMO EM 50"
 	ranking_nome_timer_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	ranking_nome_timer_label.vertical_alignment   = VERTICAL_ALIGNMENT_CENTER
-	ranking_nome_timer_label.add_theme_font_size_override("font_size", 24)
-	ranking_nome_timer_label.add_theme_color_override("font_color", COR_NEON_ARENA_CLARO)
-	ranking_nome_timer_label.add_theme_color_override("font_outline_color", Color.BLACK)
-	ranking_nome_timer_label.add_theme_constant_override("outline_size", 6)
+	Leve.font_size(ranking_nome_timer_label, "font_size", 24)
+	Leve.color(ranking_nome_timer_label, "font_color", COR_NEON_ARENA_CLARO)
+	Leve.color(ranking_nome_timer_label, "font_outline_color", Color.BLACK)
+	Leve.constant(ranking_nome_timer_label, "outline_size", 6)
 	ranking_nome_panel.add_child(ranking_nome_timer_label)
 
 	_ajustar_modal_nome_ranking()
@@ -3388,8 +3388,8 @@ func _criar_botao_tecla_ranking(texto: String) -> Button:
 	btn.focus_mode = Control.FOCUS_NONE
 	btn.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	btn.disabled = true
-	btn.add_theme_font_size_override("font_size", 28)
-	btn.add_theme_color_override("font_color", Color.WHITE)
+	Leve.font_size(btn, "font_size", 28)
+	Leve.color(btn, "font_color", Color.WHITE)
 
 	var normal := StyleBoxFlat.new()
 	normal.bg_color = Color(0.02, 0.02, 0.025, 0.98)
@@ -3403,8 +3403,8 @@ func _criar_botao_tecla_ranking(texto: String) -> Button:
 	normal.corner_radius_bottom_left = 12
 	normal.corner_radius_bottom_right = 12
 
-	btn.add_theme_stylebox_override("normal", normal)
-	btn.add_theme_stylebox_override("disabled", normal)
+	Leve.stylebox(btn, "normal", normal)
+	Leve.stylebox(btn, "disabled", normal)
 
 	return btn
 
@@ -3536,7 +3536,7 @@ func _confirmar_nome_ranking(usar_anonimo: bool = false) -> void:
 			ranking_precisao_pendente,
 			ranking_cenario_pendente
 		]
-		fim_stats_label.add_theme_font_size_override("font_size", 38)
+		Leve.font_size(fim_stats_label, "font_size", 38)
 
 	if fim_footer != null:
 		_estilizar_botao_modal_final(fim_footer, "APERTE START PARA JOGAR NOVAMENTE", false)
@@ -3646,7 +3646,7 @@ const BOTAO_RECARGA_3: int = MOUSE_BUTTON_XBUTTON2
 
 
 func _pos_arma() -> Vector2:
-	return get_viewport().get_mouse_position()
+	return Tela.mouse()
 
 
 func _evento_tiro_arma(me: InputEventMouseButton) -> bool:

@@ -241,6 +241,13 @@ var total_acertos: int = 0
 var total_erros: int = 0
 
 var marcas_erro: Array[Dictionary] = []
+## TV Box: prateleiras e marcas de tiro ficam em camadas próprias, atrás do
+## nó da fase (mesma ordem de antes: prateleiras, marcas, efeitos). Elas só
+## são redesenhadas quando entra/sai uma marca, e não mais em todo quadro
+## junto com os efeitos. Guarda as marcas mais recentes (as mais antigas somem).
+const MAX_MARCAS_ERRO: int = 80
+var _camada_estantes: Node2D = null
+var _camada_marcas: Node2D = null
 var fx_madeira: Array[Dictionary] = []
 var fx_vidro: Array[Dictionary] = []
 var fx_impacto: Array[Dictionary] = []
@@ -350,6 +357,8 @@ func _ready() -> void:
 	randomize()
 
 	_aplicar_sensibilidade_global()
+	_criar_camadas_estaticas()
+	_preaquecer_alfa_garrafas.call_deferred()
 	alvo_pos = get_viewport_rect().size * 0.5
 	mouse_delta_acumulado = Vector2.ZERO
 
@@ -701,9 +710,6 @@ func _atualizar_mira_hibrida(delta: float) -> void:
 
 
 func _draw() -> void:
-	_desenhar_profundidade_estantes()
-	_desenhar_sombra_estantes()
-	_desenhar_marcas_erro()
 	_desenhar_fx_madeira()
 	_desenhar_fx_vidro()
 	_desenhar_fx_impacto()
@@ -1046,17 +1052,17 @@ func _configurar_intro_comeco() -> void:
 	comeco_titulo.text = "3"
 	comeco_titulo.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	comeco_titulo.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	comeco_titulo.add_theme_font_size_override("font_size", 210)
-	comeco_titulo.add_theme_color_override("font_color", COR_NEON_BAR_CLARO)
-	comeco_titulo.add_theme_color_override("font_outline_color", Color(0.0, 0.05, 0.0, 1.0))
-	comeco_titulo.add_theme_constant_override("outline_size", 18)
+	Leve.font_size(comeco_titulo, "font_size", 210)
+	Leve.color(comeco_titulo, "font_color", COR_NEON_BAR_CLARO)
+	Leve.color(comeco_titulo, "font_outline_color", Color(0.0, 0.05, 0.0, 1.0))
+	Leve.constant(comeco_titulo, "outline_size", 18)
 	comeco_titulo.visible = false
 	comeco_titulo.pivot_offset = Vector2.ZERO
 
 	if fonte_luckiest != null:
-		comeco_titulo.add_theme_font_override("font", fonte_luckiest)
+		Leve.font(comeco_titulo, "font", fonte_luckiest)
 	elif ResourceLoader.exists(FONTE_LUCKIEST):
-		comeco_titulo.add_theme_font_override("font", load(FONTE_LUCKIEST))
+		Leve.font(comeco_titulo, "font", load(FONTE_LUCKIEST))
 
 	comeco_root.add_child(comeco_titulo)
 
@@ -1064,16 +1070,16 @@ func _configurar_intro_comeco() -> void:
 	comeco_subtitulo.text = "PREPARE-SE"
 	comeco_subtitulo.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	comeco_subtitulo.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	comeco_subtitulo.add_theme_font_size_override("font_size", 48)
-	comeco_subtitulo.add_theme_color_override("font_color", COR_NEON_BAR)
-	comeco_subtitulo.add_theme_color_override("font_outline_color", Color(0.0, 0.05, 0.0, 1.0))
-	comeco_subtitulo.add_theme_constant_override("outline_size", 9)
+	Leve.font_size(comeco_subtitulo, "font_size", 48)
+	Leve.color(comeco_subtitulo, "font_color", COR_NEON_BAR)
+	Leve.color(comeco_subtitulo, "font_outline_color", Color(0.0, 0.05, 0.0, 1.0))
+	Leve.constant(comeco_subtitulo, "outline_size", 9)
 	comeco_subtitulo.visible = false
 
 	if fonte_luckiest != null:
-		comeco_subtitulo.add_theme_font_override("font", fonte_luckiest)
+		Leve.font(comeco_subtitulo, "font", fonte_luckiest)
 	elif ResourceLoader.exists(FONTE_LUCKIEST):
-		comeco_subtitulo.add_theme_font_override("font", load(FONTE_LUCKIEST))
+		Leve.font(comeco_subtitulo, "font", load(FONTE_LUCKIEST))
 
 	comeco_root.add_child(comeco_subtitulo)
 
@@ -1108,7 +1114,7 @@ func _iniciar_intro_comeco() -> void:
 		comeco_titulo.visible = true
 		comeco_titulo.modulate = Color(1, 1, 1, 0.0)
 		comeco_titulo.scale = Vector2.ONE * 0.55
-		comeco_titulo.add_theme_font_size_override("font_size", 220)
+		Leve.font_size(comeco_titulo, "font_size", 220)
 
 	if comeco_subtitulo != null:
 		comeco_subtitulo.text = ""
@@ -1133,10 +1139,10 @@ func _rodar_intro_comeco_async() -> void:
 			comeco_titulo.visible = true
 			comeco_titulo.modulate = Color(1, 1, 1, 0.0)
 			comeco_titulo.scale = Vector2.ONE * 0.45
-			comeco_titulo.add_theme_font_size_override("font_size", 210)
-			comeco_titulo.add_theme_color_override("font_color", COR_NEON_BAR_CLARO)
-			comeco_titulo.add_theme_color_override("font_outline_color", Color(0.0, 0.05, 0.0, 1.0))
-			comeco_titulo.add_theme_constant_override("outline_size", 18)
+			Leve.font_size(comeco_titulo, "font_size", 210)
+			Leve.color(comeco_titulo, "font_color", COR_NEON_BAR_CLARO)
+			Leve.color(comeco_titulo, "font_outline_color", Color(0.0, 0.05, 0.0, 1.0))
+			Leve.constant(comeco_titulo, "outline_size", 18)
 
 
 		var tw_num := create_tween()
@@ -1166,10 +1172,10 @@ func _rodar_intro_comeco_async() -> void:
 		comeco_titulo.visible = true
 		comeco_titulo.modulate = Color(1, 1, 1, 0.0)
 		comeco_titulo.scale = Vector2.ONE * 0.70
-		comeco_titulo.add_theme_font_size_override("font_size", 84)
-		comeco_titulo.add_theme_color_override("font_color", COR_NEON_BAR_CLARO)
-		comeco_titulo.add_theme_color_override("font_outline_color", Color(0.0, 0.05, 0.0, 1.0))
-		comeco_titulo.add_theme_constant_override("outline_size", 12)
+		Leve.font_size(comeco_titulo, "font_size", 84)
+		Leve.color(comeco_titulo, "font_color", COR_NEON_BAR_CLARO)
+		Leve.color(comeco_titulo, "font_outline_color", Color(0.0, 0.05, 0.0, 1.0))
+		Leve.constant(comeco_titulo, "outline_size", 12)
 
 	if comeco_subtitulo != null:
 		comeco_subtitulo.visible = false
@@ -1433,21 +1439,21 @@ func _atualizar_status_chat_visual() -> void:
 
 			lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 			lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-			lbl.add_theme_font_size_override("font_size", 40)
-			lbl.add_theme_color_override("font_color", Color.WHITE)
-			lbl.add_theme_color_override("font_outline_color", Color.BLACK)
-			lbl.add_theme_constant_override("outline_size", 8)
+			Leve.font_size(lbl, "font_size", 40)
+			Leve.color(lbl, "font_color", Color.WHITE)
+			Leve.color(lbl, "font_outline_color", Color.BLACK)
+			Leve.constant(lbl, "outline_size", 8)
 
 			if chat_rodape_panel != null:
 				var estilo := chat_rodape_panel.get_theme_stylebox("panel") as StyleBoxFlat
 				if estilo == null:
 					estilo = _estilo_card_bar()
-					chat_rodape_panel.add_theme_stylebox_override("panel", estilo)
+					Leve.stylebox(chat_rodape_panel, "panel", estilo)
 
-				estilo.bg_color = Color(0.012, 0.045, 0.018, 0.88)
-				estilo.border_color = cor
-				estilo.shadow_color = Color(cor.r, cor.g, cor.b, 0.74)
-				estilo.shadow_size = 34
+				Leve.prop(estilo, "bg_color", Color(0.012, 0.045, 0.018, 0.88))
+				Leve.prop(estilo, "border_color", cor)
+				Leve.prop(estilo, "shadow_color", Color(cor.r, cor.g, cor.b, 0.74))
+				Leve.prop(estilo, "shadow_size", 34)
 
 		else:
 			lbl.visible = false
@@ -1733,13 +1739,83 @@ func _ponto_esta_sobre_garrafa_real(garrafa: Area2D, pos_global: Vector2) -> boo
 	if px < 0 or py < 0 or px >= int(tamanho.x) or py >= int(tamanho.y):
 		return false
 
-	var img: Image = textura.get_image()
-	if img == null or img.is_empty():
+	var alfa: float = _alfa_no_pixel(textura, px, py)
+	if alfa < 0.0:
 		return true
 
-	var cor: Color = img.get_pixel(px, py)
+	return alfa > 0.12
 
-	return cor.a > 0.12
+
+## Transparência de um pixel do quadro da garrafa. Antes, CADA tiro pedia à
+## placa de vídeo a folha de sprites inteira (textura.get_image()), o que dava
+## um tranco a cada disparo na TV Box. Agora a imagem de cada folha é lida uma
+## vez só e fica guardada. Retorna -1 se a imagem não puder ser lida (conta
+## como acerto, igual antes).
+var _cache_alfa: Dictionary = {}
+
+func _alfa_no_pixel(textura: Texture2D, px: int, py: int) -> float:
+	var base: Texture2D = textura
+	var origem := Vector2i.ZERO
+	var limite := Vector2i(textura.get_size())
+	if textura is AtlasTexture:
+		var at := textura as AtlasTexture
+		if at.atlas == null:
+			return -1.0
+		base = at.atlas
+		origem = Vector2i(at.region.position)
+		limite = Vector2i(at.region.size)
+	# Fora do recorte do quadro: transparente (como o get_pixel de antes).
+	if px >= limite.x or py >= limite.y:
+		return 0.0
+	var img: Image = _imagem_em_cache(base)
+	if img == null:
+		return -1.0
+	var x: int = origem.x + px
+	var y: int = origem.y + py
+	if x < 0 or y < 0 or x >= img.get_width() or y >= img.get_height():
+		return 0.0
+	return img.get_pixel(x, y).a
+
+
+func _imagem_em_cache(tex: Texture2D) -> Image:
+	var chave: int = tex.get_instance_id()
+	if _cache_alfa.has(chave):
+		return _cache_alfa[chave]
+	var img: Image = tex.get_image()
+	if img != null and not img.is_empty():
+		if img.is_compressed():
+			img.decompress()
+		if img.is_compressed() or img.is_empty():
+			img = null
+	else:
+		img = null
+	_cache_alfa[chave] = img
+	return img
+
+
+## Lê as folhas das garrafas uma por quadro, logo depois de abrir a fase,
+## para o primeiro tiro em cada garrafa também não travar.
+func _preaquecer_alfa_garrafas() -> void:
+	for cena in [cena_garrafa_gin, cena_garrafa_rum, cena_garrafa_vodka, cena_garrafa_whisky, cena_garrafa_falsa]:
+		if cena == null:
+			continue
+		var inst: Node = cena.instantiate()
+		for anim in inst.find_children("*", "AnimatedSprite2D", true, false):
+			var sf: SpriteFrames = (anim as AnimatedSprite2D).sprite_frames
+			if sf == null:
+				continue
+			for nome in sf.get_animation_names():
+				for i in range(sf.get_frame_count(nome)):
+					var t: Texture2D = sf.get_frame_texture(nome, i)
+					if t is AtlasTexture and (t as AtlasTexture).atlas != null:
+						t = (t as AtlasTexture).atlas
+					if t != null and not _cache_alfa.has(t.get_instance_id()):
+						_imagem_em_cache(t)
+						await get_tree().process_frame
+						if not is_inside_tree():
+							inst.free()
+							return
+		inst.free()
 
 
 func _obter_sprite_principal_da_garrafa(garrafa: Area2D) -> Sprite2D:
@@ -2705,6 +2781,8 @@ func _registrar_fx_vidro_colorido(pos: Vector2, cor_base: Color, cor_liquido: Co
 
 
 func _registrar_erro_visual(pos: Vector2) -> void:
+	while marcas_erro.size() >= MAX_MARCAS_ERRO:
+		marcas_erro.remove_at(0)
 	marcas_erro.append({
 		"pos": pos,
 		"idade": 0.0,
@@ -2716,6 +2794,7 @@ func _registrar_erro_visual(pos: Vector2) -> void:
 		"desvio_y": randf_range(-1.5, 1.5)
 	})
 	queue_redraw()
+	_redesenhar_marcas()
 
 
 func _atualizar_marcas_erro(delta: float) -> void:
@@ -2729,6 +2808,7 @@ func _atualizar_marcas_erro(delta: float) -> void:
 
 		if idade >= vida:
 			marcas_erro.remove_at(i)
+			_redesenhar_marcas()
 		else:
 			marcas_erro[i] = marca
 
@@ -2926,6 +3006,32 @@ func _atualizar_fx_vidro(delta: float) -> void:
 			fx_vidro[i] = fx
 
 
+func _criar_camadas_estaticas() -> void:
+	_camada_estantes = Node2D.new()
+	_camada_estantes.name = "CamadaEstantes"
+	_camada_estantes.show_behind_parent = true
+	add_child(_camada_estantes)
+	_camada_estantes.draw.connect(_desenhar_camada_estantes)
+
+	_camada_marcas = Node2D.new()
+	_camada_marcas.name = "CamadaMarcasTiro"
+	_camada_marcas.show_behind_parent = true
+	add_child(_camada_marcas)
+	_camada_marcas.draw.connect(_desenhar_marcas_erro)
+
+	get_viewport().size_changed.connect(_camada_estantes.queue_redraw)
+
+
+func _desenhar_camada_estantes() -> void:
+	_desenhar_profundidade_estantes()
+	_desenhar_sombra_estantes()
+
+
+func _redesenhar_marcas() -> void:
+	if _camada_marcas != null:
+		_camada_marcas.queue_redraw()
+
+
 func _desenhar_profundidade_estantes() -> void:
 	var largura_tela: float = get_viewport_rect().size.x
 	var altura_tela: float = get_viewport_rect().size.y
@@ -2935,27 +3041,27 @@ func _desenhar_profundidade_estantes() -> void:
 	if altura_util <= 0.0:
 		return
 
-	draw_rect(Rect2(0.0, y_inicio, largura_tela, altura_util), Color(0.0, 0.0, 0.0, 0.015), true)
-	draw_rect(Rect2(0.0, y_inicio, 54.0, altura_util), Color(0.0, 0.0, 0.0, 0.012), true)
-	draw_rect(Rect2(largura_tela - 54.0, y_inicio, 54.0, altura_util), Color(0.0, 0.0, 0.0, 0.012), true)
+	_camada_estantes.draw_rect(Rect2(0.0, y_inicio, largura_tela, altura_util), Color(0.0, 0.0, 0.0, 0.015), true)
+	_camada_estantes.draw_rect(Rect2(0.0, y_inicio, 54.0, altura_util), Color(0.0, 0.0, 0.0, 0.012), true)
+	_camada_estantes.draw_rect(Rect2(largura_tela - 54.0, y_inicio, 54.0, altura_util), Color(0.0, 0.0, 0.0, 0.012), true)
 
 	if Y_PRATELEIRA_100 - 72.0 >= y_inicio:
-		draw_rect(Rect2(78.0, Y_PRATELEIRA_100 - 72.0, 720.0, 26.0), Color(0.0, 0.0, 0.0, 0.030), true)
+		_camada_estantes.draw_rect(Rect2(78.0, Y_PRATELEIRA_100 - 72.0, 720.0, 26.0), Color(0.0, 0.0, 0.0, 0.030), true)
 
 	if Y_PRATELEIRA_80 - 62.0 >= y_inicio:
-		draw_rect(Rect2(60.0, Y_PRATELEIRA_80 - 62.0, 758.0, 24.0), Color(0.0, 0.0, 0.0, 0.026), true)
+		_camada_estantes.draw_rect(Rect2(60.0, Y_PRATELEIRA_80 - 62.0, 758.0, 24.0), Color(0.0, 0.0, 0.0, 0.026), true)
 
 	if Y_PRATELEIRA_50 - 52.0 >= y_inicio:
-		draw_rect(Rect2(44.0, Y_PRATELEIRA_50 - 52.0, 790.0, 22.0), Color(0.0, 0.0, 0.0, 0.022), true)
+		_camada_estantes.draw_rect(Rect2(44.0, Y_PRATELEIRA_50 - 52.0, 790.0, 22.0), Color(0.0, 0.0, 0.0, 0.022), true)
 
-	draw_rect(
+	_camada_estantes.draw_rect(
 		Rect2(30.0, Y_PRATELEIRA_20 - 44.0, AREA_BARRIL_X_INICIO - 30.0, 24.0),
 		Color(0.0, 0.0, 0.0, 0.0),
 		true
 	)
 
 	if AREA_BARRIL_X_FIM < largura_tela:
-		draw_rect(
+		_camada_estantes.draw_rect(
 			Rect2(AREA_BARRIL_X_FIM, Y_PRATELEIRA_20 - 44.0, largura_tela - AREA_BARRIL_X_FIM, 24.0),
 			Color(0.0, 0.0, 0.0, 0.0),
 			true
@@ -2967,22 +3073,22 @@ func _desenhar_sombra_estantes() -> void:
 	var y_inicio: float = CORTE_DESENHO_TOPO_Y
 
 	if Y_PRATELEIRA_100 + 34.0 >= y_inicio:
-		draw_rect(Rect2(80.0, Y_PRATELEIRA_100 + 34.0, 714.0, 8.0), Color(0.0, 0.0, 0.0, 0.045), true)
+		_camada_estantes.draw_rect(Rect2(80.0, Y_PRATELEIRA_100 + 34.0, 714.0, 8.0), Color(0.0, 0.0, 0.0, 0.045), true)
 
 	if Y_PRATELEIRA_80 + 36.0 >= y_inicio:
-		draw_rect(Rect2(64.0, Y_PRATELEIRA_80 + 36.0, 748.0, 8.0), Color(0.0, 0.0, 0.0, 0.042), true)
+		_camada_estantes.draw_rect(Rect2(64.0, Y_PRATELEIRA_80 + 36.0, 748.0, 8.0), Color(0.0, 0.0, 0.0, 0.042), true)
 
 	if Y_PRATELEIRA_50 + 38.0 >= y_inicio:
-		draw_rect(Rect2(48.0, Y_PRATELEIRA_50 + 38.0, 784.0, 8.0), Color(0.0, 0.0, 0.0, 0.040), true)
+		_camada_estantes.draw_rect(Rect2(48.0, Y_PRATELEIRA_50 + 38.0, 784.0, 8.0), Color(0.0, 0.0, 0.0, 0.040), true)
 
-	draw_rect(
+	_camada_estantes.draw_rect(
 		Rect2(34.0, Y_PRATELEIRA_20 + 40.0, AREA_BARRIL_X_INICIO - 34.0, 8.0),
 		Color(0.0, 0.0, 0.0, 0.0),
 		true
 	)
 
 	if AREA_BARRIL_X_FIM < largura_tela:
-		draw_rect(
+		_camada_estantes.draw_rect(
 			Rect2(AREA_BARRIL_X_FIM, Y_PRATELEIRA_20 + 40.0, largura_tela - AREA_BARRIL_X_FIM, 8.0),
 			Color(0.0, 0.0, 0.0, 0.0),
 			true
@@ -3009,17 +3115,17 @@ func _configurar_modal_nome_ranking() -> void:
 
 	ranking_nome_panel = Panel.new()
 	ranking_nome_root.add_child(ranking_nome_panel)
-	ranking_nome_panel.add_theme_stylebox_override("panel", _estilo_modal_bar())
+	Leve.stylebox(ranking_nome_panel, "panel", _estilo_modal_bar())
 
 	# ── Título ────────────────────────────────────────────────────────────
 	ranking_nome_titulo = Label.new()
 	ranking_nome_titulo.text = "🏆 NOVO RECORDE!"
 	ranking_nome_titulo.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	ranking_nome_titulo.vertical_alignment   = VERTICAL_ALIGNMENT_CENTER
-	ranking_nome_titulo.add_theme_font_size_override("font_size", 46)
-	ranking_nome_titulo.add_theme_color_override("font_color", Color(0.82, 1.0, 0.86, 1.0))
-	ranking_nome_titulo.add_theme_color_override("font_outline_color", Color.BLACK)
-	ranking_nome_titulo.add_theme_constant_override("outline_size", 8)
+	Leve.font_size(ranking_nome_titulo, "font_size", 46)
+	Leve.color(ranking_nome_titulo, "font_color", Color(0.82, 1.0, 0.86, 1.0))
+	Leve.color(ranking_nome_titulo, "font_outline_color", Color.BLACK)
+	Leve.constant(ranking_nome_titulo, "outline_size", 8)
 	ranking_nome_panel.add_child(ranking_nome_titulo)
 
 	# ── Instrução ─────────────────────────────────────────────────────────
@@ -3027,10 +3133,10 @@ func _configurar_modal_nome_ranking() -> void:
 	ranking_nome_texto.text = "ATIRE NAS LETRAS PARA ESCREVER SEU NOME\nMÁXIMO 9 LETRAS"
 	ranking_nome_texto.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	ranking_nome_texto.vertical_alignment   = VERTICAL_ALIGNMENT_CENTER
-	ranking_nome_texto.add_theme_font_size_override("font_size", 24)
-	ranking_nome_texto.add_theme_color_override("font_color", COR_NEON_BAR_CLARO)
-	ranking_nome_texto.add_theme_color_override("font_outline_color", Color.BLACK)
-	ranking_nome_texto.add_theme_constant_override("outline_size", 5)
+	Leve.font_size(ranking_nome_texto, "font_size", 24)
+	Leve.color(ranking_nome_texto, "font_color", COR_NEON_BAR_CLARO)
+	Leve.color(ranking_nome_texto, "font_outline_color", Color.BLACK)
+	Leve.constant(ranking_nome_texto, "outline_size", 5)
 	ranking_nome_panel.add_child(ranking_nome_texto)
 
 	# ── Display do nome digitado ───────────────────────────────────────────
@@ -3038,19 +3144,19 @@ func _configurar_modal_nome_ranking() -> void:
 	ranking_nome_display.text = "---------"
 	ranking_nome_display.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	ranking_nome_display.vertical_alignment   = VERTICAL_ALIGNMENT_CENTER
-	ranking_nome_display.add_theme_font_size_override("font_size", 54)
-	ranking_nome_display.add_theme_color_override("font_color", COR_NEON_BAR)
-	ranking_nome_display.add_theme_color_override("font_outline_color", Color.BLACK)
-	ranking_nome_display.add_theme_constant_override("outline_size", 9)
+	Leve.font_size(ranking_nome_display, "font_size", 54)
+	Leve.color(ranking_nome_display, "font_color", COR_NEON_BAR)
+	Leve.color(ranking_nome_display, "font_outline_color", Color.BLACK)
+	Leve.constant(ranking_nome_display, "outline_size", 9)
 	if fonte_orbitron != null:
-		ranking_nome_display.add_theme_font_override("font", fonte_orbitron)
+		Leve.font(ranking_nome_display, "font", fonte_orbitron)
 	ranking_nome_panel.add_child(ranking_nome_display)
 
 	# ── Teclado de letras ─────────────────────────────────────────────────
 	ranking_nome_teclado = GridContainer.new()
 	ranking_nome_teclado.columns = 9
-	ranking_nome_teclado.add_theme_constant_override("h_separation", 8)
-	ranking_nome_teclado.add_theme_constant_override("v_separation", 8)
+	Leve.constant(ranking_nome_teclado, "h_separation", 8)
+	Leve.constant(ranking_nome_teclado, "v_separation", 8)
 	ranking_nome_panel.add_child(ranking_nome_teclado)
 
 	var letras := "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
@@ -3062,12 +3168,12 @@ func _configurar_modal_nome_ranking() -> void:
 
 	# ── Botões de ação ────────────────────────────────────────────────────
 	ranking_nome_btn_apagar = _criar_botao_tecla_ranking("⌫  APAGAR")
-	ranking_nome_btn_apagar.add_theme_color_override("font_color", Color(0.02, 0.10, 0.04, 1.0))
+	Leve.color(ranking_nome_btn_apagar, "font_color", Color(0.02, 0.10, 0.04, 1.0))
 	ranking_nome_btn_apagar.pressed.connect(_ranking_apagar_letra)
 	ranking_nome_panel.add_child(ranking_nome_btn_apagar)
 
 	ranking_nome_btn_ok = _criar_botao_tecla_ranking("✔  SALVAR")
-	ranking_nome_btn_ok.add_theme_color_override("font_color", Color(0.02, 0.10, 0.04, 1.0))
+	Leve.color(ranking_nome_btn_ok, "font_color", Color(0.02, 0.10, 0.04, 1.0))
 	ranking_nome_btn_ok.pressed.connect(_confirmar_nome_ranking.bind(false))
 	ranking_nome_panel.add_child(ranking_nome_btn_ok)
 
@@ -3076,10 +3182,10 @@ func _configurar_modal_nome_ranking() -> void:
 	ranking_nome_timer_label.text = "SALVA COMO ANONIMO EM 50"
 	ranking_nome_timer_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	ranking_nome_timer_label.vertical_alignment   = VERTICAL_ALIGNMENT_CENTER
-	ranking_nome_timer_label.add_theme_font_size_override("font_size", 24)
-	ranking_nome_timer_label.add_theme_color_override("font_color", COR_NEON_BAR_CLARO)
-	ranking_nome_timer_label.add_theme_color_override("font_outline_color", Color.BLACK)
-	ranking_nome_timer_label.add_theme_constant_override("outline_size", 6)
+	Leve.font_size(ranking_nome_timer_label, "font_size", 24)
+	Leve.color(ranking_nome_timer_label, "font_color", COR_NEON_BAR_CLARO)
+	Leve.color(ranking_nome_timer_label, "font_outline_color", Color.BLACK)
+	Leve.constant(ranking_nome_timer_label, "outline_size", 6)
 	ranking_nome_panel.add_child(ranking_nome_timer_label)
 
 	call_deferred("_ajustar_modal_nome_ranking")
@@ -3091,11 +3197,11 @@ func _criar_botao_tecla_ranking(texto: String) -> Button:
 	btn.text = texto
 	btn.focus_mode = Control.FOCUS_NONE
 	btn.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	btn.add_theme_font_size_override("font_size", 24)
-	btn.add_theme_color_override("font_color", Color(0.02, 0.10, 0.04, 1.0))
+	Leve.font_size(btn, "font_size", 24)
+	Leve.color(btn, "font_color", Color(0.02, 0.10, 0.04, 1.0))
 
 	if fonte_luckiest != null:
-		btn.add_theme_font_override("font", fonte_luckiest)
+		Leve.font(btn, "font", fonte_luckiest)
 
 	var normal := StyleBoxFlat.new()
 	normal.bg_color = Color(0.18, 0.96, 0.28, 0.92)
@@ -3125,9 +3231,9 @@ func _criar_botao_tecla_ranking(texto: String) -> Button:
 	hover.shadow_color = Color(0.20, 1.0, 0.32, 0.62)
 	hover.shadow_size  = 14
 
-	btn.add_theme_stylebox_override("normal",  normal)
-	btn.add_theme_stylebox_override("hover",   hover)
-	btn.add_theme_stylebox_override("pressed", hover)
+	Leve.stylebox(btn, "normal",  normal)
+	Leve.stylebox(btn, "hover",   hover)
+	Leve.stylebox(btn, "pressed", hover)
 
 	return btn
 
@@ -3240,10 +3346,10 @@ func _animar_texto_record_salvo_temporario(nome_salvo: String) -> void:
 		return
 
 	fim_title_label.text = "RECORDE SALVO!"
-	fim_title_label.add_theme_font_size_override("font_size", 50)
-	fim_title_label.add_theme_color_override("font_color", Color(0.82, 1.0, 0.86, 1.0))
-	fim_title_label.add_theme_color_override("font_outline_color", Color.BLACK)
-	fim_title_label.add_theme_constant_override("outline_size", 9)
+	Leve.font_size(fim_title_label, "font_size", 50)
+	Leve.color(fim_title_label, "font_color", Color(0.82, 1.0, 0.86, 1.0))
+	Leve.color(fim_title_label, "font_outline_color", Color.BLACK)
+	Leve.constant(fim_title_label, "outline_size", 9)
 
 	fim_title_label.modulate = Color(1, 1, 1, 0.0)
 	fim_title_label.scale = Vector2(0.88, 0.88)
@@ -3267,8 +3373,8 @@ func _animar_texto_record_salvo_temporario(nome_salvo: String) -> void:
 		return
 
 	fim_title_label.text = "RESULTADO FINAL"
-	fim_title_label.add_theme_font_size_override("font_size", 50)
-	fim_title_label.add_theme_color_override("font_color", COR_NEON_BAR_CLARO)
+	Leve.font_size(fim_title_label, "font_size", 50)
+	Leve.color(fim_title_label, "font_color", COR_NEON_BAR_CLARO)
 	fim_title_label.modulate = Color(1, 1, 1, 0.0)
 	fim_title_label.scale = Vector2(0.96, 0.96)
 
@@ -3344,20 +3450,20 @@ func _desenhar_marcas_erro() -> void:
 
 		var centro := pos + Vector2(dx, dy)
 
-		draw_circle(centro, poeira, Color(0.08, 0.04, 0.02, 0.10))
-		draw_circle(centro, anel, Color(0.14, 0.08, 0.04, 0.18))
-		draw_circle(centro, raio + 2.2, Color(0.34, 0.18, 0.07, 0.30))
-		draw_circle(centro, raio + 0.8, Color(0.22, 0.11, 0.05, 0.46))
-		draw_circle(centro, raio * 0.72, Color(0.025, 0.020, 0.018, 0.96))
+		_camada_marcas.draw_circle(centro, poeira, Color(0.08, 0.04, 0.02, 0.10))
+		_camada_marcas.draw_circle(centro, anel, Color(0.14, 0.08, 0.04, 0.18))
+		_camada_marcas.draw_circle(centro, raio + 2.2, Color(0.34, 0.18, 0.07, 0.30))
+		_camada_marcas.draw_circle(centro, raio + 0.8, Color(0.22, 0.11, 0.05, 0.46))
+		_camada_marcas.draw_circle(centro, raio * 0.72, Color(0.025, 0.020, 0.018, 0.96))
 
-		draw_line(
+		_camada_marcas.draw_line(
 			centro + Vector2(-raio * 0.9, -1.0),
 			centro + Vector2(raio * 0.7, 0.5),
 			Color(0.45, 0.27, 0.12, 0.20),
 			1.2,
 			true
 		)
-		draw_line(
+		_camada_marcas.draw_line(
 			centro + Vector2(-1.0, -raio * 0.8),
 			centro + Vector2(1.0, raio * 0.7),
 			Color(0.40, 0.24, 0.10, 0.14),
@@ -3365,7 +3471,7 @@ func _desenhar_marcas_erro() -> void:
 			true
 		)
 
-		draw_arc(
+		_camada_marcas.draw_arc(
 			centro + Vector2(0.5, 0.8),
 			raio * 0.92,
 			0.15,
@@ -3673,20 +3779,20 @@ func _posicionar_modal_final() -> void:
 		fim_title_label.size = Vector2(painel_w - 60.0, 74.0)
 		fim_title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		fim_title_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		fim_title_label.add_theme_font_size_override("font_size", 54)
-		fim_title_label.add_theme_color_override("font_color", COR_NEON_BAR_CLARO)
-		fim_title_label.add_theme_color_override("font_outline_color", Color.BLACK)
-		fim_title_label.add_theme_constant_override("outline_size", 8)
+		Leve.font_size(fim_title_label, "font_size", 54)
+		Leve.color(fim_title_label, "font_color", COR_NEON_BAR_CLARO)
+		Leve.color(fim_title_label, "font_outline_color", Color.BLACK)
+		Leve.constant(fim_title_label, "outline_size", 8)
 
 	if fim_score_label != null:
 		fim_score_label.position = Vector2(x + 80.0, y + 152.0)
 		fim_score_label.size = Vector2(painel_w - 160.0, 150.0)
 		fim_score_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		fim_score_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		fim_score_label.add_theme_font_size_override("font_size", 42)
-		fim_score_label.add_theme_color_override("font_color", Color(0.82, 1.0, 0.86, 1.0))
-		fim_score_label.add_theme_color_override("font_outline_color", Color.BLACK)
-		fim_score_label.add_theme_constant_override("outline_size", 6)
+		Leve.font_size(fim_score_label, "font_size", 42)
+		Leve.color(fim_score_label, "font_color", Color(0.82, 1.0, 0.86, 1.0))
+		Leve.color(fim_score_label, "font_outline_color", Color.BLACK)
+		Leve.constant(fim_score_label, "outline_size", 6)
 
 	if fim_stats_label != null:
 		var linhas: int = fim_stats_label.text.count("\n") + 1
@@ -3702,10 +3808,10 @@ func _posicionar_modal_final() -> void:
 		fim_stats_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		fim_stats_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		fim_stats_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		fim_stats_label.add_theme_font_size_override("font_size", font_stats)
-		fim_stats_label.add_theme_color_override("font_color", Color(0.88, 1.0, 0.90, 1.0))
-		fim_stats_label.add_theme_color_override("font_outline_color", Color.BLACK)
-		fim_stats_label.add_theme_constant_override("outline_size", 5)
+		Leve.font_size(fim_stats_label, "font_size", font_stats)
+		Leve.color(fim_stats_label, "font_color", Color(0.88, 1.0, 0.90, 1.0))
+		Leve.color(fim_stats_label, "font_outline_color", Color.BLACK)
+		Leve.constant(fim_stats_label, "outline_size", 5)
 
 	if fim_countdown_label != null:
 		fim_countdown_label.position = Vector2(x + 60.0, y + painel_h - 150.0)
@@ -3713,10 +3819,10 @@ func _posicionar_modal_final() -> void:
 		fim_countdown_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		fim_countdown_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		fim_countdown_label.autowrap_mode = TextServer.AUTOWRAP_OFF
-		fim_countdown_label.add_theme_font_size_override("font_size", 24)
-		fim_countdown_label.add_theme_color_override("font_color", COR_NEON_BAR_CLARO)
-		fim_countdown_label.add_theme_color_override("font_outline_color", Color.BLACK)
-		fim_countdown_label.add_theme_constant_override("outline_size", 5)
+		Leve.font_size(fim_countdown_label, "font_size", 24)
+		Leve.color(fim_countdown_label, "font_color", COR_NEON_BAR_CLARO)
+		Leve.color(fim_countdown_label, "font_outline_color", Color.BLACK)
+		Leve.constant(fim_countdown_label, "outline_size", 5)
 
 	if fim_insert_coin_label != null:
 		fim_insert_coin_label.position = Vector2(x + 60.0, y + painel_h - 98.0)
@@ -3724,10 +3830,10 @@ func _posicionar_modal_final() -> void:
 		fim_insert_coin_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		fim_insert_coin_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		fim_insert_coin_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		fim_insert_coin_label.add_theme_font_size_override("font_size", 24)
-		fim_insert_coin_label.add_theme_color_override("font_color", COR_NEON_BAR)
-		fim_insert_coin_label.add_theme_color_override("font_outline_color", Color.BLACK)
-		fim_insert_coin_label.add_theme_constant_override("outline_size", 5)
+		Leve.font_size(fim_insert_coin_label, "font_size", 24)
+		Leve.color(fim_insert_coin_label, "font_color", COR_NEON_BAR)
+		Leve.color(fim_insert_coin_label, "font_outline_color", Color.BLACK)
+		Leve.constant(fim_insert_coin_label, "outline_size", 5)
 
 
 
@@ -3755,6 +3861,7 @@ func _reiniciar_jogo() -> void:
 	aviso_recarga_t = 0.0
 
 	marcas_erro.clear()
+	_redesenhar_marcas()
 	fx_madeira.clear()
 	fx_vidro.clear()
 	fx_impacto.clear()
@@ -3871,7 +3978,7 @@ func _configurar_hud() -> void:
 	hud_layer.add_child(hud_root)
 
 	top_bar = Panel.new()
-	top_bar.add_theme_stylebox_override("panel", _estilo_card_bar())
+	Leve.stylebox(top_bar, "panel", _estilo_card_bar())
 	top_bar.z_index = 40
 	hud_root.add_child(top_bar)
 
@@ -3892,23 +3999,23 @@ func _configurar_hud() -> void:
 
 	# Painel de pontuação — sempre Panel arredondado neon verde (igual timer/municao)
 	score_panel = Panel.new()
-	score_panel.add_theme_stylebox_override("panel", _estilo_card_bar())
+	Leve.stylebox(score_panel, "panel", _estilo_card_bar())
 	score_panel.z_index = 55
 	score_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hud_root.add_child(score_panel)
 
 	timer_panel = Panel.new()
-	timer_panel.add_theme_stylebox_override("panel", _estilo_card_bar())
+	Leve.stylebox(timer_panel, "panel", _estilo_card_bar())
 	timer_panel.z_index = 60
 	hud_root.add_child(timer_panel)
 
 	municao_panel = Panel.new()
-	municao_panel.add_theme_stylebox_override("panel", _estilo_card_bar())
+	Leve.stylebox(municao_panel, "panel", _estilo_card_bar())
 	municao_panel.z_index = 60
 	hud_root.add_child(municao_panel)
 
 	status_panel = Panel.new()
-	status_panel.add_theme_stylebox_override("panel", _estilo_card_bar())
+	Leve.stylebox(status_panel, "panel", _estilo_card_bar())
 	status_panel.visible = false
 	status_panel.z_index = 60
 	hud_root.add_child(status_panel)
@@ -3917,17 +4024,17 @@ func _configurar_hud() -> void:
 	chat_rodape_panel.name = "ChatRodapePanel"
 	chat_rodape_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	chat_rodape_panel.visible = false
-	chat_rodape_panel.add_theme_stylebox_override("panel", _estilo_card_bar())
+	Leve.stylebox(chat_rodape_panel, "panel", _estilo_card_bar())
 	hud_root.add_child(chat_rodape_panel)
 	
 	stats_hud_panel = Panel.new()
-	stats_hud_panel.add_theme_stylebox_override("panel", _estilo_card_bar())
+	Leve.stylebox(stats_hud_panel, "panel", _estilo_card_bar())
 	stats_hud_panel.z_index = 55
 	stats_hud_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hud_root.add_child(stats_hud_panel)
 
 	fim_panel = Panel.new()
-	fim_panel.add_theme_stylebox_override("panel", _estilo_modal_bar())
+	Leve.stylebox(fim_panel, "panel", _estilo_modal_bar())
 	fim_panel.visible = false
 	fim_panel.z_index = 110
 	hud_root.add_child(fim_panel)
@@ -3941,7 +4048,7 @@ func _configurar_hud() -> void:
 	fim_topo_estilo.corner_radius_top_right    = 56
 	fim_topo_estilo.corner_radius_bottom_left  = 0
 	fim_topo_estilo.corner_radius_bottom_right = 0
-	fim_topo_panel.add_theme_stylebox_override("panel", fim_topo_estilo)
+	Leve.stylebox(fim_topo_panel, "panel", fim_topo_estilo)
 	fim_panel.add_child(fim_topo_panel)
 
 	# Linha neon separadora
@@ -3979,10 +4086,10 @@ func _configurar_hud() -> void:
 	score_title_label.text = "PONTUAÇÃO"
 	score_title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	score_title_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	score_title_label.add_theme_font_size_override("font_size", 22)
-	score_title_label.add_theme_color_override("font_color", Color(0.604, 0.997, 0.966, 1.0))
-	score_title_label.add_theme_color_override("font_outline_color", Color.BLACK)
-	score_title_label.add_theme_constant_override("outline_size", 4)
+	Leve.font_size(score_title_label, "font_size", 22)
+	Leve.color(score_title_label, "font_color", Color(0.604, 0.997, 0.966, 1.0))
+	Leve.color(score_title_label, "font_outline_color", Color.BLACK)
+	Leve.constant(score_title_label, "outline_size", 4)
 	score_title_label.z_index = 90
 	hud_root.add_child(score_title_label)
 
@@ -3990,10 +4097,10 @@ func _configurar_hud() -> void:
 	score_label.text = "0"
 	score_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	score_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	score_label.add_theme_font_size_override("font_size", 58)
-	score_label.add_theme_color_override("font_color", Color(0.631, 0.989, 0.968, 1.0))
-	score_label.add_theme_color_override("font_outline_color", Color.BLACK)
-	score_label.add_theme_constant_override("outline_size", 7)
+	Leve.font_size(score_label, "font_size", 58)
+	Leve.color(score_label, "font_color", Color(0.631, 0.989, 0.968, 1.0))
+	Leve.color(score_label, "font_outline_color", Color.BLACK)
+	Leve.constant(score_label, "outline_size", 7)
 	score_label.z_index = 90
 	hud_root.add_child(score_label)
 
@@ -4001,10 +4108,10 @@ func _configurar_hud() -> void:
 	timer_title_label.text = "TEMPO"
 	timer_title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	timer_title_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	timer_title_label.add_theme_font_size_override("font_size", 20)
-	timer_title_label.add_theme_color_override("font_color", Color(0.90, 0.97, 1.0, 1.0))
-	timer_title_label.add_theme_color_override("font_outline_color", Color.BLACK)
-	timer_title_label.add_theme_constant_override("outline_size", 4)
+	Leve.font_size(timer_title_label, "font_size", 20)
+	Leve.color(timer_title_label, "font_color", Color(0.90, 0.97, 1.0, 1.0))
+	Leve.color(timer_title_label, "font_outline_color", Color.BLACK)
+	Leve.constant(timer_title_label, "outline_size", 4)
 	timer_title_label.z_index = 90
 	hud_root.add_child(timer_title_label)
 
@@ -4012,10 +4119,10 @@ func _configurar_hud() -> void:
 	timer_label.text = "02:00"
 	timer_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	timer_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	timer_label.add_theme_font_size_override("font_size", 42)
-	timer_label.add_theme_color_override("font_color", COR_TIMER_NORMAL)
-	timer_label.add_theme_color_override("font_outline_color", Color.BLACK)
-	timer_label.add_theme_constant_override("outline_size", 7)
+	Leve.font_size(timer_label, "font_size", 42)
+	Leve.color(timer_label, "font_color", COR_TIMER_NORMAL)
+	Leve.color(timer_label, "font_outline_color", Color.BLACK)
+	Leve.constant(timer_label, "outline_size", 7)
 	timer_label.z_index = 90
 	hud_root.add_child(timer_label)
 
@@ -4023,10 +4130,10 @@ func _configurar_hud() -> void:
 	municao_title_label.text = "MUNIÇÃO"
 	municao_title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	municao_title_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	municao_title_label.add_theme_font_size_override("font_size", 21)
-	municao_title_label.add_theme_color_override("font_color", Color(0.92, 0.97, 1.0, 1.0))
-	municao_title_label.add_theme_color_override("font_outline_color", Color.BLACK)
-	municao_title_label.add_theme_constant_override("outline_size", 4)
+	Leve.font_size(municao_title_label, "font_size", 21)
+	Leve.color(municao_title_label, "font_color", Color(0.92, 0.97, 1.0, 1.0))
+	Leve.color(municao_title_label, "font_outline_color", Color.BLACK)
+	Leve.constant(municao_title_label, "outline_size", 4)
 	municao_title_label.z_index = 90
 	hud_root.add_child(municao_title_label)
 
@@ -4034,10 +4141,10 @@ func _configurar_hud() -> void:
 	municao_label.text = "CARREGADA"
 	municao_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	municao_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	municao_label.add_theme_font_size_override("font_size", 18)
-	municao_label.add_theme_color_override("font_color", Color(0.84, 1.0, 0.92, 1.0))
-	municao_label.add_theme_color_override("font_outline_color", Color.BLACK)
-	municao_label.add_theme_constant_override("outline_size", 4)
+	Leve.font_size(municao_label, "font_size", 18)
+	Leve.color(municao_label, "font_color", Color(0.84, 1.0, 0.92, 1.0))
+	Leve.color(municao_label, "font_outline_color", Color.BLACK)
+	Leve.constant(municao_label, "outline_size", 4)
 	municao_label.z_index = 90
 	hud_root.add_child(municao_label)
 
@@ -4045,10 +4152,10 @@ func _configurar_hud() -> void:
 	recarga_label.text = "ENGATILHE PARA RECARREGAR"
 	recarga_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	recarga_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	recarga_label.add_theme_font_size_override("font_size", 16)
-	recarga_label.add_theme_color_override("font_color", Color(0.76, 0.88, 1.0, 0.95))
-	recarga_label.add_theme_color_override("font_outline_color", Color.BLACK)
-	recarga_label.add_theme_constant_override("outline_size", 4)
+	Leve.font_size(recarga_label, "font_size", 16)
+	Leve.color(recarga_label, "font_color", Color(0.76, 0.88, 1.0, 0.95))
+	Leve.color(recarga_label, "font_outline_color", Color.BLACK)
+	Leve.constant(recarga_label, "outline_size", 4)
 	recarga_label.z_index = 90
 	hud_root.add_child(recarga_label)
 
@@ -4056,10 +4163,10 @@ func _configurar_hud() -> void:
 	tiros_title_label.text = "TIROS"
 	tiros_title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	tiros_title_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	tiros_title_label.add_theme_font_size_override("font_size", 18)
-	tiros_title_label.add_theme_color_override("font_color", Color(1.0, 0.90, 0.32, 1.0))
-	tiros_title_label.add_theme_color_override("font_outline_color", Color.BLACK)
-	tiros_title_label.add_theme_constant_override("outline_size", 4)
+	Leve.font_size(tiros_title_label, "font_size", 18)
+	Leve.color(tiros_title_label, "font_color", Color(1.0, 0.90, 0.32, 1.0))
+	Leve.color(tiros_title_label, "font_outline_color", Color.BLACK)
+	Leve.constant(tiros_title_label, "outline_size", 4)
 	tiros_title_label.z_index = 90
 	hud_root.add_child(tiros_title_label)
 
@@ -4067,10 +4174,10 @@ func _configurar_hud() -> void:
 	tiros_label.text = "0"
 	tiros_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	tiros_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	tiros_label.add_theme_font_size_override("font_size", 34)
-	tiros_label.add_theme_color_override("font_color", Color.WHITE)
-	tiros_label.add_theme_color_override("font_outline_color", Color.BLACK)
-	tiros_label.add_theme_constant_override("outline_size", 6)
+	Leve.font_size(tiros_label, "font_size", 34)
+	Leve.color(tiros_label, "font_color", Color.WHITE)
+	Leve.color(tiros_label, "font_outline_color", Color.BLACK)
+	Leve.constant(tiros_label, "outline_size", 6)
 	tiros_label.z_index = 90
 	hud_root.add_child(tiros_label)
 
@@ -4078,10 +4185,10 @@ func _configurar_hud() -> void:
 	acertos_title_label.text = "ACERTOS"
 	acertos_title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	acertos_title_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	acertos_title_label.add_theme_font_size_override("font_size", 18)
-	acertos_title_label.add_theme_color_override("font_color", Color(0.32, 0.92, 1.0, 1.0))
-	acertos_title_label.add_theme_color_override("font_outline_color", Color.BLACK)
-	acertos_title_label.add_theme_constant_override("outline_size", 4)
+	Leve.font_size(acertos_title_label, "font_size", 18)
+	Leve.color(acertos_title_label, "font_color", Color(0.32, 0.92, 1.0, 1.0))
+	Leve.color(acertos_title_label, "font_outline_color", Color.BLACK)
+	Leve.constant(acertos_title_label, "outline_size", 4)
 	acertos_title_label.z_index = 90
 	hud_root.add_child(acertos_title_label)
 
@@ -4089,10 +4196,10 @@ func _configurar_hud() -> void:
 	acertos_label.text = "0"
 	acertos_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	acertos_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	acertos_label.add_theme_font_size_override("font_size", 34)
-	acertos_label.add_theme_color_override("font_color", Color.WHITE)
-	acertos_label.add_theme_color_override("font_outline_color", Color.BLACK)
-	acertos_label.add_theme_constant_override("outline_size", 6)
+	Leve.font_size(acertos_label, "font_size", 34)
+	Leve.color(acertos_label, "font_color", Color.WHITE)
+	Leve.color(acertos_label, "font_outline_color", Color.BLACK)
+	Leve.constant(acertos_label, "outline_size", 6)
 	acertos_label.z_index = 90
 	hud_root.add_child(acertos_label)
 
@@ -4100,10 +4207,10 @@ func _configurar_hud() -> void:
 	status_label.text = ""
 	status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	status_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	status_label.add_theme_color_override("font_color", Color.WHITE)
-	status_label.add_theme_color_override("font_outline_color", Color.BLACK)
-	status_label.add_theme_font_size_override("font_size", 42)
-	status_label.add_theme_constant_override("outline_size", 6)
+	Leve.color(status_label, "font_color", Color.WHITE)
+	Leve.color(status_label, "font_outline_color", Color.BLACK)
+	Leve.font_size(status_label, "font_size", 42)
+	Leve.constant(status_label, "outline_size", 6)
 	status_label.visible = false
 	status_label.z_index = 95
 	hud_root.add_child(status_label)
@@ -4114,10 +4221,10 @@ func _configurar_hud() -> void:
 		lbl.text = ""
 		lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		lbl.add_theme_font_size_override("font_size", 34 - (i * 3))
-		lbl.add_theme_color_override("font_color", Color.WHITE)
-		lbl.add_theme_color_override("font_outline_color", Color.BLACK)
-		lbl.add_theme_constant_override("outline_size", 6)
+		Leve.font_size(lbl, "font_size", 34 - (i * 3))
+		Leve.color(lbl, "font_color", Color.WHITE)
+		Leve.color(lbl, "font_outline_color", Color.BLACK)
+		Leve.constant(lbl, "outline_size", 6)
 		lbl.visible = false
 		lbl.z_index = 95
 		hud_root.add_child(lbl)
@@ -4128,10 +4235,10 @@ func _configurar_hud() -> void:
 	fim_title_label.text = "FIM DE JOGO"
 	fim_title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	fim_title_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	fim_title_label.add_theme_font_size_override("font_size", 64)
-	fim_title_label.add_theme_color_override("font_color", Color(1.0, 0.78, 0.20, 1.0))
-	fim_title_label.add_theme_color_override("font_outline_color", Color.BLACK)
-	fim_title_label.add_theme_constant_override("outline_size", 8)
+	Leve.font_size(fim_title_label, "font_size", 64)
+	Leve.color(fim_title_label, "font_color", Color(1.0, 0.78, 0.20, 1.0))
+	Leve.color(fim_title_label, "font_outline_color", Color.BLACK)
+	Leve.constant(fim_title_label, "outline_size", 8)
 	fim_title_label.z_index = 120
 	hud_root.add_child(fim_title_label)
 
@@ -4139,10 +4246,10 @@ func _configurar_hud() -> void:
 	fim_score_label.visible = false
 	fim_score_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	fim_score_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	fim_score_label.add_theme_font_size_override("font_size", 52)
-	fim_score_label.add_theme_color_override("font_color", Color.WHITE)
-	fim_score_label.add_theme_color_override("font_outline_color", Color.BLACK)
-	fim_score_label.add_theme_constant_override("outline_size", 8)
+	Leve.font_size(fim_score_label, "font_size", 52)
+	Leve.color(fim_score_label, "font_color", Color.WHITE)
+	Leve.color(fim_score_label, "font_outline_color", Color.BLACK)
+	Leve.constant(fim_score_label, "outline_size", 8)
 	fim_score_label.z_index = 120
 	hud_root.add_child(fim_score_label)
 
@@ -4151,10 +4258,10 @@ func _configurar_hud() -> void:
 	fim_stats_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	fim_stats_label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
 	fim_stats_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	fim_stats_label.add_theme_font_size_override("font_size", 32)
-	fim_stats_label.add_theme_color_override("font_color", Color(0.90, 0.96, 1.0, 1.0))
-	fim_stats_label.add_theme_color_override("font_outline_color", Color.BLACK)
-	fim_stats_label.add_theme_constant_override("outline_size", 6)
+	Leve.font_size(fim_stats_label, "font_size", 32)
+	Leve.color(fim_stats_label, "font_color", Color(0.90, 0.96, 1.0, 1.0))
+	Leve.color(fim_stats_label, "font_outline_color", Color.BLACK)
+	Leve.constant(fim_stats_label, "outline_size", 6)
 	fim_stats_label.z_index = 120
 	hud_root.add_child(fim_stats_label)
 
@@ -4163,10 +4270,10 @@ func _configurar_hud() -> void:
 	fim_insert_coin_label.text = "INSERT COIN"
 	fim_insert_coin_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	fim_insert_coin_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	fim_insert_coin_label.add_theme_font_size_override("font_size", 33)
-	fim_insert_coin_label.add_theme_color_override("font_color", Color(1.0, 0.92, 0.22, 1.0))
-	fim_insert_coin_label.add_theme_color_override("font_outline_color", Color.BLACK)
-	fim_insert_coin_label.add_theme_constant_override("outline_size", 8)
+	Leve.font_size(fim_insert_coin_label, "font_size", 33)
+	Leve.color(fim_insert_coin_label, "font_color", Color(1.0, 0.92, 0.22, 1.0))
+	Leve.color(fim_insert_coin_label, "font_outline_color", Color.BLACK)
+	Leve.constant(fim_insert_coin_label, "outline_size", 8)
 	fim_insert_coin_label.z_index = 120
 	hud_root.add_child(fim_insert_coin_label)
 
@@ -4174,10 +4281,10 @@ func _configurar_hud() -> void:
 	fim_countdown_label.visible = false
 	fim_countdown_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	fim_countdown_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	fim_countdown_label.add_theme_font_size_override("font_size", 22)
-	fim_countdown_label.add_theme_color_override("font_color", Color(0.86, 0.94, 1.0, 1.0))
-	fim_countdown_label.add_theme_color_override("font_outline_color", Color.BLACK)
-	fim_countdown_label.add_theme_constant_override("outline_size", 5)
+	Leve.font_size(fim_countdown_label, "font_size", 22)
+	Leve.color(fim_countdown_label, "font_color", Color(0.86, 0.94, 1.0, 1.0))
+	Leve.color(fim_countdown_label, "font_outline_color", Color.BLACK)
+	Leve.constant(fim_countdown_label, "outline_size", 5)
 	fim_countdown_label.z_index = 120
 	hud_root.add_child(fim_countdown_label)
 
@@ -4192,10 +4299,10 @@ func _configurar_hud() -> void:
 	fim_cutscene_titulo.text = "FIM DE JOGO"
 	fim_cutscene_titulo.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	fim_cutscene_titulo.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	fim_cutscene_titulo.add_theme_font_size_override("font_size", 64)
-	fim_cutscene_titulo.add_theme_color_override("font_color", Color(1.0, 0.82, 0.24, 1.0))
-	fim_cutscene_titulo.add_theme_color_override("font_outline_color", Color.BLACK)
-	fim_cutscene_titulo.add_theme_constant_override("outline_size", 8)
+	Leve.font_size(fim_cutscene_titulo, "font_size", 64)
+	Leve.color(fim_cutscene_titulo, "font_color", Color(1.0, 0.82, 0.24, 1.0))
+	Leve.color(fim_cutscene_titulo, "font_outline_color", Color.BLACK)
+	Leve.constant(fim_cutscene_titulo, "outline_size", 8)
 	fim_cutscene_titulo.z_index = 140
 	hud_root.add_child(fim_cutscene_titulo)
 
@@ -4204,10 +4311,10 @@ func _configurar_hud() -> void:
 	fim_cutscene_loading.text = "CALCULANDO RESULTADOS..."
 	fim_cutscene_loading.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	fim_cutscene_loading.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	fim_cutscene_loading.add_theme_font_size_override("font_size", 26)
-	fim_cutscene_loading.add_theme_color_override("font_color", Color(0.84, 0.94, 1.0, 1.0))
-	fim_cutscene_loading.add_theme_color_override("font_outline_color", Color.BLACK)
-	fim_cutscene_loading.add_theme_constant_override("outline_size", 5)
+	Leve.font_size(fim_cutscene_loading, "font_size", 26)
+	Leve.color(fim_cutscene_loading, "font_color", Color(0.84, 0.94, 1.0, 1.0))
+	Leve.color(fim_cutscene_loading, "font_outline_color", Color.BLACK)
+	Leve.constant(fim_cutscene_loading, "outline_size", 5)
 	fim_cutscene_loading.z_index = 140
 	hud_root.add_child(fim_cutscene_loading)
 
@@ -4227,10 +4334,10 @@ func _configurar_hud() -> void:
 	combo_hud_label.visible = false
 	combo_hud_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	combo_hud_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	combo_hud_label.add_theme_font_size_override("font_size", 60)
-	combo_hud_label.add_theme_color_override("font_color", Color(1.0, 0.92, 0.30, 1.0))
-	combo_hud_label.add_theme_color_override("font_outline_color", Color.BLACK)
-	combo_hud_label.add_theme_constant_override("outline_size", 6)
+	Leve.font_size(combo_hud_label, "font_size", 60)
+	Leve.color(combo_hud_label, "font_color", Color(1.0, 0.92, 0.30, 1.0))
+	Leve.color(combo_hud_label, "font_outline_color", Color.BLACK)
+	Leve.constant(combo_hud_label, "outline_size", 6)
 	combo_hud_label.z_index = 95
 	hud_root.add_child(combo_hud_label)
 	
@@ -4440,16 +4547,16 @@ func _configurar_aviso_inicio() -> void:
 	aviso_footer_label.text = "ATIRE PARA COMEÇAR"
 	aviso_footer_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	aviso_footer_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	aviso_footer_label.add_theme_font_size_override("font_size", 48)
-	aviso_footer_label.add_theme_color_override("font_color", COR_NEON_BAR_CLARO)
-	aviso_footer_label.add_theme_color_override("font_outline_color", Color(0.0, 0.05, 0.0, 1.0))
-	aviso_footer_label.add_theme_constant_override("outline_size", 10)
+	Leve.font_size(aviso_footer_label, "font_size", 48)
+	Leve.color(aviso_footer_label, "font_color", COR_NEON_BAR_CLARO)
+	Leve.color(aviso_footer_label, "font_outline_color", Color(0.0, 0.05, 0.0, 1.0))
+	Leve.constant(aviso_footer_label, "outline_size", 10)
 	aviso_footer_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 	if fonte_luckiest != null:
-		aviso_footer_label.add_theme_font_override("font", fonte_luckiest)
+		Leve.font(aviso_footer_label, "font", fonte_luckiest)
 	elif ResourceLoader.exists(FONTE_LUCKIEST):
-		aviso_footer_label.add_theme_font_override("font", load(FONTE_LUCKIEST))
+		Leve.font(aviso_footer_label, "font", load(FONTE_LUCKIEST))
 
 	aviso_footer_label.self_modulate = Color(0.88, 1.0, 0.90, 1.0)
 	aviso_root.add_child(aviso_footer_label)
@@ -5109,7 +5216,7 @@ func _set_estilo_panel(
 
 	if estilo == null:
 		estilo = _estilo_card_bar()
-		panel.add_theme_stylebox_override("panel", estilo)
+		Leve.stylebox(panel, "panel", estilo)
 
 	estilo.bg_color = bg
 	estilo.border_color = borda
@@ -5230,10 +5337,10 @@ func _set_status_neutro(texto: String) -> void:
 		status_label.rotation = 0.0
 		status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		status_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		status_label.add_theme_font_size_override("font_size", 40)
-		status_label.add_theme_color_override("font_color", Color.WHITE)
-		status_label.add_theme_color_override("font_outline_color", Color.BLACK)
-		status_label.add_theme_constant_override("outline_size", 8)
+		Leve.font_size(status_label, "font_size", 40)
+		Leve.color(status_label, "font_color", Color.WHITE)
+		Leve.color(status_label, "font_outline_color", Color.BLACK)
+		Leve.constant(status_label, "outline_size", 8)
 
 	if status_panel != null:
 		status_panel.visible = true
@@ -5243,7 +5350,7 @@ func _set_status_neutro(texto: String) -> void:
 		var estilo := status_panel.get_theme_stylebox("panel") as StyleBoxFlat
 		if estilo == null:
 			estilo = _estilo_card_bar()
-			status_panel.add_theme_stylebox_override("panel", estilo)
+			Leve.stylebox(status_panel, "panel", estilo)
 
 		estilo.bg_color = Color(0.025, 0.105, 0.035, 0.92)
 		estilo.border_color = COR_NEON_BAR
@@ -5366,15 +5473,15 @@ func _set_status_erro(texto: String) -> void:
 	_set_status_neutro(texto)
 
 	if status_label != null:
-		status_label.add_theme_color_override("font_color", Color(1.0, 0.28, 0.18, 1.0))
-		status_label.add_theme_color_override("font_outline_color", Color.BLACK)
-		status_label.add_theme_constant_override("outline_size", 8)
+		Leve.color(status_label, "font_color", Color(1.0, 0.28, 0.18, 1.0))
+		Leve.color(status_label, "font_outline_color", Color.BLACK)
+		Leve.constant(status_label, "outline_size", 8)
 
 	if status_panel != null:
 		var estilo := status_panel.get_theme_stylebox("panel") as StyleBoxFlat
 		if estilo == null:
 			estilo = _estilo_card_bar()
-			status_panel.add_theme_stylebox_override("panel", estilo)
+			Leve.stylebox(status_panel, "panel", estilo)
 
 		# fundo neutro, só a borda/brilho muda para erro
 		estilo.bg_color = Color(0.045, 0.060, 0.040, 0.92)
@@ -5474,10 +5581,10 @@ func _atualizar_combo_hud() -> void:
 	combo_hud_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	combo_hud_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	combo_hud_label.modulate = Color(1.0, 0.94, 0.34, pulso)
-	combo_hud_label.add_theme_font_size_override("font_size", 26)
-	combo_hud_label.add_theme_color_override("font_color", Color(1.0, 0.94, 0.34, 1.0))
-	combo_hud_label.add_theme_color_override("font_outline_color", Color.BLACK)
-	combo_hud_label.add_theme_constant_override("outline_size", 6)
+	Leve.font_size(combo_hud_label, "font_size", 26)
+	Leve.color(combo_hud_label, "font_color", Color(1.0, 0.94, 0.34, 1.0))
+	Leve.color(combo_hud_label, "font_outline_color", Color.BLACK)
+	Leve.constant(combo_hud_label, "outline_size", 6)
 
 
 
@@ -5633,7 +5740,6 @@ func _tem_fx_visuais_ativos() -> bool:
 		not fx_madeira.is_empty()
 		or not fx_vidro.is_empty()
 		or not fx_impacto.is_empty()
-		or not marcas_erro.is_empty()
 		or tremor_tempo > 0.0
 	)
 
@@ -5687,7 +5793,7 @@ const BOTAO_RECARGA_3: int = MOUSE_BUTTON_XBUTTON2
 
 
 func _pos_arma() -> Vector2:
-	return get_viewport().get_mouse_position()
+	return Tela.mouse()
 
 
 func _debug_botao_arma(me: InputEventMouseButton) -> void:
@@ -5799,15 +5905,15 @@ func _fonte_titulo(lbl: Label, tamanho: int, cor: Color = COR_NEON_BAR_CLARO) ->
 		return
 
 	if fonte_luckiest != null:
-		lbl.add_theme_font_override("font", fonte_luckiest)
+		Leve.font(lbl, "font", fonte_luckiest)
 
-	lbl.add_theme_font_size_override("font_size", tamanho)
-	lbl.add_theme_color_override("font_color", cor)
-	lbl.add_theme_color_override("font_outline_color", Color.BLACK)
-	lbl.add_theme_constant_override("outline_size", 8)
-	lbl.add_theme_color_override("font_shadow_color", cor)
-	lbl.add_theme_constant_override("shadow_offset_x", 0)
-	lbl.add_theme_constant_override("shadow_offset_y", 0)
+	Leve.font_size(lbl, "font_size", tamanho)
+	Leve.color(lbl, "font_color", cor)
+	Leve.color(lbl, "font_outline_color", Color.BLACK)
+	Leve.constant(lbl, "outline_size", 8)
+	Leve.color(lbl, "font_shadow_color", cor)
+	Leve.constant(lbl, "shadow_offset_x", 0)
+	Leve.constant(lbl, "shadow_offset_y", 0)
 
 
 func _fonte_valor(lbl: Label, tamanho: int, cor: Color = Color.WHITE) -> void:
@@ -5815,15 +5921,15 @@ func _fonte_valor(lbl: Label, tamanho: int, cor: Color = Color.WHITE) -> void:
 		return
 
 	if fonte_orbitron != null:
-		lbl.add_theme_font_override("font", fonte_orbitron)
+		Leve.font(lbl, "font", fonte_orbitron)
 
-	lbl.add_theme_font_size_override("font_size", tamanho)
-	lbl.add_theme_color_override("font_color", cor)
-	lbl.add_theme_color_override("font_outline_color", Color.BLACK)
-	lbl.add_theme_constant_override("outline_size", 7)
-	lbl.add_theme_color_override("font_shadow_color", cor)
-	lbl.add_theme_constant_override("shadow_offset_x", 0)
-	lbl.add_theme_constant_override("shadow_offset_y", 0)
+	Leve.font_size(lbl, "font_size", tamanho)
+	Leve.color(lbl, "font_color", cor)
+	Leve.color(lbl, "font_outline_color", Color.BLACK)
+	Leve.constant(lbl, "outline_size", 7)
+	Leve.color(lbl, "font_shadow_color", cor)
+	Leve.constant(lbl, "shadow_offset_x", 0)
+	Leve.constant(lbl, "shadow_offset_y", 0)
 
 
 func _estilo_card_bar() -> StyleBoxFlat:

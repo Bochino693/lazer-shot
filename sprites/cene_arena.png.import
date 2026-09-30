@@ -3,19 +3,21 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://crgoq7tnhxx2w"
-path="res://.godot/imported/cene_arena.png-c3e64f9b17c09591d159c35335d1243e.ctex"
+path.s3tc="res://.godot/imported/cene_arena.png-c3e64f9b17c09591d159c35335d1243e.s3tc.ctex"
+path.etc2="res://.godot/imported/cene_arena.png-c3e64f9b17c09591d159c35335d1243e.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 
 [deps]
 
 source_file="res://sprites/cene_arena.png"
-dest_files=["res://.godot/imported/cene_arena.png-c3e64f9b17c09591d159c35335d1243e.ctex"]
+dest_files=["res://.godot/imported/cene_arena.png-c3e64f9b17c09591d159c35335d1243e.s3tc.ctex", "res://.godot/imported/cene_arena.png-c3e64f9b17c09591d159c35335d1243e.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0
