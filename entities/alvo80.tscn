@@ -1,0 +1,68 @@
+[gd_scene format=3 uid="uid://cx4m14ilf3sfi"]
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_utpx1"]
+
+[sub_resource type="CompressedTexture2D" id="CompressedTexture2D_xr6nd"]
+load_path = "res://.godot/imported/slipt_base-removebg-preview (1).png-94dd1ff2cd1ff817dff53cfbf8f8160c.ctex"
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_8ychq"]
+atlas = SubResource("CompressedTexture2D_xr6nd")
+region = Rect2(0, 259, 197, 259)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_a706l"]
+atlas = SubResource("CompressedTexture2D_xr6nd")
+region = Rect2(0, 251, 197, 251)
+
+[sub_resource type="CompressedTexture2D" id="CompressedTexture2D_hlp4l"]
+load_path = "res://.godot/imported/split_shock-removebg-preview.png-1e55dec40ce609fb9088beb0cf40f2d0.ctex"
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_uxyar"]
+atlas = SubResource("CompressedTexture2D_hlp4l")
+region = Rect2(0, 259, 197, 259)
+
+[sub_resource type="CompressedTexture2D" id="CompressedTexture2D_ex73f"]
+load_path = "res://.godot/imported/slip_idle-removebg-preview.png-8e3bbe02003f577187b800d323994fd1.ctex"
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_qrwfy"]
+atlas = SubResource("CompressedTexture2D_ex73f")
+region = Rect2(0, 259, 197, 259)
+
+[sub_resource type="SpriteFrames" id="SpriteFrames_2ykq5"]
+animations = [{
+"frames": [{
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_8ychq")
+}],
+"loop": true,
+"name": &"high",
+"speed": 5.0
+}, {
+"frames": [{
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_a706l")
+}, {
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_uxyar")
+}],
+"loop": true,
+"name": &"hit",
+"speed": 5.0
+}, {
+"frames": [{
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_qrwfy")
+}],
+"loop": true,
+"name": &"idle",
+"speed": 5.0
+}]
+
+[node name="Alvo80" type="Area2D" unique_id=625215697]
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="." unique_id=2077022868]
+shape = SubResource("CircleShape2D_utpx1")
+
+[node name="AnimatedSprite2D" type="AnimatedSprite2D" parent="." unique_id=1128668991]
+sprite_frames = SubResource("SpriteFrames_2ykq5")
+animation = &"hit"
+frame_progress = 0.6372576

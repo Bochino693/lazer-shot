@@ -1,0 +1,128 @@
+[gd_scene format=3 uid="uid://eiu6d1j1bhjb"]
+
+[ext_resource type="Script" uid="uid://c10kehdi60b3d" path="res://scripts/cenarios.gd" id="1_pp170"]
+
+[node name="Cenarios" type="Control" unique_id=1140349846]
+layout_mode = 3
+anchors_preset = 0
+script = ExtResource("1_pp170")
+
+[node name="Background" type="VideoStreamPlayer" parent="." unique_id=1427780621]
+layout_mode = 0
+offset_right = 1024.0
+offset_bottom = 1536.0
+scale = Vector2(1.2122642, 1.215981)
+
+[node name="Titulo" type="Label" parent="." unique_id=2066924533]
+layout_mode = 0
+offset_right = 40.0
+offset_bottom = 23.0
+
+[node name="GridContainer" type="GridContainer" parent="." unique_id=2135960247]
+layout_mode = 0
+offset_right = 40.0
+offset_bottom = 40.0
+columns = 2
+
+[node name="CardCenario1" type="Panel" parent="GridContainer" unique_id=294329251]
+layout_mode = 2
+
+[node name="ImagemCenario1" type="TextureRect" parent="GridContainer/CardCenario1" unique_id=1682690366]
+layout_mode = 0
+offset_right = 40.0
+offset_bottom = 40.0
+
+[node name="Cenario1" type="TextureButton" parent="GridContainer/CardCenario1" unique_id=1903443950]
+layout_mode = 0
+offset_top = -8.0
+offset_bottom = -8.0
+
+[node name="Nome1" type="Label" parent="GridContainer/CardCenario1" unique_id=356656619]
+layout_mode = 0
+offset_right = 40.0
+offset_bottom = 23.0
+
+[node name="Estrelas1" type="HBoxContainer" parent="GridContainer/CardCenario1" unique_id=2075905838]
+layout_mode = 0
+offset_right = 40.0
+offset_bottom = 40.0
+
+[node name="CardCenario2" type="Panel" parent="GridContainer" unique_id=518402231]
+layout_mode = 2
+
+[node name="ImagemCenario2" type="TextureRect" parent="GridContainer/CardCenario2" unique_id=1020714997]
+layout_mode = 0
+offset_right = 40.0
+offset_bottom = 40.0
+
+[node name="Cenario2" type="TextureButton" parent="GridContainer/CardCenario2" unique_id=14377200]
+layout_mode = 0
+offset_left = 4.0
+offset_top = -4.0
+offset_right = 4.0
+offset_bottom = -4.0
+
+[node name="Nome2" type="Label" parent="GridContainer/CardCenario2" unique_id=708627804]
+layout_mode = 0
+offset_right = 40.0
+offset_bottom = 23.0
+
+[node name="Estrelas2" type="HBoxContainer" parent="GridContainer/CardCenario2" unique_id=82030907]
+layout_mode = 0
+offset_right = 40.0
+offset_bottom = 40.0
+
+[node name="CardCenario3" type="Panel" parent="GridContainer" unique_id=1114429637]
+layout_mode = 2
+
+[node name="ImagemCenario3" type="TextureRect" parent="GridContainer/CardCenario3" unique_id=302098746]
+layout_mode = 0
+offset_right = 40.0
+offset_bottom = 40.0
+
+[node name="Cenario3" type="TextureButton" parent="GridContainer/CardCenario3" unique_id=1536462498]
+layout_mode = 0
+offset_left = -4.0
+offset_top = -8.0
+offset_right = -4.0
+offset_bottom = -8.0
+
+[node name="Nome3" type="Label" parent="GridContainer/CardCenario3" unique_id=500742410]
+layout_mode = 0
+offset_right = 40.0
+offset_bottom = 23.0
+
+[node name="Estrelas3" type="HBoxContainer" parent="GridContainer/CardCenario3" unique_id=1702010690]
+layout_mode = 0
+offset_right = 40.0
+offset_bottom = 40.0
+
+[node name="CardCenario4" type="Panel" parent="GridContainer" unique_id=1440193960]
+layout_mode = 2
+
+[node name="ImagemCenario4" type="TextureRect" parent="GridContainer/CardCenario4" unique_id=168311152]
+layout_mode = 0
+offset_right = 40.0
+offset_bottom = 40.0
+
+[node name="Cenario4" type="TextureButton" parent="GridContainer/CardCenario4" unique_id=1741518274]
+layout_mode = 0
+offset_left = -4.0
+offset_top = -8.0
+offset_right = -4.0
+offset_bottom = -8.0
+
+[node name="Nome4" type="Label" parent="GridContainer/CardCenario4" unique_id=1315294643]
+layout_mode = 0
+offset_right = 40.0
+offset_bottom = 23.0
+
+[node name="Estrelas4" type="HBoxContainer" parent="GridContainer/CardCenario4" unique_id=960629094]
+layout_mode = 0
+offset_right = 40.0
+offset_bottom = 40.0
+
+[node name="BotaoRanking" type="Button" parent="." unique_id=1439400672]
+layout_mode = 0
+offset_right = 8.0
+offset_bottom = 8.0

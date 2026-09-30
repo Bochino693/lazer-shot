@@ -1,0 +1,61 @@
+; Engine configuration file.
+; It's best edited using the editor UI and not directly,
+; since the parameters that go here are not all obvious.
+;
+; Format:
+;   [section] ; section goes between []
+;   param=value ; assign values to parameters
+
+config_version=5
+
+[application]
+
+config/name="xshot"
+run/main_scene="uid://cnp5qquolmpd5"
+config/features=PackedStringArray("4.6", "GL Compatibility")
+boot_splash/show_image=false
+config/icon="res://icon.svg"
+
+[autoload]
+
+RankingManager="*uid://oo6ta7ci88jb"
+TransicaoGlobal="*uid://tp1td1y7p13d"
+MiraGlobal="*uid://bp7dd0c721pie"
+
+[display]
+
+window/size/viewport_width=1024
+window/size/viewport_height=1536
+window/size/mode=3
+window/size/borderless=true
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
+window/handheld/orientation=1
+
+[input]
+
+input_start={
+"deadzone": 0.2,
+"events": [Object(InputEventJoypadButton,"resource_local_to_scene":false,"resource_name":"","device":-1,"button_index":0,"pressure":0.0,"pressed":true,"script":null)
+]
+}
+input_recharge={
+"deadzone": 0.2,
+"events": [Object(InputEventJoypadButton,"resource_local_to_scene":false,"resource_name":"","device":-1,"button_index":1,"pressure":0.0,"pressed":true,"script":null)
+]
+}
+input_shot={
+"deadzone": 0.2,
+"events": [Object(InputEventJoypadButton,"resource_local_to_scene":false,"resource_name":"","device":-1,"button_index":2,"pressure":0.0,"pressed":true,"script":null)
+]
+}
+
+[physics]
+
+3d/physics_engine="Jolt Physics"
+
+[rendering]
+
+rendering_device/driver.windows="d3d12"
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"

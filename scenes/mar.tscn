@@ -1,0 +1,27 @@
+[gd_scene format=3 uid="uid://bmjq0nr2mk24n"]
+
+[ext_resource type="Script" uid="uid://crlq0hk5kt7sj" path="res://scripts/mar.gd" id="1_64n6q"]
+[ext_resource type="Texture2D" uid="uid://bx7f0fq31cp13" path="res://sprites/atlantis.png" id="1_tjuwp"]
+[ext_resource type="PackedScene" uid="uid://djhftn4f6p1q4" path="res://entities/vaso80.tscn" id="2_64n6q"]
+[ext_resource type="PackedScene" uid="uid://fcwhutgfts5o" path="res://entities/bau100.tscn" id="3_nwgxb"]
+[ext_resource type="PackedScene" uid="uid://b1ng2csvkia7b" path="res://entities/bomba.tscn" id="5_nwgxb"]
+[ext_resource type="PackedScene" uid="uid://0tv3qmcqqtjt" path="res://entities/aguaviva20.tscn" id="6_b0ph8"]
+
+[node name="Mar" type="Node2D" unique_id=1146271441]
+script = ExtResource("1_64n6q")
+
+[node name="Sprite2D" type="Sprite2D" parent="." unique_id=1291697968]
+scale = Vector2(1.2040094, 1.210443)
+texture = ExtResource("1_tjuwp")
+centered = false
+
+[node name="Alvos" type="Area2D" parent="." unique_id=1091625127]
+
+[node name="Vaso80" parent="Alvos" unique_id=1185824308 instance=ExtResource("2_64n6q")]
+
+[node name="Bau100" parent="Alvos" unique_id=458915451 instance=ExtResource("3_nwgxb")]
+scale = Vector2(1.2040094, 1.210443)
+
+[node name="Bomba" parent="Alvos" unique_id=1294268204 instance=ExtResource("5_nwgxb")]
+
+[node name="Aguaviva20" parent="Alvos" unique_id=1501791696 instance=ExtResource("6_b0ph8")]

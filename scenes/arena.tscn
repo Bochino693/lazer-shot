@@ -1,0 +1,100 @@
+[gd_scene format=3 uid="uid://cihrkc7w6peji"]
+
+[ext_resource type="Script" uid="uid://dqvnh3e2hk7bi" path="res://scripts/arena.gd" id="1_olpmc"]
+[ext_resource type="Texture2D" uid="uid://d0tosdxjaxjob" path="res://sprites/ARENA.png" id="2_xdvfk"]
+
+[node name="ArenaLazerShot" type="Node2D" unique_id=2120854784]
+script = ExtResource("1_olpmc")
+
+[node name="Background" type="Sprite2D" parent="." unique_id=1204066899]
+texture = ExtResource("2_xdvfk")
+centered = false
+
+[node name="CamadaAlvos" type="Node2D" parent="." unique_id=308006296]
+
+[node name="Hud" type="CanvasLayer" parent="." unique_id=1549806319]
+
+[node name="Topo" type="Control" parent="Hud" unique_id=448320228]
+layout_mode = 3
+anchors_preset = 0
+offset_right = 40.0
+offset_bottom = 40.0
+
+[node name="PainelTempo" type="Panel" parent="Hud/Topo" unique_id=817029637]
+layout_mode = 0
+offset_right = 40.0
+offset_bottom = 40.0
+
+[node name="TituloTempo" type="Label" parent="Hud/Topo/PainelTempo" unique_id=620759422]
+layout_mode = 0
+offset_right = 40.0
+offset_bottom = 23.0
+
+[node name="ValorTempo" type="Label" parent="Hud/Topo/PainelTempo" unique_id=2117371127]
+layout_mode = 0
+offset_right = 40.0
+offset_bottom = 23.0
+
+[node name="PainelPontuacao" type="Panel" parent="Hud/Topo" unique_id=66392836]
+layout_mode = 0
+offset_right = 40.0
+offset_bottom = 40.0
+
+[node name="TituloPontuacao" type="Label" parent="Hud/Topo/PainelPontuacao" unique_id=1177494675]
+layout_mode = 0
+offset_right = 40.0
+offset_bottom = 23.0
+
+[node name="ValorPontuacao" type="Label" parent="Hud/Topo/PainelPontuacao" unique_id=811861580]
+layout_mode = 0
+offset_right = 40.0
+offset_bottom = 23.0
+
+[node name="PainelMunicao" type="Panel" parent="Hud/Topo" unique_id=1154298429]
+layout_mode = 0
+offset_right = 40.0
+offset_bottom = 40.0
+
+[node name="TituloMunicao" type="Label" parent="Hud/Topo/PainelMunicao" unique_id=1695220791]
+layout_mode = 0
+offset_right = 40.0
+offset_bottom = 23.0
+
+[node name="ValorMunicao" type="Label" parent="Hud/Topo/PainelMunicao" unique_id=484974160]
+layout_mode = 0
+offset_right = 40.0
+offset_bottom = 23.0
+
+[node name="PainelTiros" type="Panel" parent="Hud/Topo" unique_id=1990844865]
+layout_mode = 0
+offset_right = 40.0
+offset_bottom = 40.0
+
+[node name="TituloTiros" type="Label" parent="Hud/Topo/PainelTiros" unique_id=181429973]
+layout_mode = 0
+offset_right = 40.0
+offset_bottom = 23.0
+
+[node name="ValorTiros" type="Label" parent="Hud/Topo/PainelTiros" unique_id=2118351525]
+layout_mode = 0
+offset_right = 40.0
+offset_bottom = 23.0
+
+[node name="PainelAcertos" type="Panel" parent="Hud/Topo" unique_id=1902089999]
+layout_mode = 0
+offset_right = 40.0
+offset_bottom = 40.0
+
+[node name="TituloAcertos" type="Label" parent="Hud/Topo/PainelAcertos" unique_id=1892922358]
+layout_mode = 0
+offset_right = 40.0
+offset_bottom = 23.0
+
+[node name="ValorAcertos" type="Label" parent="Hud/Topo/PainelAcertos" unique_id=1001270170]
+layout_mode = 0
+offset_right = 40.0
+offset_bottom = 23.0
+
+[node name="TimerJogo" type="Timer" parent="." unique_id=1992408424]
+
+[node name="TimerSpawn" type="Timer" parent="." unique_id=1441784218]

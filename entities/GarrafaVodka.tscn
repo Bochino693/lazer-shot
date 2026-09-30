@@ -1,0 +1,84 @@
+[gd_scene format=3 uid="uid://dbhak0wu13u07"]
+
+[ext_resource type="Texture2D" uid="uid://b2vdmwfw1xjeu" path="res://sprites/sprites-vodka.png" id="1_xhidn"]
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_2ogah"]
+atlas = ExtResource("1_xhidn")
+region = Rect2(496, 402, 124, 402)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_qy2jy"]
+atlas = ExtResource("1_xhidn")
+region = Rect2(620, 402, 124, 402)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_m4gmu"]
+atlas = ExtResource("1_xhidn")
+region = Rect2(744, 402, 124, 402)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_e8vfc"]
+atlas = ExtResource("1_xhidn")
+region = Rect2(854, 400, 122, 400)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_b2h0u"]
+atlas = ExtResource("1_xhidn")
+region = Rect2(976, 400, 122, 400)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_18pno"]
+atlas = ExtResource("1_xhidn")
+region = Rect2(1220, 400, 122, 400)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_noisr"]
+atlas = ExtResource("1_xhidn")
+region = Rect2(1342, 400, 122, 400)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_7u2vs"]
+atlas = ExtResource("1_xhidn")
+region = Rect2(0, 0, 153, 388)
+
+[sub_resource type="SpriteFrames" id="SpriteFrames_lscrh"]
+animations = [{
+"frames": [{
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_2ogah")
+}, {
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_qy2jy")
+}, {
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_m4gmu")
+}, {
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_e8vfc")
+}, {
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_b2h0u")
+}, {
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_18pno")
+}, {
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_noisr")
+}],
+"loop": true,
+"name": &"hit",
+"speed": 5.0
+}, {
+"frames": [{
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_7u2vs")
+}],
+"loop": true,
+"name": &"idle",
+"speed": 5.0
+}]
+
+[sub_resource type="CapsuleShape2D" id="CapsuleShape2D_ru22y"]
+
+[node name="GarrafaVodka" type="Area2D" unique_id=1957537882]
+
+[node name="AnimatedSprite2D" type="AnimatedSprite2D" parent="." unique_id=1948709459]
+sprite_frames = SubResource("SpriteFrames_lscrh")
+animation = &"idle"
+frame_progress = 0.15178703
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="." unique_id=607675285]
+shape = SubResource("CapsuleShape2D_ru22y")

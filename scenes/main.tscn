@@ -1,0 +1,42 @@
+[gd_scene format=3 uid="uid://cnp5qquolmpd5"]
+
+[ext_resource type="Script" uid="uid://d0cxlcsxnyfif" path="res://scripts/main.gd" id="1_0wfyh"]
+
+[node name="Main Menu" type="Node2D" unique_id=12920092]
+script = ExtResource("1_0wfyh")
+
+[node name="ParallaxBackground" type="ParallaxBackground" parent="." unique_id=2097502080]
+
+[node name="FundoLayer" type="ParallaxLayer" parent="ParallaxBackground" unique_id=1073627963]
+
+[node name="VideoInit" type="VideoStreamPlayer" parent="ParallaxBackground/FundoLayer" unique_id=931612866]
+offset_right = 40.0
+offset_bottom = 40.0
+
+[node name="MeioLayer" type="ParallaxLayer" parent="ParallaxBackground" unique_id=234525793]
+
+[node name="Sprite2D" type="Sprite2D" parent="ParallaxBackground/MeioLayer" unique_id=2085402091]
+
+[node name="FrenteLayer" type="ParallaxLayer" parent="ParallaxBackground" unique_id=217219454]
+
+[node name="Sprite2D" type="Sprite2D" parent="ParallaxBackground/FrenteLayer" unique_id=518226804]
+
+[node name="CanvasLayer" type="CanvasLayer" parent="." unique_id=722887265]
+
+[node name="Subtitulo" type="Label" parent="CanvasLayer" unique_id=1060042966]
+offset_right = 40.0
+offset_bottom = 23.0
+
+[node name="Pressione1" type="Label" parent="CanvasLayer" unique_id=1115152802]
+offset_right = 40.0
+offset_bottom = 23.0
+
+[node name="FlashIntro" type="ColorRect" parent="CanvasLayer" unique_id=929635833]
+offset_right = 40.0
+offset_bottom = 40.0
+
+[node name="AnimationPlayer" type="AnimationPlayer" parent="." unique_id=143333115]
+
+[node name="Timer" type="Timer" parent="." unique_id=936349400]
+
+[node name="AudioStreamPlayer" type="AudioStreamPlayer2D" parent="." unique_id=381492089]

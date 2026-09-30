@@ -1,0 +1,49 @@
+[gd_scene format=3 uid="uid://cxq4axxl2u7v7"]
+
+[ext_resource type="Texture2D" uid="uid://dxsfmiuoqvbhy" path="res://sprites/sprites-whiskey.png" id="1_2f21q"]
+
+[sub_resource type="CapsuleShape2D" id="CapsuleShape2D_ua64k"]
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_tx17c"]
+atlas = ExtResource("1_2f21q")
+region = Rect2(156, 512, 156, 256)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_8uqgd"]
+atlas = ExtResource("1_2f21q")
+region = Rect2(1344, 512, 168, 256)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_nngdj"]
+atlas = ExtResource("1_2f21q")
+region = Rect2(0, 0, 167, 341)
+
+[sub_resource type="SpriteFrames" id="SpriteFrames_n3puh"]
+animations = [{
+"frames": [{
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_tx17c")
+}, {
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_8uqgd")
+}],
+"loop": true,
+"name": &"hit",
+"speed": 5.0
+}, {
+"frames": [{
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_nngdj")
+}],
+"loop": true,
+"name": &"idle",
+"speed": 5.0
+}]
+
+[node name="GarrafaWhisky" type="Area2D" unique_id=1104605356]
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="." unique_id=1991390283]
+shape = SubResource("CapsuleShape2D_ua64k")
+
+[node name="AnimatedSprite2D" type="AnimatedSprite2D" parent="." unique_id=2143225643]
+sprite_frames = SubResource("SpriteFrames_n3puh")
+animation = &"idle"
+frame_progress = 0.5957084

@@ -1,0 +1,65 @@
+[gd_scene format=3 uid="uid://djhftn4f6p1q4"]
+
+[ext_resource type="Texture2D" uid="uid://faclb2bma8xn" path="res://sprites/sprites_vaso.png" id="1_e3jtk"]
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_8h1dk"]
+atlas = ExtResource("1_e3jtk")
+region = Rect2(307, 341, 307, 341)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_e3jtk"]
+atlas = ExtResource("1_e3jtk")
+region = Rect2(614, 321, 307, 321)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_pfky3"]
+atlas = ExtResource("1_e3jtk")
+region = Rect2(921, 321, 307, 321)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_0uqx8"]
+atlas = ExtResource("1_e3jtk")
+region = Rect2(1228, 341, 307, 341)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_3wk3l"]
+atlas = ExtResource("1_e3jtk")
+region = Rect2(0, 341, 307, 341)
+
+[sub_resource type="SpriteFrames" id="SpriteFrames_io17f"]
+animations = [{
+"frames": [{
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_8h1dk")
+}, {
+"duration": 2.6,
+"texture": SubResource("AtlasTexture_e3jtk")
+}, {
+"duration": 3.0,
+"texture": SubResource("AtlasTexture_pfky3")
+}, {
+"duration": 0.2,
+"texture": SubResource("AtlasTexture_0uqx8")
+}],
+"loop": true,
+"name": &"hit",
+"speed": 9.0
+}, {
+"frames": [{
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_3wk3l")
+}],
+"loop": true,
+"name": &"idle",
+"speed": 9.0
+}]
+
+[sub_resource type="CapsuleShape2D" id="CapsuleShape2D_41e8g"]
+radius = 96.0
+height = 212.0
+
+[node name="Vaso80" type="Area2D" unique_id=340687831]
+
+[node name="AnimatedSprite2D" type="AnimatedSprite2D" parent="." unique_id=929593769]
+sprite_frames = SubResource("SpriteFrames_io17f")
+animation = &"hit"
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="." unique_id=2108457114]
+position = Vector2(20, 26)
+shape = SubResource("CapsuleShape2D_41e8g")

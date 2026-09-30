@@ -1,0 +1,41 @@
+[gd_scene format=3 uid="uid://lfvsgyggf2cg"]
+
+[ext_resource type="Texture2D" uid="uid://dthr3wbx7b54d" path="res://sprites/lanternas.png" id="1_5ubo3"]
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_fyova"]
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_2tec3"]
+atlas = ExtResource("1_5ubo3")
+region = Rect2(1107, 666, 369, 331)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_2lga3"]
+atlas = ExtResource("1_5ubo3")
+region = Rect2(360, 666, 360, 331)
+
+[sub_resource type="SpriteFrames" id="SpriteFrames_rhm6k"]
+animations = [{
+"frames": [{
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_2tec3")
+}],
+"loop": true,
+"name": &"hit",
+"speed": 5.0
+}, {
+"frames": [{
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_2lga3")
+}],
+"loop": true,
+"name": &"idle",
+"speed": 5.0
+}]
+
+[node name="LanternaAzul" type="Area2D" unique_id=129205646]
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="." unique_id=236300062]
+shape = SubResource("CircleShape2D_fyova")
+
+[node name="AnimatedSprite2D" type="AnimatedSprite2D" parent="." unique_id=800007908]
+sprite_frames = SubResource("SpriteFrames_rhm6k")
+animation = &"hit"

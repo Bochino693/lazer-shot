@@ -1,0 +1,41 @@
+[gd_scene format=3 uid="uid://dgiw4l2xmdxjy"]
+
+[ext_resource type="Texture2D" uid="uid://dthr3wbx7b54d" path="res://sprites/lanternas.png" id="1_tooab"]
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_v7o4o"]
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_qclet"]
+atlas = ExtResource("1_tooab")
+region = Rect2(1107, 0, 369, 358)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_36sq7"]
+atlas = ExtResource("1_tooab")
+region = Rect2(369, 0, 369, 358)
+
+[sub_resource type="SpriteFrames" id="SpriteFrames_1vquj"]
+animations = [{
+"frames": [{
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_qclet")
+}],
+"loop": true,
+"name": &"hit",
+"speed": 9.0
+}, {
+"frames": [{
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_36sq7")
+}],
+"loop": true,
+"name": &"idle",
+"speed": 9.0
+}]
+
+[node name="LanternaVermelha" type="Area2D" unique_id=783066640]
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="." unique_id=1932058384]
+shape = SubResource("CircleShape2D_v7o4o")
+
+[node name="AnimatedSprite2D" type="AnimatedSprite2D" parent="." unique_id=1334767878]
+sprite_frames = SubResource("SpriteFrames_1vquj")
+animation = &"idle"

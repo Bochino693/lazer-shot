@@ -1,0 +1,56 @@
+[gd_scene format=3 uid="uid://c5p5sl3p3yekq"]
+
+[ext_resource type="Texture2D" uid="uid://dr2wwtvvjwh4q" path="res://sprites/idle_hit_arena.png" id="1_ntptx"]
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_60j7i"]
+atlas = ExtResource("1_ntptx")
+region = Rect2(170, 0, 170, 512)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_b4dxe"]
+atlas = ExtResource("1_ntptx")
+region = Rect2(348, 0, 174, 512)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_rcu64"]
+atlas = ExtResource("1_ntptx")
+region = Rect2(685, 0, 158, 507)
+
+[sub_resource type="AtlasTexture" id="AtlasTexture_x2l55"]
+atlas = ExtResource("1_ntptx")
+region = Rect2(0, 0, 155, 512)
+
+[sub_resource type="SpriteFrames" id="SpriteFrames_tdta8"]
+animations = [{
+"frames": [{
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_60j7i")
+}, {
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_b4dxe")
+}, {
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_rcu64")
+}],
+"loop": true,
+"name": &"hit",
+"speed": 5.0
+}, {
+"frames": [{
+"duration": 1.0,
+"texture": SubResource("AtlasTexture_x2l55")
+}],
+"loop": true,
+"name": &"idle",
+"speed": 5.0
+}]
+
+[sub_resource type="CapsuleShape2D" id="CapsuleShape2D_ixato"]
+
+[node name="InocenteAlvo" type="Area2D" unique_id=967113475]
+
+[node name="AnimatedSprite2D" type="AnimatedSprite2D" parent="." unique_id=1291009037]
+sprite_frames = SubResource("SpriteFrames_tdta8")
+animation = &"idle"
+frame_progress = 0.034877405
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="." unique_id=2077267185]
+shape = SubResource("CapsuleShape2D_ixato")
