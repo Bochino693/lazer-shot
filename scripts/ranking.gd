@@ -77,7 +77,6 @@ func _ready() -> void:
 
 	modo_atrativo = origem == "main_atrativo"
 
-	Input.set_mouse_mode(Input.MOUSE_MODE_HIDDEN)
 	_iniciar_musica_ranking()
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 
@@ -109,7 +108,6 @@ func _ready() -> void:
 			botao_descer.visible = false
 			botao_descer.disabled = true
 
-		Input.set_mouse_mode(Input.MOUSE_MODE_HIDDEN)
 		_criar_flash_insert_coin()
 		_criar_insert_coin_atrativo()
 		_auto_voltar_atrativo()
@@ -218,13 +216,9 @@ func _process(delta: float) -> void:
 	if modo_atrativo:
 		return
 
-	if not mira_iniciada:
-		var tela: Vector2 = get_viewport_rect().size
-		alvo_pos = tela * 0.5
-		mira_iniciada = true
-
-	if usar_controle_xbox and Input.get_connected_joypads().size() > 0:
-		_atualizar_mira_xbox(delta)
+	# mira única do jogo (MiraGlobal)
+	alvo_pos = MiraGlobal.pos
+	mira_iniciada = true
 
 	alvo_anim_t += delta
 
@@ -240,35 +234,8 @@ func _process(delta: float) -> void:
 
 
 
-func _atualizar_mira_xbox(delta: float) -> void:
-	var tela: Vector2 = get_viewport_rect().size
-
-	if not xbox_mira_iniciada:
-		alvo_pos = Tela.mouse()
-
-		if alvo_pos == Vector2.ZERO:
-			alvo_pos = tela * 0.5
-
-		xbox_mira_iniciada = true
-
-	var eixo_x: float = Input.get_joy_axis(0, JOY_AXIS_LEFT_X)
-	var eixo_y: float = Input.get_joy_axis(0, JOY_AXIS_LEFT_Y)
-
-	if abs(eixo_x) < deadzone_xbox:
-		eixo_x = 0.0
-
-	if abs(eixo_y) < deadzone_xbox:
-		eixo_y = 0.0
-
-	var movimento := Vector2(eixo_x, eixo_y)
-
-	if movimento.length() > 1.0:
-		movimento = movimento.normalized()
-
-	alvo_pos += movimento * velocidade_mira_xbox * delta
-	alvo_pos.x = clamp(alvo_pos.x, 0.0, tela.x)
-	alvo_pos.y = clamp(alvo_pos.y, 0.0, tela.y)
-
+func _atualizar_mira_xbox(_delta: float) -> void:
+	alvo_pos = MiraGlobal.pos
 
 
 func _criar_fundo() -> void:
@@ -336,7 +303,6 @@ func _iniciar_jogo_pelo_insert_coin() -> void:
 	if get_tree().has_meta("ranking_origem"):
 		get_tree().remove_meta("ranking_origem")
 
-	Input.set_mouse_mode(Input.MOUSE_MODE_HIDDEN)
 
 	await _efeito_insert_coin_confirmado()
 
@@ -877,16 +843,7 @@ func _input(event: InputEvent) -> void:
 		return
 
 	if event is InputEventMouseMotion:
-		var motion := event as InputEventMouseMotion
-		var tela: Vector2 = get_viewport_rect().size
-
-		alvo_pos += motion.relative * velocidade_mira_mouse
-		alvo_pos.x = clamp(alvo_pos.x, 0.0, tela.x)
-		alvo_pos.y = clamp(alvo_pos.y, 0.0, tela.y)
-
-		if alvo_overlay != null:
-			alvo_overlay.queue_redraw()
-
+		# o movimento já entra na mira única (MiraGlobal)
 		return
 
 	if event is InputEventJoypadButton:

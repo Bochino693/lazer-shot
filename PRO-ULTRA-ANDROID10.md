@@ -103,7 +103,7 @@ nos botões (também funciona com mouse, ou setas + START).
 | Créditos na máquina | ajusta ou zera os créditos atuais |
 | Tempo de partida | 0:30 a 10:00 |
 | Dificuldade | FÁCIL / DIFÍCIL (difícil = sem mira na tela) |
-| Tela de resultado / Nome no ranking | tempos dessas telas |
+| Tela de resultado / Nome no ranking | tempos dessas telas (padrão: volta ao início em 17 s sem START; nome em 50 s) |
 | Tempo da abertura / Tempo do vídeo | ciclo da tela inicial |
 | Vídeos de demonstração / Ranking na abertura | liga e desliga cada parte do ciclo |
 | Música / Efeitos | volumes (agora valem no jogo inteiro) |
@@ -180,12 +180,44 @@ padrão da configuração.
 **Imagem:**
 - as prévias (arena, bar, deserto, mar) foram refeitas dos originais sem as
   marcas BANDICAM/clideo;
-- o vídeo de fundo 2:3 do menu, da abertura e do ranking não estica mais na tela
-  9:16: aparece inteiro e as faixas prolongam as bordas do próprio vídeo.
+- o vídeo de fundo do menu, da abertura e do ranking fica em tela cheia (ver
+  rodada 4).
 
 **Menos pintura por quadro:** flash e dano do Mar só são desenhados enquanto
 aparecem; o fundo preto repetido do menu saiu; o feixe de sol do bar pinta só
 a faixa acesa (28% da tela em vez de 100%).
+
+## Rodada 4: mira estável, menu liso e ranking padronizado
+
+**A arma é o mouse, e a mira é uma só** (`scripts/MiraGlobal.gd`): o ponteiro
+fica sempre capturado (nenhuma tela troca o modo, o que no Android fazia a mira
+pular), cada movimento da arma soma na mesma mira com a sensibilidade do botão
+MIRA do menu, um filtro leve tira o tremor da mão sem atrasar o movimento, e a
+mira continua no mesmo lugar ao trocar de tela. O direcional do controle não
+mexe mais a mira. Na configuração o gatilho aperta o botão sob a mira; no ajuste
+de sensibilidade, o tiro no slider leva o valor até o ponto acertado.
+
+**Escolha de cenário sem tranco:** cada vídeo do menu (fundo + 4 prévias) é
+aberto uma vez só, ainda com a tela escura; só o vídeo que está na tela
+decodifica, o que sai congela no último quadro enquanto o novo surge por cima,
+e o card precisa ficar sob a mira um instante (0,22 s) para trocar. Antes,
+durante a roleta e o modal, o vídeo era recarregado e reiniciado a cada quadro.
+Na abertura a prévia também já fica pronta e entra por cima do vídeo inicial.
+
+**Vídeos em tela cheia**, sem faixas: o fundo 2:3 preenche a tela 9:16 cortando
+no máximo 1,5% de cada lado (logo e título ficam inteiros) e o resto vira um
+ajuste leve de escala.
+
+**Ranking igual em todas as fases** (`scripts/nome_ranking.gd`): teclado com a
+tecla sob a mira acesa, letras que entram com um estalo, casas do nome com
+cursor, tempo em barra; SALVAR, START ou o fim do tempo salvam (vazio vira
+ANONIMO). Depois do nome a tela de resultado volta sozinha ao início em
+**17 s** se ninguém apertar START, em todas as fases (configurável; quem tinha
+o padrão antigo de 21 s passa para 17). O contador não mostra mais 9999.
+
+**Letras:** todos os textos usam a Exo 2 (a LuckiestGuy desenhava alguns "O"
+menores e fora da linha); acentos e símbolos (🏆 ▶ ★ ✔ ⌫) saem das fontes do
+próprio jogo, iguais na TV Box e no PC.
 
 ## Para testar no PC como se fosse a TV Box
 

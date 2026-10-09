@@ -34,7 +34,6 @@ var _saindo := false
 
 
 func _ready() -> void:
-	Input.set_mouse_mode(Input.MOUSE_MODE_HIDDEN)
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_criar_interface()
 	_atualizar_tudo()
@@ -464,9 +463,12 @@ func _input(event: InputEvent) -> void:
 			get_viewport().set_input_as_handled()
 			return
 
-	# Gatilho da arma pelo controle (input_shot): aperta o botão sob a mira.
-	if InputMap.has_action("input_shot") and event.is_action_pressed("input_shot"):
-		var p := Tela.mouse()
+	# Gatilho (clique esquerdo da arma ou input_shot): aperta o botão sob a
+	# mira única. O ponteiro fica capturado, então a interface não recebe o
+	# clique por conta própria.
+	var gatilho := event is InputEventMouseButton and (event as InputEventMouseButton).pressed and (event as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT
+	if gatilho or (InputMap.has_action("input_shot") and event.is_action_pressed("input_shot")):
+		var p := MiraGlobal.pos
 		for b in _botoes:
 			if b.is_visible_in_tree() and b.get_global_rect().has_point(p):
 				b.pressed.emit()
@@ -488,4 +490,4 @@ func _process(delta: float) -> void:
 
 
 func _desenhar_mira() -> void:
-	Pincel.mira(_mira, Tela.mouse(), 18.0, 8.0, COR_DESTAQUE, Color(1, 1, 1, 0.85))
+	Pincel.mira(_mira, MiraGlobal.pos, 18.0, 8.0, COR_DESTAQUE, Color(1, 1, 1, 0.85))

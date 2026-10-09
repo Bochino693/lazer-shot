@@ -19,6 +19,7 @@ var ranking_nome_timer_label: Label = null
 var ranking_nome_digitado: String = ""
 var ranking_nome_ativo: bool = false
 var ranking_nome_tempo: float = 50.0
+var nome_ranking: NomeRanking = null   # tela de nome (igual em todas as fases)
 var ranking_pontos_pendentes: int = 0
 var ranking_cenario_pendente: String = "MAR"
 var ranking_precisao_pendente: int = 0
@@ -46,7 +47,7 @@ var som_bullet_no_stream: AudioStream = null
 @export var reducao_spawn_aguaviva: float = 0.5
 @export var reducao_spawn_vaso: float = 0.5
 @export_file("*.tscn") var cena_main_menu_path: String = "res://scenes/main.tscn"
-@export var tempo_auto_retorno_menu_seg: float = 21.0
+@export var tempo_auto_retorno_menu_seg: float = 17.0
 
 
 @export var caminho_info_inicio: String = "res://info_scenes/mar_info.png"
@@ -59,7 +60,8 @@ var info_inicio_label: Label = null
 
 
 const FONTE_TEXTO: String = "res://fonts/Exo2-Bold.ttf"
-const FONTE_LUCKIEST: String = "res://fonts/LuckiestGuy-Regular.ttf"
+# Títulos: mesma família do jogo (todos os acentos, letras alinhadas).
+const FONTE_LUCKIEST: String = "res://fonts/Exo2-ExtraBold.ttf"
 
 const COR_NEON_MAR: Color = Color(0.18, 0.88, 1.0, 1.0)
 const COR_NEON_MAR_CLARO: Color = Color(0.78, 0.96, 1.0, 1.0)
@@ -493,7 +495,7 @@ func _ready() -> void:
 	_criar_tela_info_inicio()
 	_criar_modal_fim()
 	_criar_overlay_alerta_bombas()
-	_configurar_modal_nome_ranking()
+	_criar_nome_ranking()
 	_criar_mira_overlay()
 
 	_ajustar_layout()
@@ -553,30 +555,10 @@ func _process(delta: float) -> void:
 	_atualizar_combo_hits(delta)
 	_ocultar_overlays_apagados()
 
-	if ranking_nome_ativo:
-		ranking_nome_tempo = max(0.0, ranking_nome_tempo - delta)
-
-		if ranking_nome_timer_label != null:
-			ranking_nome_timer_label.text = "SALVA COMO ANONIMO EM %02d" % int(ceil(ranking_nome_tempo))
-
-		if ranking_nome_tempo <= 0.0:
-			_confirmar_nome_ranking(true)
-
-	if ranking_nome_ativo:
-		if Input.get_mouse_mode() != Input.MOUSE_MODE_HIDDEN:
-			Input.set_mouse_mode(Input.MOUSE_MODE_HIDDEN)
-			Tela.warp_mouse(alvo_pos)
-	else:
-		if Input.get_mouse_mode() != Input.MOUSE_MODE_CAPTURED:
-			Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
-
 	_atualizar_mira_hibrida(delta)
 
-	if ranking_nome_ativo:
-		var tela_mouse := get_viewport_rect().size
-		alvo_pos = Tela.mouse()
-		alvo_pos.x = clampf(alvo_pos.x, 0.0, tela_mouse.x)
-		alvo_pos.y = clampf(alvo_pos.y, 0.0, tela_mouse.y)
+	if ranking_nome_ativo and nome_ranking != null:
+		nome_ranking.mira(alvo_pos)
 
 	alvo_anim_t += delta
 	pulse_modal_t += delta
@@ -663,62 +645,9 @@ func _process(delta: float) -> void:
 
 
 
-func _atualizar_mira_hibrida(delta: float) -> void:
-	var tela: Vector2 = get_viewport_rect().size
-
-	# Quando o ranking estiver aberto o cursor está em HIDDEN mode.
-	# Lemos a posição real para que hover dos botões e mira fiquem alinhados.
-	if ranking_nome_ativo:
-		alvo_pos = Tela.mouse()
-		alvo_pos.x = clampf(alvo_pos.x, 0.0, tela.x)
-		alvo_pos.y = clampf(alvo_pos.y, 0.0, tela.y)
-		return
-
-	if not xbox_mira_iniciada:
-		alvo_pos = tela * 0.5
-		mouse_delta_acumulado = Vector2.ZERO
-		xbox_mira_iniciada = true
-
-	var tem_xbox: bool = usar_controle_xbox \
-		and Input.get_connected_joypads().size() > 0
-
-	var usou_xbox: bool = false
-
-	if tem_xbox:
-		var eixo_x: float = Input.get_joy_axis(
-			0,
-			JOY_AXIS_LEFT_X
-		)
-
-		var eixo_y: float = Input.get_joy_axis(
-			0,
-			JOY_AXIS_LEFT_Y
-		)
-
-		if abs(eixo_x) < deadzone_xbox:
-			eixo_x = 0.0
-
-		if abs(eixo_y) < deadzone_xbox:
-			eixo_y = 0.0
-
-		var movimento := Vector2(eixo_x, eixo_y)
-
-		if movimento.length() > 1.0:
-			movimento = movimento.normalized()
-
-		if movimento.length() > 0.0:
-			alvo_pos += movimento * velocidade_mira_xbox * delta
-			usou_xbox = true
-
-	if not usou_xbox:
-		if mouse_delta_acumulado.length_squared() > 0.0:
-			alvo_pos += mouse_delta_acumulado * sensibilidade_mouse
-			mouse_delta_acumulado = Vector2.ZERO
-
-	alvo_pos.x = clampf(alvo_pos.x, 0.0, tela.x)
-	alvo_pos.y = clampf(alvo_pos.y, 0.0, tela.y)
-
-
+func _atualizar_mira_hibrida(_delta: float) -> void:
+	# mira única do jogo (MiraGlobal): mesma em todas as telas, sem saltos
+	alvo_pos = MiraGlobal.pos
 
 
 func _obter_texto_combo(hit_count: int) -> String:
@@ -1834,6 +1763,7 @@ func _atualizar_texto_countdown_fim() -> void:
 
 
 func _iniciar_timer_retorno_fim() -> void:
+	tempo_auto_retorno_menu_seg = Maquina.tempo_volta_menu()
 	fim_retorno_timer = tempo_auto_retorno_menu_seg
 	_atualizar_texto_countdown_fim()
 
@@ -3176,281 +3106,31 @@ func _ajustar_layout() -> void:
 	_atualizar_barra_municao()
 	_posicionar_modal_final_mar()
 	_posicionar_alerta_bombas()
-	_ajustar_modal_nome_ranking()
-
-
-func _configurar_modal_nome_ranking() -> void:
-	ranking_nome_layer = CanvasLayer.new()
-	ranking_nome_layer.name = "RankingNomeLayer"
-	ranking_nome_layer.layer = 180
-	ranking_nome_layer.visible = false
-	add_child(ranking_nome_layer)
-
-	ranking_nome_root = Control.new()
-	ranking_nome_root.set_anchors_preset(Control.PRESET_FULL_RECT)
-	ranking_nome_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	ranking_nome_layer.add_child(ranking_nome_root)
-
-	ranking_nome_bg = ColorRect.new()
-	ranking_nome_bg.color = Color(0.0, 0.01, 0.025, 0.90)
-	ranking_nome_bg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	ranking_nome_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	ranking_nome_root.add_child(ranking_nome_bg)
-
-	var glow_bg := ColorRect.new()
-	glow_bg.name = "RankingGlowBg"
-	glow_bg.color = Color(0.12, 0.76, 1.0, 0.10)
-	glow_bg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	glow_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	ranking_nome_root.add_child(glow_bg)
-
-	ranking_nome_panel = Panel.new()
-	ranking_nome_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	ranking_nome_root.add_child(ranking_nome_panel)
-
-	var estilo := StyleBoxFlat.new()
-	estilo.bg_color = Color(0.010, 0.030, 0.060, 0.985)
-	estilo.border_color = Color(0.22, 0.92, 1.0, 1.0)
-	estilo.border_width_left = 5
-	estilo.border_width_top = 5
-	estilo.border_width_right = 5
-	estilo.border_width_bottom = 5
-	estilo.corner_radius_top_left = 34
-	estilo.corner_radius_top_right = 34
-	estilo.corner_radius_bottom_left = 34
-	estilo.corner_radius_bottom_right = 34
-	estilo.shadow_color = Color(0.0, 0.80, 1.0, 0.55)
-	estilo.shadow_size = 42
-	estilo.shadow_offset = Vector2.ZERO
-	Leve.stylebox(ranking_nome_panel, "panel", estilo)
-
-	var topo := ColorRect.new()
-	topo.name = "RankingTopoNeon"
-	topo.color = Color(0.035, 0.080, 0.140, 0.96)
-	ranking_nome_panel.add_child(topo)
-
-	var linha_topo := ColorRect.new()
-	linha_topo.name = "RankingLinhaTopo"
-	linha_topo.color = Color(0.22, 0.92, 1.0, 1.0)
-	ranking_nome_panel.add_child(linha_topo)
-
-	var linha_base := ColorRect.new()
-	linha_base.name = "RankingLinhaBase"
-	linha_base.color = Color(0.22, 0.92, 1.0, 0.80)
-	ranking_nome_panel.add_child(linha_base)
-
-	var display_box := ColorRect.new()
-	display_box.name = "RankingDisplayBox"
-	display_box.color = Color(0.020, 0.065, 0.110, 0.96)
-	ranking_nome_panel.add_child(display_box)
-
-	var display_linha := ColorRect.new()
-	display_linha.name = "RankingDisplayLinha"
-	display_linha.color = Color(0.22, 0.92, 1.0, 0.70)
-	ranking_nome_panel.add_child(display_linha)
-
-	ranking_nome_titulo = Label.new()
-	ranking_nome_titulo.text = "NOVO RECORDE!"
-	ranking_nome_titulo.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	ranking_nome_titulo.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	Leve.font_size(ranking_nome_titulo, "font_size", 52)
-	Leve.color(ranking_nome_titulo, "font_color", Color(0.82, 0.98, 1.0, 1.0))
-	Leve.color(ranking_nome_titulo, "font_outline_color", Color(0.0, 0.20, 0.32, 1.0))
-	Leve.constant(ranking_nome_titulo, "outline_size", 10)
-	_fonte_valor(ranking_nome_titulo, 52, Color(0.82, 0.98, 1.0, 1.0))
-	ranking_nome_panel.add_child(ranking_nome_titulo)
-
-	ranking_nome_texto = Label.new()
-	ranking_nome_texto.text = "ATIRE NAS LETRAS PARA ESCREVER SEU NOME\nMÁXIMO 9 LETRAS"
-	ranking_nome_texto.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	ranking_nome_texto.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	Leve.font_size(ranking_nome_texto, "font_size", 24)
-	Leve.color(ranking_nome_texto, "font_color", Color(0.78, 0.96, 1.0, 1.0))
-	Leve.color(ranking_nome_texto, "font_outline_color", Color.BLACK)
-	Leve.constant(ranking_nome_texto, "outline_size", 5)
-	_fonte_titulo(ranking_nome_texto, 24, Color(0.78, 0.96, 1.0, 1.0))
-	ranking_nome_panel.add_child(ranking_nome_texto)
-
-	ranking_nome_display = Label.new()
-	ranking_nome_display.text = "---------"
-	ranking_nome_display.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	ranking_nome_display.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	Leve.font_size(ranking_nome_display, "font_size", 58)
-	Leve.color(ranking_nome_display, "font_color", Color(1.0, 0.92, 0.28, 1.0))
-	Leve.color(ranking_nome_display, "font_outline_color", Color(0.0, 0.12, 0.20, 1.0))
-	Leve.constant(ranking_nome_display, "outline_size", 10)
-	_fonte_valor(ranking_nome_display, 58, Color(1.0, 0.92, 0.28, 1.0))
-	ranking_nome_panel.add_child(ranking_nome_display)
-
-	ranking_nome_teclado = GridContainer.new()
-	ranking_nome_teclado.columns = 9
-	ranking_nome_teclado.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	Leve.constant(ranking_nome_teclado, "h_separation", 9)
-	Leve.constant(ranking_nome_teclado, "v_separation", 9)
-	ranking_nome_panel.add_child(ranking_nome_teclado)
-
-	var letras := "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-	for i in range(letras.length()):
-		var letra := letras.substr(i, 1)
-		var btn := _criar_botao_tecla_ranking(letra)
-		ranking_nome_teclado.add_child(btn)
-
-	ranking_nome_btn_apagar = _criar_botao_tecla_ranking("APAGAR")
-	ranking_nome_panel.add_child(ranking_nome_btn_apagar)
-
-	ranking_nome_btn_ok = _criar_botao_tecla_ranking("SALVAR")
-	ranking_nome_panel.add_child(ranking_nome_btn_ok)
-
-	ranking_nome_timer_label = Label.new()
-	ranking_nome_timer_label.text = "SALVA COMO ANONIMO EM 50"
-	ranking_nome_timer_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	ranking_nome_timer_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	Leve.font_size(ranking_nome_timer_label, "font_size", 24)
-	Leve.color(ranking_nome_timer_label, "font_color", Color(0.30, 0.94, 1.0, 1.0))
-	Leve.color(ranking_nome_timer_label, "font_outline_color", Color.BLACK)
-	Leve.constant(ranking_nome_timer_label, "outline_size", 6)
-	_fonte_titulo(ranking_nome_timer_label, 24, Color(0.30, 0.94, 1.0, 1.0))
-	ranking_nome_panel.add_child(ranking_nome_timer_label)
-
-	call_deferred("_ajustar_modal_nome_ranking")
-
-
-
-func _criar_botao_tecla_ranking(texto: String) -> Button:
-	var btn := Button.new()
-	btn.text = texto
-	btn.focus_mode = Control.FOCUS_NONE
-	btn.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	btn.disabled = false
-
-	Leve.font_size(btn, "font_size", 24)
-	Leve.color(btn, "font_color", Color(0.82, 0.98, 1.0, 1.0))
-	Leve.color(btn, "font_hover_color", Color.WHITE)
-	Leve.color(btn, "font_pressed_color", Color(0.02, 0.05, 0.08, 1.0))
-	Leve.color(btn, "font_outline_color", Color.BLACK)
-	Leve.constant(btn, "outline_size", 4)
-
-	var normal := StyleBoxFlat.new()
-	normal.bg_color = Color(0.025, 0.080, 0.130, 0.98)
-	normal.border_color = Color(0.18, 0.82, 1.0, 0.88)
-	normal.border_width_left = 3
-	normal.border_width_top = 3
-	normal.border_width_right = 3
-	normal.border_width_bottom = 3
-	normal.corner_radius_top_left = 15
-	normal.corner_radius_top_right = 15
-	normal.corner_radius_bottom_left = 15
-	normal.corner_radius_bottom_right = 15
-	normal.shadow_color = Color(0.0, 0.78, 1.0, 0.38)
-	normal.shadow_size = 18
-	normal.shadow_offset = Vector2.ZERO
-
-	var hover := StyleBoxFlat.new()
-	hover.bg_color = Color(0.18, 0.88, 1.0, 0.98)
-	hover.border_color = Color(0.82, 0.98, 1.0, 1.0)
-	hover.border_width_left = 4
-	hover.border_width_top = 4
-	hover.border_width_right = 4
-	hover.border_width_bottom = 4
-	hover.corner_radius_top_left = 15
-	hover.corner_radius_top_right = 15
-	hover.corner_radius_bottom_left = 15
-	hover.corner_radius_bottom_right = 15
-	hover.shadow_color = Color(0.0, 0.92, 1.0, 0.75)
-	hover.shadow_size = 26
-	hover.shadow_offset = Vector2.ZERO
-
-	var pressed := StyleBoxFlat.new()
-	pressed.bg_color = Color(1.0, 0.88, 0.24, 1.0)
-	pressed.border_color = Color(1.0, 0.98, 0.68, 1.0)
-	pressed.border_width_left = 4
-	pressed.border_width_top = 4
-	pressed.border_width_right = 4
-	pressed.border_width_bottom = 4
-	pressed.corner_radius_top_left = 15
-	pressed.corner_radius_top_right = 15
-	pressed.corner_radius_bottom_left = 15
-	pressed.corner_radius_bottom_right = 15
-	pressed.shadow_color = Color(1.0, 0.80, 0.18, 0.70)
-	pressed.shadow_size = 24
-	pressed.shadow_offset = Vector2.ZERO
-
-	Leve.stylebox(btn, "normal", normal)
-	Leve.stylebox(btn, "hover", hover)
-	Leve.stylebox(btn, "pressed", pressed)
-
-	return btn
-
-
-
-func _ranking_tecla_letra(letra: String) -> void:
-	if not ranking_nome_ativo:
-		return
-
-	if ranking_nome_digitado.length() >= 9:
-		return
-
-	ranking_nome_digitado += letra
-	_atualizar_display_nome_ranking()
-
-
-func _ranking_apagar_letra() -> void:
-	if not ranking_nome_ativo:
-		return
-
-	if ranking_nome_digitado.length() <= 0:
-		return
-
-	ranking_nome_digitado = ranking_nome_digitado.substr(0, ranking_nome_digitado.length() - 1)
-	_atualizar_display_nome_ranking()
-
-
-func _atualizar_display_nome_ranking() -> void:
-	if ranking_nome_display == null:
-		return
-
-	if ranking_nome_digitado == "":
-		ranking_nome_display.text = "---------"
-	else:
-		ranking_nome_display.text = ranking_nome_digitado
 
 
 func _abrir_modal_nome_ranking_mar(pontos: int, precisao: int) -> void:
 	ranking_pontos_pendentes = pontos
 	ranking_cenario_pendente = "MAR"
 	ranking_precisao_pendente = clamp(precisao, 0, 100)
-	ranking_nome_tempo = 50.0
 	ranking_nome_ativo = true
 	ranking_ja_salvo = false
 	ranking_nome_digitado = ""
-	
-	mouse_delta_acumulado = Vector2.ZERO
-	Input.set_mouse_mode(Input.MOUSE_MODE_HIDDEN)
-
-	# Teleporta o cursor OS para alvo_pos para zerar o offset
-	# entre hover dos botões e a mira desenhada.
-	var pos_inicial := alvo_pos
-	if pos_inicial == Vector2.ZERO:
-		pos_inicial = get_viewport_rect().size * 0.5
-	Tela.warp_mouse(pos_inicial)
 
 	_forcar_mira_sobre_modal_ranking()
-
-	if ranking_nome_layer != null:
-		ranking_nome_layer.visible = true
-
-	if ranking_nome_timer_label != null:
-		ranking_nome_timer_label.text = "SALVA COMO ANONIMO EM 50"
-
-	_atualizar_display_nome_ranking()
-	_ajustar_modal_nome_ranking()
 	_atualizar_texto_countdown_fim()
 
+	if nome_ranking != null:
+		nome_ranking.abrir(Color(0.24, 0.72, 1.0), pontos, ranking_precisao_pendente)
 
 
 func _confirmar_nome_ranking(usar_anonimo: bool = false) -> void:
 	if ranking_ja_salvo:
 		return
+
+	# confirmado por fora da tela de nome (ex.: START): vale o que já foi digitado
+	if nome_ranking != null and nome_ranking.ativo:
+		ranking_nome_digitado = nome_ranking.nome
+		nome_ranking.fechar()
 
 	var nome_final: String = "ANONIMO"
 
@@ -3471,10 +3151,8 @@ func _confirmar_nome_ranking(usar_anonimo: bool = false) -> void:
 	ranking_nome_ativo = false
 	ranking_nome_tempo = 0.0
 
-	if ranking_nome_layer != null:
-		ranking_nome_layer.visible = false
-
-	Input.set_mouse_mode(Input.MOUSE_MODE_HIDDEN)
+	if nome_ranking != null and nome_ranking.ativo:
+		nome_ranking.fechar()
 
 	if alvo_layer != null:
 		alvo_layer.layer = 100
@@ -3504,91 +3182,6 @@ func _confirmar_nome_ranking(usar_anonimo: bool = false) -> void:
 	_atualizar_texto_countdown_fim()
 	_posicionar_modal_final_mar()
 
-
-
-func _ajustar_modal_nome_ranking() -> void:
-	if ranking_nome_root == null or ranking_nome_panel == null:
-		return
-
-	var tela: Vector2 = get_viewport_rect().size
-
-	ranking_nome_root.size = tela
-
-	if ranking_nome_bg != null:
-		ranking_nome_bg.position = Vector2.ZERO
-		ranking_nome_bg.size = tela
-
-	var glow_bg := ranking_nome_root.get_node_or_null("RankingGlowBg") as ColorRect
-	if glow_bg != null:
-		glow_bg.position = Vector2.ZERO
-		glow_bg.size = tela
-
-	var painel_w: float = min(1020.0, tela.x - 64.0)
-	var painel_h: float = min(780.0, tela.y - 80.0)
-
-	ranking_nome_panel.position = Vector2(
-		(tela.x - painel_w) * 0.5,
-		(tela.y - painel_h) * 0.5
-	).round()
-
-	ranking_nome_panel.size = Vector2(painel_w, painel_h)
-
-	var topo := ranking_nome_panel.get_node_or_null("RankingTopoNeon") as ColorRect
-	if topo != null:
-		topo.position = Vector2.ZERO
-		topo.size = Vector2(painel_w, 116.0)
-
-	var linha_topo := ranking_nome_panel.get_node_or_null("RankingLinhaTopo") as ColorRect
-	if linha_topo != null:
-		linha_topo.position = Vector2.ZERO
-		linha_topo.size = Vector2(painel_w, 5.0)
-
-	var linha_base := ranking_nome_panel.get_node_or_null("RankingLinhaBase") as ColorRect
-	if linha_base != null:
-		linha_base.position = Vector2(0.0, painel_h - 5.0)
-		linha_base.size = Vector2(painel_w, 5.0)
-
-	var display_box := ranking_nome_panel.get_node_or_null("RankingDisplayBox") as ColorRect
-	if display_box != null:
-		display_box.position = Vector2(86.0, 158.0)
-		display_box.size = Vector2(painel_w - 172.0, 86.0)
-
-	var display_linha := ranking_nome_panel.get_node_or_null("RankingDisplayLinha") as ColorRect
-	if display_linha != null:
-		display_linha.position = Vector2(86.0, 240.0)
-		display_linha.size = Vector2(painel_w - 172.0, 4.0)
-
-	if ranking_nome_titulo != null:
-		ranking_nome_titulo.position = Vector2(20.0, 18.0)
-		ranking_nome_titulo.size = Vector2(painel_w - 40.0, 64.0)
-
-	if ranking_nome_texto != null:
-		ranking_nome_texto.position = Vector2(40.0, 90.0)
-		ranking_nome_texto.size = Vector2(painel_w - 80.0, 58.0)
-
-	if ranking_nome_display != null:
-		ranking_nome_display.position = Vector2(96.0, 160.0)
-		ranking_nome_display.size = Vector2(painel_w - 192.0, 80.0)
-
-	if ranking_nome_teclado != null:
-		ranking_nome_teclado.position = Vector2(64.0, 272.0)
-		ranking_nome_teclado.size = Vector2(painel_w - 128.0, 280.0)
-
-		for child in ranking_nome_teclado.get_children():
-			if child is Button:
-				(child as Button).custom_minimum_size = Vector2(86.0, 64.0)
-
-	if ranking_nome_btn_apagar != null:
-		ranking_nome_btn_apagar.position = Vector2(150.0, painel_h - 150.0)
-		ranking_nome_btn_apagar.size = Vector2(280.0, 66.0)
-
-	if ranking_nome_btn_ok != null:
-		ranking_nome_btn_ok.position = Vector2(painel_w - 430.0, painel_h - 150.0)
-		ranking_nome_btn_ok.size = Vector2(280.0, 66.0)
-
-	if ranking_nome_timer_label != null:
-		ranking_nome_timer_label.position = Vector2(40.0, painel_h - 74.0)
-		ranking_nome_timer_label.size = Vector2(painel_w - 80.0, 42.0)
 
 
 func _atualizar_bombas_hud() -> void:
@@ -3856,10 +3449,10 @@ func _mostrar_modal_resultado_final() -> void:
 
 	_posicionar_modal_final_mar()
 
+	_iniciar_timer_retorno_fim()
 	if entrou_ranking:
-		fim_retorno_timer = 9999.0
-	else:
-		_iniciar_timer_retorno_fim()
+		# a contagem de volta só anda depois do nome
+		ranking_nome_ativo = true
 
 	var tw := create_tween()
 	tw.set_parallel(true)
@@ -5903,8 +5496,6 @@ func _finalizar_recarga() -> void:
 
 
 func _forcar_mira_sobre_modal_ranking() -> void:
-	Input.set_mouse_mode(Input.MOUSE_MODE_HIDDEN)
-
 	if ranking_nome_root != null:
 		ranking_nome_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
@@ -5949,7 +5540,7 @@ var tempo_trava_input_arma: float = 0.0
 
 
 func _pos_arma() -> Vector2:
-	return Tela.mouse()
+	return MiraGlobal.pos
 
 
 func _evento_tiro_arma(me: InputEventMouseButton) -> bool:
@@ -6040,69 +5631,21 @@ func _executar_recarga_arma() -> void:
 
 
 func _ranking_tentar_atirar_tecla(pos_tiro: Vector2) -> void:
-	if not ranking_nome_ativo:
+	if not ranking_nome_ativo or nome_ranking == null:
 		return
-
-	if ranking_trava_tecla_tiro:
-		return
-
-	ranking_trava_tecla_tiro = true
-
 	_tocar_som(som_tiro_stream, -1.5, randf_range(0.98, 1.03))
-
-	if ranking_nome_teclado != null:
-		for child in ranking_nome_teclado.get_children():
-			if child is Button:
-				var btn := child as Button
-				var rect := Rect2(btn.global_position, btn.size)
-
-				if rect.has_point(pos_tiro):
-					_ranking_tecla_letra(btn.text)
-					_fx_tecla_ranking(btn)
-					await get_tree().create_timer(0.18).timeout
-					ranking_trava_tecla_tiro = false
-					return
-
-	if ranking_nome_btn_apagar != null:
-		var rect_apagar := Rect2(
-			ranking_nome_btn_apagar.global_position,
-			ranking_nome_btn_apagar.size
-		)
-
-		if rect_apagar.has_point(pos_tiro):
-			_ranking_apagar_letra()
-			_fx_tecla_ranking(ranking_nome_btn_apagar)
-			await get_tree().create_timer(0.18).timeout
-			ranking_trava_tecla_tiro = false
-			return
-
-	if ranking_nome_btn_ok != null:
-		var rect_ok := Rect2(
-			ranking_nome_btn_ok.global_position,
-			ranking_nome_btn_ok.size
-		)
-
-		if rect_ok.has_point(pos_tiro):
-			_fx_tecla_ranking(ranking_nome_btn_ok)
-			_confirmar_nome_ranking(false)
-			await get_tree().create_timer(0.18).timeout
-			ranking_trava_tecla_tiro = false
-			return
-
-	await get_tree().create_timer(0.08).timeout
-	ranking_trava_tecla_tiro = false
+	nome_ranking.tiro(pos_tiro)
 
 
+func _criar_nome_ranking() -> void:
+	nome_ranking = NomeRanking.new()
+	add_child(nome_ranking)
+	nome_ranking.confirmado.connect(_ao_confirmar_nome)
 
-func _fx_tecla_ranking(btn: Button) -> void:
-	if btn == null:
-		return
 
-	var escala_original: Vector2 = btn.scale
-
-	var tw := create_tween()
-	tw.tween_property(btn, "scale", escala_original * 1.12, 0.06)
-	tw.tween_property(btn, "scale", escala_original, 0.10)
+func _ao_confirmar_nome(nome: String) -> void:
+	ranking_nome_digitado = "" if nome == "ANONIMO" else nome
+	_confirmar_nome_ranking(nome == "ANONIMO")
 
 
 func _aplicar_config_admin_na_cena() -> void:
