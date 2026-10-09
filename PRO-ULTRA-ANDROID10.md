@@ -273,6 +273,57 @@ multiplique por 5 a 8.
 usados por nome (FundoVivo, NomeRanking); cada tela pré-carrega só os fundos
 que pede.
 
+## Rodada 6: mira sem pontos cegos e vídeo pelo hardware da TV Box
+
+**Mira da arma** (`scripts/MiraGlobal.gd`). A arma é um mouse com giroscópio.
+O jogo pede ao Android para "capturar" o ponteiro (ele manda só o quanto a
+arma andou). O Android só aceita esse pedido com a janela em foco e o solta
+quando o foco sai; o Godot pede uma vez só e nunca mais. Sem captura, o
+cursor do sistema bate na borda da tela deitada do HDMI e somar o movimento
+deixava parte da tela fora de alcance (os "pontos cegos"). Agora:
+- a captura é pedida de novo a cada segundo enquanto não estiver valendo e
+  sempre que o app volta ao foco;
+- enquanto ela não volta, a mira vai para onde o ponteiro real está (cobre a
+  tela inteira, sem buraco);
+- sem filtro nenhum: a mira anda exatamente o que a arma andou, na hora;
+- o cursor do sistema fica invisível (não pisca seta ao refazer a captura).
+
+**Vídeo de volta, pelo decodificador de hardware** (`scripts/video_nativo.gd`
++ `shaders/video_oes.gdshader`). O player de vídeo do Godot 4.6 (Theora)
+decodifica no processador, na mesma linha do jogo, converte a cor pixel a
+pixel e reenvia a imagem inteira a cada quadro; não há configuração do Godot
+que mude isso. A TV Box toca 1080p liso porque usa o decodificador de vídeo
+dela. Agora o vídeo (H.264, `background_video/*.mp4`) vai para ele:
+MediaPlayer do Android → SurfaceTexture → `ExternalTexture` do Godot, e o
+quadro é desenhado direto da placa de vídeo, dentro do jogo (gira com a tela,
+fica atrás dos textos). Custo de processador praticamente zero.
+- Abertura: o vídeo inicial volta (720x1088). Embaixo dele fica um quadro
+  parado do próprio vídeo, então a tela nunca fica preta esperando.
+- Modo demonstração: as prévias também tocam pelo hardware, com som.
+- Menu e ranking: o vídeo da abertura volta ao fundo; no menu, a mira sobre um
+  cartão mostra a arte do cenário.
+- Na primeira vez, os vídeos são copiados para a memória interna (cerca de
+  32 MB, uma vez só); o MediaPlayer precisa de um arquivo de verdade.
+- Plano B automático: se o hardware não entregar quadro em 3 s (ou der erro),
+  a abertura e as prévias tocam o .ogv no player do Godot, como antes; menu e
+  ranking ficam com o fundo animado (para não travar).
+- Configuração > ABERTURA: "Vídeo pelo hardware" (LIGADO/DESLIGADO) e "Imagem
+  do vídeo" (NORMAL/VIRADA, caso algum aparelho entregue o quadro de cabeça
+  para baixo).
+- O export inclui `*.mp4` (`export_presets.cfg`, filtro de inclusão do preset
+  Android).
+
+**Abertura limpa:** sem os riscos coloridos de glitch. A tela abre do preto
+sobre o vídeo já em movimento e a chamada (APERTE START) surge suave.
+
+**Troca de tela:** assim que a tela fica preta, a tela que sai para de
+processar e de desenhar (animações, vídeo, efeitos), deixando o processador
+para carregar a próxima; ela sai da memória quando a nova monta.
+
+Não deu para testar na TV Box real nesta rodada (só no PC e no pacote
+exportado). Se na TV Box o vídeo da abertura aparecer parado (só o quadro de
+baixo) ou trocar pelo vídeo antigo, o hardware não aceitou: avise.
+
 ## Para testar no PC como se fosse a TV Box
 
 ```

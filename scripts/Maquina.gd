@@ -51,6 +51,9 @@ const PADRAO := {
 	"main/tempo_intro": 40,
 	"main/tempo_teaser": 20,
 	"main/demo_ativa": true,
+	# vídeos pelo decodificador de hardware da TV Box (scripts/video_nativo.gd)
+	"video/nativo": true,
+	"video/virar": false,
 	"audio/volume_musica": -5.0,
 	"audio/volume_fx": 0.0,
 	"sistema/idioma": "pt_br",

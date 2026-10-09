@@ -41,6 +41,10 @@ var fonte_google: FontFile = null
 
 # Fundo: imagem viva na placa de vídeo (sem decodificar vídeo no processador).
 var background: FundoVivo = null
+# Vídeo da abertura (decodificador de hardware) por cima do fundo vivo: aparece
+# quando o fundo é o da abertura; com a mira num cartão some e mostra a arte
+# do cenário. Sem hardware, fica só o fundo vivo (nunca o player lento).
+var video_menu: VideoNativo = null
 @onready var titulo: Label = $Titulo
 @onready var grid: GridContainer = $GridContainer
 @onready var botao_ranking: Button = $BotaoRanking
@@ -379,6 +383,7 @@ func _exit_tree() -> void:
 
 func _process(delta: float) -> void:
 	tempo_trava_input_menu = max(0.0, tempo_trava_input_menu - delta)
+	_atualizar_video_menu(delta)
 	_atualizar_mira_menu(delta)
  
 	alvo_anim_t += delta
@@ -707,10 +712,29 @@ func _configurar_background() -> void:
 	move_child(background, 1 if fundo_preto != null else 0)
 	background.mostrar("init")
 
+	video_menu = VideoNativo.new("res://background_video/back_init.mp4", "res://background_video/back_init.ogv", Vector2(720, 1088), true, 0.0)
+	video_menu.so_hardware = true
+	add_child(video_menu)
+	move_child(video_menu, background.get_index() + 1)
+	video_menu.tocar()
+
 
 func _ajustar_background_fullscreen() -> void:
 	if background != null:
 		background.ajustar()
+	if video_menu != null:
+		video_menu.ajustar()
+
+
+## O vídeo aparece com o fundo da abertura e some (0,3 s) com a arte de um
+## cenário; coberto pelo vídeo, o fundo vivo de baixo nem é desenhado.
+func _atualizar_video_menu(delta: float) -> void:
+	if video_menu == null or background == null:
+		return
+	var alvo := 1.0 if background.atual() == "init" else 0.0
+	video_menu.modulate.a = move_toward(video_menu.modulate.a, alvo, delta / 0.3)
+	video_menu.visible = video_menu.modulate.a > 0.001
+	background.visible = not (alvo == 1.0 and video_menu.modulate.a >= 0.999 and video_menu.esta_mostrando())
 
 
 # ─────────────────────────────────────────────────────────────────────────────

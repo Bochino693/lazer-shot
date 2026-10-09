@@ -113,6 +113,8 @@ func _criar_interface() -> void:
 	_passos(coluna, "Tempo do vídeo", "", "main/tempo_teaser", 5, 120, 5, func(v): return "%d s" % v)
 	_opcoes(coluna, "Vídeos de demonstração", "", "main/demo_ativa", [[true, "LIGADO"], [false, "DESLIGADO"]])
 	_opcoes(coluna, "Ranking na abertura", "", "ranking/ranking_ativo", [[true, "LIGADO"], [false, "DESLIGADO"]])
+	_opcoes(coluna, "Vídeo pelo hardware", "decodificador da TV Box (desligado: player do Godot)", "video/nativo", [[true, "LIGADO"], [false, "DESLIGADO"]])
+	_opcoes(coluna, "Imagem do vídeo", "se o vídeo aparecer de cabeça para baixo", "video/virar", [[false, "NORMAL"], [true, "VIRADA"]])
 
 	# SOM
 	_secao(coluna, "SOM")

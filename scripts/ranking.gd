@@ -13,8 +13,10 @@ const RankingManagerScript := preload("res://scripts/RankingManager.gd")
 var RankingManager := RankingManagerScript.new()
 
 var modo_atrativo: bool = false
-# Fundo vivo (imagem animada na placa de vídeo), escurecido atrás da tabela.
+# Fundo: vídeo da abertura pelo decodificador de hardware sobre o fundo vivo
+# (quadro parado animado), os dois escurecidos atrás da tabela.
 var fundo_vivo: FundoVivo = null
+var video_fundo: VideoNativo = null
 
 var audio_ranking: AudioStreamPlayer = null
 
@@ -243,6 +245,19 @@ func _criar_fundo() -> void:
 	fundo_vivo.modulate = Color(0.55, 0.55, 0.55)
 	add_child(fundo_vivo)
 	fundo_vivo.mostrar("init")
+
+	video_fundo = VideoNativo.new("res://background_video/back_init.mp4", "res://background_video/back_init.ogv", Vector2(720, 1088), true, 0.0)
+	video_fundo.so_hardware = true
+	video_fundo.z_index = -50
+	video_fundo.modulate = Color(0.55, 0.55, 0.55)
+	add_child(video_fundo)
+	video_fundo.comecou.connect(func() -> void:
+		get_tree().create_timer(0.5).timeout.connect(func() -> void:
+			if fundo_vivo != null and video_fundo != null and video_fundo.esta_mostrando():
+				fundo_vivo.visible = false
+		)
+	)
+	video_fundo.tocar()
 
 
 func _evento_start(event: InputEvent) -> bool:
