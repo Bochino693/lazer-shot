@@ -1814,7 +1814,7 @@ func _voltar_para_main_menu() -> void:
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 
 	if cena_main_menu_path != "" and ResourceLoader.exists(cena_main_menu_path):
-		get_tree().change_scene_to_file(cena_main_menu_path)
+		TransicaoGlobal.trocar_cena(cena_main_menu_path)
 	else:
 		push_warning("Cena de menu principal não encontrada: " + cena_main_menu_path)
 

@@ -343,7 +343,7 @@ func _process(delta: float) -> void:
 				fim_contagem_label.modulate.a = pulso
 
 		if fim_tempo_voltar <= 0.0 and not ranking_nome_ativo:
-			get_tree().change_scene_to_file(cena_main_menu)
+			TransicaoGlobal.trocar_cena(cena_main_menu)
 			return
 
 	var dificuldade: String = get_tree().get_meta("modo_dificuldade", "facil")

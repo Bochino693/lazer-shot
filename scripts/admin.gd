@@ -562,6 +562,6 @@ func _voltar_main() -> void:
 	_salvar_config()
 
 	if cena_voltar != "" and ResourceLoader.exists(cena_voltar):
-		get_tree().change_scene_to_file(cena_voltar)
+		TransicaoGlobal.trocar_cena(cena_voltar)
 	else:
-		get_tree().change_scene_to_file("res://scenes/main.tscn")
+		TransicaoGlobal.trocar_cena("res://scenes/main.tscn")

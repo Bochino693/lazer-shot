@@ -522,7 +522,7 @@ func _sair_demo_para_main() -> void:
 
 	demo_ativo = false
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
-	get_tree().change_scene_to_file(cena_main_menu)
+	TransicaoGlobal.trocar_cena(cena_main_menu)
 
 
 func _obter_vida_individual_por_pontos(pontos: int) -> float:
@@ -3917,7 +3917,7 @@ func _retornar_para_menu() -> void:
 		return
 
 	Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
-	get_tree().change_scene_to_file(cena_main_menu)
+	TransicaoGlobal.trocar_cena(cena_main_menu)
 
 
 func _configurar_hud() -> void:

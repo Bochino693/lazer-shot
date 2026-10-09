@@ -140,7 +140,7 @@ func _abrir_tela_admin() -> void:
 	_mostrar_ponteiro_mouse()
 
 	get_tree().set_meta("admin_origem", "main")
-	get_tree().change_scene_to_file(cena_admin)
+	TransicaoGlobal.trocar_cena(cena_admin)
 
 
 # ─────────────────────────────────────────────
@@ -274,7 +274,9 @@ func _configurar_canvas() -> void:
 	flash_intro.offset_top = 0.0
 	flash_intro.offset_right = 0.0
 	flash_intro.offset_bottom = 0.0
-	flash_intro.color = Color(1, 1, 1, 1)
+	# A abertura nasce do preto (a transição chega no preto); os riscos do
+	# glitch passam por cima e o vídeo aparece. Sem tela branca chapada.
+	flash_intro.color = Color(0, 0, 0, 1)
 	flash_intro.modulate = Color(1, 1, 1, 1)
 
 
@@ -640,10 +642,8 @@ func _trocar_cena_com_saida(caminho_cena: String) -> void:
 
 	_ocultar_ponteiro_mouse()
 
-	if Engine.has_singleton("TransicaoGlobal"):
-		TransicaoGlobal.trocar_cena(caminho_cena)
-	else:
-		get_tree().change_scene_to_file(caminho_cena)
+	# A tela já está preta (flash_intro): troca sem escurecer de novo.
+	TransicaoGlobal.trocar_cena(caminho_cena, 0.0)
 
 
 

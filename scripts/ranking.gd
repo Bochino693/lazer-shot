@@ -208,7 +208,7 @@ func _auto_voltar_atrativo() -> void:
 	if get_tree().has_meta("ranking_origem"):
 		get_tree().remove_meta("ranking_origem")
 
-	get_tree().change_scene_to_file(CENA_INICIO)
+	TransicaoGlobal.trocar_cena(CENA_INICIO)
 
 
 
@@ -333,7 +333,7 @@ func _iniciar_jogo_pelo_insert_coin() -> void:
 	await _efeito_insert_coin_confirmado()
 
 	if ResourceLoader.exists(CENA_MENU):
-		get_tree().change_scene_to_file(CENA_MENU)
+		TransicaoGlobal.trocar_cena(CENA_MENU)
 
 
 func _criar_painel() -> void:
@@ -1065,7 +1065,7 @@ func _reiniciar_video_fundo() -> void:
 
 func _voltar_menu() -> void:
 	if ResourceLoader.exists(CENA_MENU):
-		get_tree().change_scene_to_file(CENA_MENU)
+		TransicaoGlobal.trocar_cena(CENA_MENU)
 
 
 func _iniciar_musica_ranking() -> void:

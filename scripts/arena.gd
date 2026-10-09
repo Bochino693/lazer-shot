@@ -499,7 +499,7 @@ func _process(delta: float) -> void:
 			fim_contagem_label.text = "VOLTANDO AO MENU EM %02d" % int(ceil(fim_tempo_voltar))
 
 		if fim_tempo_voltar <= 0.0:
-			get_tree().change_scene_to_file("res://scenes/main.tscn")
+			TransicaoGlobal.trocar_cena("res://scenes/main.tscn")
 
 
 func _atualizar_mira_hibrida(delta: float) -> void:
