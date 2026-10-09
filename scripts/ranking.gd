@@ -9,14 +9,12 @@ const CAMINHO_MUSICA_RANKING: String = "res://songs/ranking-song.mp3"
 const CENA_INICIO: String = "res://scenes/main.tscn"
 const TEMPO_RANKING_ATRATIVO: float = 20.0
 
-const CAMINHO_VIDEO_INIT: String = "res://background_video/back_init.ogv"
-
 const RankingManagerScript := preload("res://scripts/RankingManager.gd")
 var RankingManager := RankingManagerScript.new()
 
 var modo_atrativo: bool = false
-var video_fundo: VideoStreamPlayer = null
-var overlay_fundo: ColorRect = null
+# Fundo vivo (imagem animada na placa de vídeo), escurecido atrás da tabela.
+var fundo_vivo: FundoVivo = null
 
 var audio_ranking: AudioStreamPlayer = null
 
@@ -239,42 +237,12 @@ func _atualizar_mira_xbox(_delta: float) -> void:
 
 
 func _criar_fundo() -> void:
-	video_fundo = VideoStreamPlayer.new()
-	video_fundo.name = "VideoFundoRanking"
-
-	video_fundo.position = Vector2.ZERO
-	video_fundo.size = get_viewport_rect().size
-
-	video_fundo.set_anchors_preset(Control.PRESET_FULL_RECT)
-
-	video_fundo.expand = true
-	video_fundo.autoplay = true
-	video_fundo.loop = true
-
-	video_fundo.volume = -80.0
-
-	video_fundo.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	video_fundo.z_index = -50
-
-	add_child(video_fundo)
-
-	if ResourceLoader.exists(CAMINHO_VIDEO_INIT):
-		video_fundo.stream = load(CAMINHO_VIDEO_INIT)
-		# cobre a tela sem esticar (o vídeo é 2:3)
-		Leve.cobrir_video(video_fundo, get_viewport_rect().size, 2.0 / 3.0)
-
-		await get_tree().process_frame
-
-		video_fundo.play()
-
-		if not video_fundo.finished.is_connected(_reiniciar_video_fundo):
-			video_fundo.finished.connect(_reiniciar_video_fundo)
-
-	overlay_fundo = ColorRect.new()
-	overlay_fundo.color = Color(0.0, 0.0, 0.0, 0.45)
-	overlay_fundo.set_anchors_preset(Control.PRESET_FULL_RECT)
-	overlay_fundo.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(overlay_fundo)
+	fundo_vivo = FundoVivo.new(["init"])
+	fundo_vivo.z_index = -50
+	# escurecido (antes: vídeo + véu preto de 45%, duas camadas de tela cheia)
+	fundo_vivo.modulate = Color(0.55, 0.55, 0.55)
+	add_child(fundo_vivo)
+	fundo_vivo.mostrar("init")
 
 
 func _evento_start(event: InputEvent) -> bool:
@@ -1023,11 +991,6 @@ func _criar_lista_vazia() -> void:
 	
 	await get_tree().process_frame
 	_atualizar_botoes_rolagem()
-
-
-func _reiniciar_video_fundo() -> void:
-	if video_fundo != null:
-		video_fundo.play()
 
 
 func _voltar_menu() -> void:

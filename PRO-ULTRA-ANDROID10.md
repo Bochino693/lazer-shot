@@ -219,6 +219,60 @@ o padrão antigo de 21 s passa para 17). O contador não mostra mais 9999.
 menores e fora da linha); acentos e símbolos (🏆 ▶ ★ ✔ ⌫) saem das fontes do
 próprio jogo, iguais na TV Box e no PC.
 
+## Rodada 5: fundos vivos, sem vídeo pesado, e partida sem engasgo
+
+**Fundo vivo no lugar dos vídeos** (`scripts/fundo_vivo.gd` +
+`shaders/fundo_vivo.gdshader`): na TV Box o vídeo é decodificado pelo
+processador a cada quadro (5 a 8 vezes mais lento que no PC); era o grosso das
+travadas do menu e da abertura. Agora abertura, menu de cenários e ranking usam
+uma imagem que ganha vida na placa de vídeo: luzes que piscam e sobem com o
+grave da música, chão e água ondulando com reflexo, brilho grande na batida,
+zoom lento ("respiração"), uma faixa de brilho que cruza a tela de tempos em
+tempos e faíscas subindo. Sem música tocando, um pulso calmo próprio mantém
+tudo em movimento. Uma máscara por imagem (R = luzes, G = superfícies,
+B = brilho da batida) diz onde cada efeito acontece; elas são geradas por
+`tools/gerar_fundos_vivos.py`.
+
+- **Menu:** a mira sobre um cartão troca o fundo para a arte daquele cenário
+  (Egito com o mesmo fundo animado da fase, Mar, Bar, Arena), com cruzamento
+  suave; a roleta e o modal de dificuldade também mostram o cenário da vez.
+  Todos os fundos ficam prontos (e já desenhados uma vez) sob a transição, então
+  o primeiro passar da mira não engasga.
+- **Abertura e ranking:** o vídeo `back_init` saiu; o fundo vivo usa um quadro
+  dele. O único vídeo que sobrou é a prévia do modo demonstração, agora em
+  432x768 e 24 quadros (cerca de 40% menos trabalho de decodificação) e só
+  enquanto aparece.
+- **Abertura:** o efeito de entrada só começa com a tela estável (depois da
+  transição e de 4 quadros seguidos no ritmo), e não mais nos primeiros quadros,
+  que são os mais pesados de qualquer tela.
+
+**Egito vivo:** a energia dos feixes corre mais rápido e mais forte com o grave,
+o cristal acende na batida e solta uma onda de luz pelo cenário, raios giram em
+volta do sol/da lua, o ar tremula no horizonte, a imagem respira devagar,
+faíscas sobem do cristal e poeira dourada (azulada à noite) atravessa a tela.
+
+**Partida sem engasgo:**
+- Egito: cada alvo novo copiava a cena inteira do alvo (`duplicate()` padrão,
+  ~1,5 ms no PC, ~10 ms na TV Box, um tranco a cada alvo). Agora copia só os
+  nós (~0,1 ms, mesmo alvo).
+- Egito: o estilo dos cartões do HUD era refeito todo quadro (157 µs → 9 µs);
+  isso também apagava o aviso do cartão TEMPO, que agora fica laranja nos 30 s
+  finais e vermelho nos 10 s finais como deveria.
+- Egito: as teias de luz dos alvos redesenham ~6 vezes por segundo em vez de
+  todo quadro.
+- Arena: as marcas de laser na parede só são redesenhadas quando há fumaça
+  animando ou marca nova.
+
+Medição no PC de teste (pior quadro de cada segundo, só processador, com tiros
+a cada 0,35 s; varia de uma medição para outra): abertura 0,3 ms, menu
+~1 ms (antes ~3,8 ms com vídeo), ranking 0,8 ms, Egito 1,6–2,1 ms (antes
+2,8–3,6 ms), Arena 2,0–2,6 ms, Bar ~1,9 ms, Mar 2,3–2,9 ms. Na TV Box
+multiplique por 5 a 8.
+
+**Pré-carga:** `tools/gerar_precarga.py` agora segue também os componentes
+usados por nome (FundoVivo, NomeRanking); cada tela pré-carrega só os fundos
+que pede.
+
 ## Para testar no PC como se fosse a TV Box
 
 ```

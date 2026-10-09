@@ -7,12 +7,6 @@ layout_mode = 3
 anchors_preset = 0
 script = ExtResource("1_pp170")
 
-[node name="Background" type="VideoStreamPlayer" parent="." unique_id=1427780621]
-layout_mode = 0
-offset_right = 1024.0
-offset_bottom = 1536.0
-scale = Vector2(1.2122642, 1.215981)
-
 [node name="Titulo" type="Label" parent="." unique_id=2066924533]
 layout_mode = 0
 offset_right = 40.0
