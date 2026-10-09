@@ -1,5 +1,6 @@
 extends Control
 
+const Pincel := preload("res://scripts/pincel.gd")
 const CENA_MENU: String = "res://scenes/cenarios.tscn"
 const MAX_RANKING: int = 20
 
@@ -621,6 +622,7 @@ func _configurar_alvo_overlay() -> void:
 	alvo_overlay = Control.new()
 	alvo_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
 	alvo_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	alvo_overlay.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	alvo_layer.add_child(alvo_overlay)
 	alvo_overlay.draw.connect(_desenhar_alvo_overlay)
 
@@ -630,19 +632,16 @@ func _desenhar_alvo_overlay() -> void:
 	var pulso := 1.0 + sin(alvo_anim_t * 6.0) * 0.08
 	var raio := 18.0 * pulso
 
-	alvo_overlay.draw_arc(alvo_pos, raio, 0.0, TAU, 40, Color(1.0, 0.12, 0.08), 2.8, true)
-	alvo_overlay.draw_arc(alvo_pos, raio * 0.52, 0.0, TAU, 28, Color.WHITE, 1.4, true)
-	alvo_overlay.draw_circle(alvo_pos, 3.4 * pulso, Color(1.0, 0.12, 0.08))
+	Pincel.anel(alvo_overlay, alvo_pos, raio, 2.8, Color(1.0, 0.12, 0.08))
+	Pincel.anel(alvo_overlay, alvo_pos, raio * 0.52, 1.4, Color.WHITE)
+	Pincel.circulo(alvo_overlay, alvo_pos, 3.4 * pulso, Color(1.0, 0.12, 0.08))
 
 	var l := 13.0 * pulso
 	var e := 7.0 * pulso
-	alvo_overlay.draw_line(alvo_pos + Vector2(-l - e, 0), alvo_pos + Vector2(-e, 0), Color.WHITE, 2.2)
-	alvo_overlay.draw_line(alvo_pos + Vector2(e, 0), alvo_pos + Vector2(l + e, 0), Color.WHITE, 2.2)
-	alvo_overlay.draw_line(alvo_pos + Vector2(0, -l - e), alvo_pos + Vector2(0, -e), Color.WHITE, 2.2)
-	alvo_overlay.draw_line(alvo_pos + Vector2(0, e), alvo_pos + Vector2(0, l + e), Color.WHITE, 2.2)
-
-
-
+	Pincel.linha(alvo_overlay, alvo_pos + Vector2(-l - e, 0), alvo_pos + Vector2(-e, 0), Color.WHITE, 2.2)
+	Pincel.linha(alvo_overlay, alvo_pos + Vector2(e, 0), alvo_pos + Vector2(l + e, 0), Color.WHITE, 2.2)
+	Pincel.linha(alvo_overlay, alvo_pos + Vector2(0, -l - e), alvo_pos + Vector2(0, -e), Color.WHITE, 2.2)
+	Pincel.linha(alvo_overlay, alvo_pos + Vector2(0, e), alvo_pos + Vector2(0, l + e), Color.WHITE, 2.2)
 func _criar_linha_ranking(posicao: int, nome: String, cenario: String, modo: String, pontos: int, precisao: int) -> Panel:
 	var linha := Panel.new()
 

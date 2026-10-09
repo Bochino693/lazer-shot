@@ -1,5 +1,6 @@
 extends Control
 
+const Pincel := preload("res://scripts/pincel.gd")
 const CENA_CENARIO_1: String = "res://scenes/deserto.tscn"
 const CENA_CENARIO_2: String = "res://scenes/mar.tscn"
 const CENA_CENARIO_3: String = "res://scenes/bar.tscn"
@@ -1401,6 +1402,7 @@ func _configurar_alvo_overlay() -> void:
 		alvo_overlay.name = "AlvoOverlay"
 		alvo_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
 		alvo_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		alvo_overlay.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 		alvo_layer.add_child(alvo_overlay)
 		alvo_overlay.draw.connect(_desenhar_alvo_overlay)
 
@@ -1415,20 +1417,18 @@ func _desenhar_alvo_overlay() -> void:
 	var cor_secundaria := Color(1.0, 1.0, 1.0, 0.94)
 	var cor_sombra := Color(0.0, 0.0, 0.0, 0.34)
 
-	alvo_overlay.draw_arc(alvo_pos + Vector2(1.2, 1.2), raio_base, 0.0, TAU, 40, cor_sombra, 3.0, true)
-	alvo_overlay.draw_arc(alvo_pos, raio_base, 0.0, TAU, 40, cor_principal, 2.5, true)
-	alvo_overlay.draw_arc(alvo_pos, raio_meio, 0.0, TAU, 28, Color(1.0, 0.88, 0.82, 0.78), 1.2, true)
-	alvo_overlay.draw_circle(alvo_pos, raio_interno, cor_principal)
-	alvo_overlay.draw_circle(alvo_pos, 1.4 * pulso, cor_secundaria)
+	Pincel.anel(alvo_overlay, alvo_pos + Vector2(1.2, 1.2), raio_base, 3.0, cor_sombra)
+	Pincel.anel(alvo_overlay, alvo_pos, raio_base, 2.5, cor_principal)
+	Pincel.anel(alvo_overlay, alvo_pos, raio_meio, 1.2, Color(1.0, 0.88, 0.82, 0.78))
+	Pincel.circulo(alvo_overlay, alvo_pos, raio_interno, cor_principal)
+	Pincel.circulo(alvo_overlay, alvo_pos, 1.4 * pulso, cor_secundaria)
 
 	var tamanho_linha := 13.0 * pulso
 	var espaco := 7.0 * pulso
-	alvo_overlay.draw_line(alvo_pos + Vector2(-tamanho_linha - espaco, 0.0), alvo_pos + Vector2(-espaco, 0.0), cor_secundaria, 2.2)
-	alvo_overlay.draw_line(alvo_pos + Vector2(espaco, 0.0), alvo_pos + Vector2(tamanho_linha + espaco, 0.0), cor_secundaria, 2.2)
-	alvo_overlay.draw_line(alvo_pos + Vector2(0.0, -tamanho_linha - espaco), alvo_pos + Vector2(0.0, -espaco), cor_secundaria, 2.2)
-	alvo_overlay.draw_line(alvo_pos + Vector2(0.0, espaco), alvo_pos + Vector2(0.0, tamanho_linha + espaco), cor_secundaria, 2.2)
-
-
+	Pincel.linha(alvo_overlay, alvo_pos + Vector2(-tamanho_linha - espaco, 0.0), alvo_pos + Vector2(-espaco, 0.0), cor_secundaria, 2.2)
+	Pincel.linha(alvo_overlay, alvo_pos + Vector2(espaco, 0.0), alvo_pos + Vector2(tamanho_linha + espaco, 0.0), cor_secundaria, 2.2)
+	Pincel.linha(alvo_overlay, alvo_pos + Vector2(0.0, -tamanho_linha - espaco), alvo_pos + Vector2(0.0, -espaco), cor_secundaria, 2.2)
+	Pincel.linha(alvo_overlay, alvo_pos + Vector2(0.0, espaco), alvo_pos + Vector2(0.0, tamanho_linha + espaco), cor_secundaria, 2.2)
 # ─────────────────────────────────────────────────────────────────────────────
 # FADE
 # ─────────────────────────────────────────────────────────────────────────────

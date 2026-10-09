@@ -85,6 +85,7 @@ var ranking_ja_salvo: bool = false
 @export var xbox_botao_recarga: int = JOY_BUTTON_X
 @export var xbox_botao_recarga_extra: int = JOY_BUTTON_LEFT_SHOULDER
 
+const Pincel := preload("res://scripts/pincel.gd")
 const META_SENS_XBOX: String = "sensibilidade_xbox"
 const META_SENS_MOUSE: String = "sensibilidade_mouse"
 
@@ -865,16 +866,16 @@ func _desenhar_marcas_laser_parede() -> void:
 		var raio: float = float(marca.get("raio", 8.0))
 
 		# Queimado externo vermelho escuro
-		fx_layer_jogo.draw_circle(pos, raio + 9.0, Color(0.55, 0.0, 0.0, 0.20))
-		fx_layer_jogo.draw_circle(pos, raio + 5.0, Color(1.0, 0.04, 0.02, 0.55))
+		Pincel.circulo(fx_layer_jogo, pos, raio + 9.0, Color(0.55, 0.0, 0.0, 0.20))
+		Pincel.circulo(fx_layer_jogo, pos, raio + 5.0, Color(1.0, 0.04, 0.02, 0.55))
 
 		# Metal amassado em volta do furo
-		fx_layer_jogo.draw_circle(pos + Vector2(-2, 1), raio + 2.5, Color(0.34, 0.34, 0.36, 0.85))
-		fx_layer_jogo.draw_circle(pos + Vector2(2, -1), raio + 1.5, Color(0.12, 0.12, 0.13, 0.95))
+		Pincel.circulo(fx_layer_jogo, pos + Vector2(-2, 1), raio + 2.5, Color(0.34, 0.34, 0.36, 0.85))
+		Pincel.circulo(fx_layer_jogo, pos + Vector2(2, -1), raio + 1.5, Color(0.12, 0.12, 0.13, 0.95))
 
 		# Furo central
-		fx_layer_jogo.draw_circle(pos, raio, Color(0.0, 0.0, 0.0, 0.98))
-		fx_layer_jogo.draw_circle(pos + Vector2(-2, -2), raio * 0.35, Color(0.35, 0.02, 0.02, 0.65))
+		Pincel.circulo(fx_layer_jogo, pos, raio, Color(0.0, 0.0, 0.0, 0.98))
+		Pincel.circulo(fx_layer_jogo, pos + Vector2(-2, -2), raio * 0.35, Color(0.35, 0.02, 0.02, 0.65))
 
 
 
@@ -987,6 +988,7 @@ func _configurar_fx_layer_jogo() -> void:
 	fx_layer_jogo.name = "FxLayerJogo"
 	fx_layer_jogo.z_index = 999
 	fx_layer_jogo.z_as_relative = false
+	fx_layer_jogo.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	add_child(fx_layer_jogo)
 
 	fx_layer_jogo.draw.connect(_desenhar_fx_layer_jogo)
@@ -2015,20 +2017,16 @@ func _desenhar_fx_colisao() -> void:
 
 		elif bool(fx.get("fumaca", false)):
 			var tam_fumaca: float = float(fx.get("tam", 10.0))
-			fx_layer_jogo.draw_circle(pos, tam_fumaca * alpha, cor)
+			Pincel.forma(fx_layer_jogo, Pincel.FUMACA, pos, tam_fumaca * alpha, cor)
 
 		elif bool(fx.get("metal", false)):
 			var tam: float = float(fx.get("tam", 5.0))
-			var p1: Vector2 = pos + Vector2(-tam, 0)
-			var p2: Vector2 = pos + Vector2(tam * 0.6, -tam * 0.45)
-			var p3: Vector2 = pos + Vector2(tam * 0.35, tam * 0.65)
-			fx_layer_jogo.draw_colored_polygon([p1, p2, p3], cor)
-			fx_layer_jogo.draw_line(p1, p2, Color.WHITE, 1.0, true)
+			Pincel.caco(fx_layer_jogo, pos, tam, idade * 9.0, cor)
 
 		else:
 			var tam2: float = float(fx.get("tam", 5.0))
-			fx_layer_jogo.draw_circle(pos, tam2 * alpha, cor)
-			fx_layer_jogo.draw_circle(pos, tam2 * 0.38 * alpha, Color.WHITE)
+			Pincel.circulo(fx_layer_jogo, pos, tam2 * alpha, cor)
+			Pincel.circulo(fx_layer_jogo, pos, tam2 * 0.38 * alpha, Color.WHITE)
 
  
 # ═══════════════════════════════════════════════════════════
@@ -2262,6 +2260,7 @@ func _configurar_mira() -> void:
 	mira_root = Control.new()
 	mira_root.set_anchors_preset(Control.PRESET_FULL_RECT)
 	mira_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	mira_root.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	mira_layer.add_child(mira_root)
  
 	mira_root.draw.connect(_desenhar_mira)
@@ -2290,28 +2289,18 @@ func _desenhar_mira() -> void:
 	elif municao_atual <= alerta_baixa_municao_limite:
 		cor_principal = Color(1.0, 0.45, 0.05, 0.95)
 
-	mira_root.draw_arc(mira_pos, 20.0, 0.0, TAU, 42, cor_principal, 3.0, true)
-	mira_root.draw_arc(mira_pos, 8.0, 0.0, TAU, 28, Color.WHITE, 1.4, true)
-	mira_root.draw_circle(mira_pos, 2.6, Color.WHITE)
-
-	mira_root.draw_line(mira_pos + Vector2(-27, 0), mira_pos + Vector2(-9, 0), Color.WHITE, 2.2, true)
-	mira_root.draw_line(mira_pos + Vector2(9, 0), mira_pos + Vector2(27, 0), Color.WHITE, 2.2, true)
-	mira_root.draw_line(mira_pos + Vector2(0, -27), mira_pos + Vector2(0, -9), Color.WHITE, 2.2, true)
-	mira_root.draw_line(mira_pos + Vector2(0, 9), mira_pos + Vector2(0, 27), Color.WHITE, 2.2, true)
+	Pincel.anel(mira_root, mira_pos, 20.0, 3.0, cor_principal)
+	Pincel.anel(mira_root, mira_pos, 8.0, 1.4, Color.WHITE)
+	Pincel.circulo(mira_root, mira_pos, 2.6, Color.WHITE)
+	Pincel.linha(mira_root, mira_pos + Vector2(-27, 0), mira_pos + Vector2(-9, 0), Color.WHITE, 2.2)
+	Pincel.linha(mira_root, mira_pos + Vector2(9, 0), mira_pos + Vector2(27, 0), Color.WHITE, 2.2)
+	Pincel.linha(mira_root, mira_pos + Vector2(0, -27), mira_pos + Vector2(0, -9), Color.WHITE, 2.2)
+	Pincel.linha(mira_root, mira_pos + Vector2(0, 9), mira_pos + Vector2(0, 27), Color.WHITE, 2.2)
 
 	if recarregando and not ranking_nome_ativo:
 		var pct: float = 1.0 - clamp(reload_tempo_restante / max(tempo_recarga_seg, 0.01), 0.0, 1.0)
-		mira_root.draw_arc(
-			mira_pos,
-			34.0,
-			-PI / 2.0,
-			-PI / 2.0 + TAU * pct,
-			48,
-			Color(0.20, 0.85, 1.0, 1.0),
-			5.0,
-			true
-		)
- 
+		Pincel.arco(mira_root, mira_pos, 34.0, -PI / 2.0, -PI / 2.0 + TAU * pct, Color(0.20, 0.85, 1.0, 1.0), 5.0)
+
 # ═══════════════════════════════════════════════════════════
 #  HUD
 # ═══════════════════════════════════════════════════════════

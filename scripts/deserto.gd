@@ -47,6 +47,8 @@ var ranking_nome_timer_label: Label = null
 var spawn_timer_continuo: float = 0.0
 var intervalo_spawn_continuo: float = 0.21
 
+const TeiaAlvo := preload("res://scripts/teia_alvo.gd")
+const Pincel := preload("res://scripts/pincel.gd")
 const FONTE_ORBITRON: String = "res://fonts/Orbitron-Bold.ttf"
 const FONTE_LUCKIEST: String = "res://fonts/LuckiestGuy-Regular.ttf"
 const ACAO_TIRO_ARMA: String = "input_shot"
@@ -968,6 +970,7 @@ func _configurar_overlay() -> void:
 	crosshair_overlay = Control.new()
 	crosshair_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
 	crosshair_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	crosshair_overlay.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	crosshair_overlay.z_index = 999
 	overlay_root.add_child(crosshair_overlay)
 	crosshair_overlay.draw.connect(_desenhar_mira)
@@ -981,6 +984,7 @@ func _configurar_fx_frontal() -> void:
 	fx_front_overlay = Control.new()
 	fx_front_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
 	fx_front_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	fx_front_overlay.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	fx_front_layer.add_child(fx_front_overlay)
 
 	fx_front_overlay.draw.connect(_desenhar_fx_frontais)
@@ -1015,27 +1019,15 @@ func _desenhar_mira() -> void:
 	elif balas_no_cartucho <= 6:
 		cor_ext = Color(1.0, 0.68, 0.18, 0.98)
 
-	crosshair_overlay.draw_arc(mira_pos, r1, 0.0, TAU, 36, cor_ext, 2.6, true)
-	crosshair_overlay.draw_arc(mira_pos, r2, 0.0, TAU, 28, cor_int, 1.2, true)
-	crosshair_overlay.draw_circle(mira_pos, 2.8, Color(1.0, 1.0, 1.0, 0.96))
-
-	crosshair_overlay.draw_line(mira_pos + Vector2(-26, 0), mira_pos + Vector2(-8, 0), Color.WHITE, 2.0, true)
-	crosshair_overlay.draw_line(mira_pos + Vector2(8, 0), mira_pos + Vector2(26, 0), Color.WHITE, 2.0, true)
-	crosshair_overlay.draw_line(mira_pos + Vector2(0, -26), mira_pos + Vector2(0, -8), Color.WHITE, 2.0, true)
-	crosshair_overlay.draw_line(mira_pos + Vector2(0, 8), mira_pos + Vector2(0, 26), Color.WHITE, 2.0, true)
+	Pincel.mira(crosshair_overlay, mira_pos, r1, r2, cor_ext, cor_int)
 
 	if recarregando:
 		var progresso: float = 1.0 - clamp(reload_tempo_restante / max(tempo_recarga_seg, 0.001), 0.0, 1.0)
-		var inicio_ang: float = -PI * 0.5
-		var fim_ang: float = inicio_ang + (TAU * progresso)
-
-		crosshair_overlay.draw_arc(mira_pos, 34.0, 0.0, TAU, 64, Color(0.10, 0.20, 0.28, 0.42), 5.0, true)
-		crosshair_overlay.draw_arc(mira_pos, 34.0, inicio_ang, fim_ang, 64, Color(0.30, 0.94, 1.0, 1.0), 5.0, true)
-		crosshair_overlay.draw_arc(mira_pos, 41.0, inicio_ang, fim_ang, 64, Color(0.82, 0.98, 1.0, 0.55), 2.0, true)
+		Pincel.mira_recarga(crosshair_overlay, mira_pos, progresso)
 
 	elif balas_no_cartucho <= 0:
 		var pulso_alerta: float = 0.35 + (sin(aviso_recarga_t * 16.0) * 0.5 + 0.5) * 0.35
-		crosshair_overlay.draw_arc(mira_pos, 32.0, 0.0, TAU, 44, Color(1.0, 0.15, 0.14, pulso_alerta), 4.0, true)
+		Pincel.anel(crosshair_overlay, mira_pos, 32.0, 4.0, Color(1.0, 0.15, 0.14, pulso_alerta))
 
 
 func _configurar_modal_inicio() -> void:
@@ -2949,22 +2941,11 @@ func _desenhar_fx_frontais() -> void:
 		var r1: float = 13.0 * escala
 		var r2: float = 6.0 * escala
 
-		var pts1 := PackedVector2Array()
-		var pts2 := PackedVector2Array()
-
-		for i in range(14):
-			var a: float = rot + (TAU * float(i) / 14.0)
-			pts1.append(pos + Vector2(cos(a), sin(a)) * r1)
-
-		for i in range(10):
-			var a2: float = -rot + (TAU * float(i) / 10.0)
-			pts2.append(pos + Vector2(cos(a2), sin(a2)) * r2)
-
-		fx_front_overlay.draw_polyline(pts1, Color(0.10, 0.08, 0.06, 0.34 * alpha), 2.2, true)
-		fx_front_overlay.draw_polyline(pts2, Color(0.28, 0.22, 0.16, 0.22 * alpha), 1.4, true)
-
-		fx_front_overlay.draw_line(pos + Vector2(-8, -8), pos + Vector2(8, 8), Color(0.18, 0.12, 0.08, 0.40 * alpha), 1.6, true)
-		fx_front_overlay.draw_line(pos + Vector2(8, -8), pos + Vector2(-8, 8), Color(0.18, 0.12, 0.08, 0.40 * alpha), 1.6, true)
+		# marca de bala na areia: anel externo, anel interno e um X fino
+		Pincel.anel(fx_front_overlay, pos, r1, 2.2, Color(0.10, 0.08, 0.06, 0.34 * alpha))
+		Pincel.anel(fx_front_overlay, pos, r2, 1.4, Color(0.28, 0.22, 0.16, 0.22 * alpha))
+		Pincel.linha(fx_front_overlay, pos + Vector2(-8, -8).rotated(rot), pos + Vector2(8, 8).rotated(rot), Color(0.18, 0.12, 0.08, 0.40 * alpha), 1.6)
+		Pincel.linha(fx_front_overlay, pos + Vector2(8, -8).rotated(rot), pos + Vector2(-8, 8).rotated(rot), Color(0.18, 0.12, 0.08, 0.40 * alpha), 1.6)
 
 	for fx in fx_cacos:
 		var pos2: Vector2 = Vector2(fx["pos"])
@@ -2977,18 +2958,7 @@ func _desenhar_fx_frontais() -> void:
 		var t2: float = clamp(idade2 / vida2, 0.0, 1.0)
 		cor.a = 1.0 - t2
 
-		var local_rect := PackedVector2Array([
-			Vector2(-tam.x * 0.5, -tam.y * 0.5),
-			Vector2(tam.x * 0.5, -tam.y * 0.5),
-			Vector2(tam.x * 0.5, tam.y * 0.5),
-			Vector2(-tam.x * 0.5, tam.y * 0.5),
-		])
-
-		var pts := PackedVector2Array()
-		for p in local_rect:
-			pts.append(pos2 + p.rotated(deg_to_rad(rot_deg)))
-
-		fx_front_overlay.draw_colored_polygon(pts, cor)
+		Pincel.lasca(fx_front_overlay, pos2, tam * 0.55, deg_to_rad(rot_deg), cor)
 
 
 
@@ -3290,97 +3260,17 @@ func _parar_musica_fim() -> void:
 
 
 func _criar_halo_sol() -> Node2D:
-	var root := Node2D.new()
-	root.name = "TeiaTamanhoOriginalSol"
-	root.visible = true
-	root.z_as_relative = false
-
-	var cor := COR_SOL
-
-	for i in range(4):
-		var ring := Line2D.new()
-		ring.name = "RingOriginal_%d" % i
-		ring.closed = true
-		ring.width = 2.2
-		ring.default_color = Color(cor.r, cor.g, cor.b, 0.20)
-		ring.antialiased = true
-
-		var raio: float = 42.0 + float(i) * 10.0
-		var pontos := PackedVector2Array()
-
-		for p in range(56):
-			var a: float = TAU * float(p) / 56.0
-			pontos.append(Vector2(cos(a), sin(a)) * raio)
-
-		ring.points = pontos
-		root.add_child(ring)
-
-	for i in range(14):
-		var linha := Line2D.new()
-		linha.name = "LinhaOriginal_%d" % i
-		linha.width = 1.3
-		linha.default_color = Color(cor.r, cor.g, cor.b, 0.16)
-		linha.antialiased = true
-
-		var ang: float = TAU * float(i) / 14.0
-		var dir := Vector2.RIGHT.rotated(ang)
-
-		linha.points = PackedVector2Array([
-			dir * 26.0,
-			dir * 78.0
-		])
-
-		root.add_child(linha)
-
-	return root
-
+	var teia := TeiaAlvo.new()
+	teia.name = "TeiaTamanhoOriginalSol"
+	teia.z_as_relative = false
+	return teia.configurar(COR_SOL, 42.0, 4, 10.0, 14, 26.0, 78.0, 2.2, 1.3, 0.20, 0.16)
 
 
 func _criar_brilho_lua() -> Node2D:
-	var root := Node2D.new()
-	root.name = "TeiaTamanhoOriginalLua"
-	root.visible = true
-	root.z_as_relative = false
-
-	var cor := COR_LUA
-
-	for i in range(4):
-		var ring := Line2D.new()
-		ring.name = "RingOriginal_%d" % i
-		ring.closed = true
-		ring.width = 2.0
-		ring.default_color = Color(cor.r, cor.g, cor.b, 0.20)
-		ring.antialiased = true
-
-		var raio: float = 40.0 + float(i) * 10.0
-		var pontos := PackedVector2Array()
-
-		for p in range(56):
-			var a: float = TAU * float(p) / 56.0
-			pontos.append(Vector2(cos(a), sin(a)) * raio)
-
-		ring.points = pontos
-		root.add_child(ring)
-
-	for i in range(14):
-		var linha := Line2D.new()
-		linha.name = "LinhaOriginal_%d" % i
-		linha.width = 1.2
-		linha.default_color = Color(cor.r, cor.g, cor.b, 0.16)
-		linha.antialiased = true
-
-		var ang: float = TAU * float(i) / 14.0
-		var dir := Vector2.RIGHT.rotated(ang)
-
-		linha.points = PackedVector2Array([
-			dir * 24.0,
-			dir * 76.0
-		])
-
-		root.add_child(linha)
-
-	return root
-
+	var teia := TeiaAlvo.new()
+	teia.name = "TeiaTamanhoOriginalLua"
+	teia.z_as_relative = false
+	return teia.configurar(COR_LUA, 40.0, 4, 10.0, 14, 24.0, 76.0, 2.0, 1.2, 0.20, 0.16)
 
 
 func _atualizar_efeito_alvo(alvo: TargetData) -> void:
@@ -3413,70 +3303,17 @@ func _atualizar_efeito_alvo(alvo: TargetData) -> void:
 		teia.scale = Vector2.ONE * alvo_scale_base
 		teia.rotation += 0.002
 
-		var alpha_base: float = lerp(0.12, 0.62, progresso)
-
-		for filho in teia.get_children():
-			if filho is Line2D:
-				var line := filho as Line2D
-				line.visible = true
-				line.modulate = Color.WHITE
-
-				if line.name.begins_with("RingOriginal"):
-					line.width = lerp(1.5, 2.8, progresso)
-					line.default_color = Color(
-						cor_teia.r,
-						cor_teia.g,
-						cor_teia.b,
-						alpha_base
-					)
-				else:
-					line.width = lerp(0.8, 1.8, progresso)
-					line.default_color = Color(
-						cor_teia.r,
-						cor_teia.g,
-						cor_teia.b,
-						alpha_base * 0.65
-					)
+		if teia.has_method("ajustar_progresso"):
+			teia.ajustar_progresso(cor_teia, progresso)
 
 	if alvo.brilho_frente != null and is_instance_valid(alvo.brilho_frente):
 		alvo.brilho_frente.visible = false
 
 
 func _criar_faixa_luz_frontal(cor: Color) -> Node2D:
-	var root := Node2D.new()
-
-	# anel frontal suave
-	for i in range(2):
-		var ring := Line2D.new()
-		ring.closed = true
-		ring.width = 3.8 - float(i) * 1.0
-		ring.default_color = Color(cor.r, cor.g, cor.b, 0.20 - float(i) * 0.05)
-		ring.antialiased = true
-
-		var raio: float = 44.0 + float(i) * 8.0
-		var pontos: PackedVector2Array = []
-		for p in range(28):
-			var a: float = (TAU * float(p)) / 28.0
-			pontos.append(Vector2(cos(a), sin(a)) * raio)
-		ring.points = pontos
-		root.add_child(ring)
-
-	# feixes tipo estrela na frente
-	for i in range(8):
-		var feixe := Line2D.new()
-		feixe.width = 2.0
-		feixe.default_color = Color(cor.r, cor.g, cor.b, 0.30)
-		feixe.antialiased = true
-
-		var ang: float = (TAU * float(i)) / 8.0
-		var dir := Vector2.RIGHT.rotated(ang)
-		feixe.points = PackedVector2Array([
-			dir * 26.0,
-			dir * 58.0
-		])
-		root.add_child(feixe)
-
-	return root
+	# anel frontal suave + feixes tipo estrela
+	var teia := TeiaAlvo.new()
+	return teia.configurar(cor, 44.0, 2, 8.0, 8, 26.0, 58.0, 3.3, 2.0, 0.18, 0.30)
 
 
 const BOTAO_GATILHO_1: int = MOUSE_BUTTON_RIGHT
