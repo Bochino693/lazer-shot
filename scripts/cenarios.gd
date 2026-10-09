@@ -1417,6 +1417,7 @@ func _desenhar_alvo_overlay() -> void:
 	var cor_secundaria := Color(1.0, 1.0, 1.0, 0.94)
 	var cor_sombra := Color(0.0, 0.0, 0.0, 0.34)
 
+	Pincel.mira_inicio(alvo_overlay, alvo_pos)
 	Pincel.anel(alvo_overlay, alvo_pos + Vector2(1.2, 1.2), raio_base, 3.0, cor_sombra)
 	Pincel.anel(alvo_overlay, alvo_pos, raio_base, 2.5, cor_principal)
 	Pincel.anel(alvo_overlay, alvo_pos, raio_meio, 1.2, Color(1.0, 0.88, 0.82, 0.78))
@@ -1429,6 +1430,7 @@ func _desenhar_alvo_overlay() -> void:
 	Pincel.linha(alvo_overlay, alvo_pos + Vector2(espaco, 0.0), alvo_pos + Vector2(tamanho_linha + espaco, 0.0), cor_secundaria, 2.2)
 	Pincel.linha(alvo_overlay, alvo_pos + Vector2(0.0, -tamanho_linha - espaco), alvo_pos + Vector2(0.0, -espaco), cor_secundaria, 2.2)
 	Pincel.linha(alvo_overlay, alvo_pos + Vector2(0.0, espaco), alvo_pos + Vector2(0.0, tamanho_linha + espaco), cor_secundaria, 2.2)
+	Pincel.mira_fim(alvo_overlay)
 # ─────────────────────────────────────────────────────────────────────────────
 # FADE
 # ─────────────────────────────────────────────────────────────────────────────

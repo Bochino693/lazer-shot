@@ -2292,6 +2292,7 @@ func _desenhar_mira() -> void:
 	elif municao_atual <= alerta_baixa_municao_limite:
 		cor_principal = Color(1.0, 0.45, 0.05, 0.95)
 
+	Pincel.mira_inicio(mira_root, mira_pos)
 	Pincel.anel(mira_root, mira_pos, 20.0, 3.0, cor_principal)
 	Pincel.anel(mira_root, mira_pos, 8.0, 1.4, Color.WHITE)
 	Pincel.circulo(mira_root, mira_pos, 2.6, Color.WHITE)
@@ -2303,6 +2304,7 @@ func _desenhar_mira() -> void:
 	if recarregando and not ranking_nome_ativo:
 		var pct: float = 1.0 - clamp(reload_tempo_restante / max(tempo_recarga_seg, 0.01), 0.0, 1.0)
 		Pincel.arco(mira_root, mira_pos, 34.0, -PI / 2.0, -PI / 2.0 + TAU * pct, Color(0.20, 0.85, 1.0, 1.0), 5.0)
+	Pincel.mira_fim(mira_root)
 
 # ═══════════════════════════════════════════════════════════
 #  HUD

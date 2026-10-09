@@ -32,6 +32,29 @@ const LASER := 15
 
 const ANEIS := [0.035, 0.07, 0.12, 0.2, 0.32, 0.5]
 
+## Tamanho da mira em todas as telas (1.3 = 30% maior que o desenho original).
+const ESCALA_MIRA := 1.3
+
+# Transformação de base: as funções que giram voltam para ela (e não para a
+# identidade), para que a mira inteira possa ser ampliada em volta do centro.
+static var _base := Transform2D.IDENTITY
+
+
+## Tudo o que for desenhado até mira_fim() sai ESCALA_MIRA vezes maior em
+## volta de `centro`. Chamar depois dos `return` antecipados e sempre fechar.
+static func mira_inicio(ci: CanvasItem, centro: Vector2) -> void:
+	_base = Transform2D(0.0, Vector2(ESCALA_MIRA, ESCALA_MIRA), 0.0, centro * (1.0 - ESCALA_MIRA))
+	ci.draw_set_transform_matrix(_base)
+
+
+static func mira_fim(ci: CanvasItem) -> void:
+	_base = Transform2D.IDENTITY
+	ci.draw_set_transform_matrix(_base)
+
+
+static func _girar(ci: CanvasItem, pos: Vector2, rot: float, escala: Vector2 = Vector2.ONE) -> void:
+	ci.draw_set_transform_matrix(_base * Transform2D(rot, escala, 0.0, pos))
+
 
 static func celula(i: int) -> Rect2:
 	return Rect2(float(i % 4) * C, float(i >> 2) * C, C, C)
@@ -44,9 +67,9 @@ static func forma(ci: CanvasItem, i: int, centro: Vector2, raio: float, cor: Col
 	if rot == 0.0 and escala == Vector2.ONE:
 		ci.draw_texture_rect_region(TEXTURA, Rect2(centro - Vector2(meio, meio), Vector2(meio, meio) * 2.0), celula(i), cor)
 		return
-	ci.draw_set_transform(centro, rot, escala)
+	_girar(ci, centro, rot, escala)
 	ci.draw_texture_rect_region(TEXTURA, Rect2(-meio, -meio, meio * 2.0, meio * 2.0), celula(i), cor)
-	ci.draw_set_transform_matrix(Transform2D.IDENTITY)
+	ci.draw_set_transform_matrix(_base)
 
 
 static func circulo(ci: CanvasItem, centro: Vector2, raio: float, cor: Color) -> void:
@@ -83,9 +106,9 @@ static func linha(ci: CanvasItem, a: Vector2, b: Vector2, cor: Color, largura: f
 	# miolo da célula: x 32..96, y 40..88 (32 px cheios no meio de 48)
 	var fonte := Rect2(32.0, 2.0 * C + 40.0, 64.0, 48.0)
 	var alto := largura * 1.5
-	ci.draw_set_transform(a, d.angle(), Vector2.ONE)
+	_girar(ci, a, d.angle())
 	ci.draw_texture_rect_region(TEXTURA, Rect2(0.0, -alto * 0.5, comp, alto), fonte, cor)
-	ci.draw_set_transform_matrix(Transform2D.IDENTITY)
+	ci.draw_set_transform_matrix(_base)
 
 
 ## Arco de `de` até `ate` (radianos) em pedaços de reta; quantos pedaços
@@ -108,10 +131,10 @@ static func arco(ci: CanvasItem, centro: Vector2, raio: float, de: float, ate: f
 		var d := p - ant
 		var comp := d.length()
 		# estica meia largura para os pedaços se encostarem sem fresta
-		ci.draw_set_transform(ant - d.normalized() * largura * 0.25, d.angle(), Vector2.ONE)
+		_girar(ci, ant - d.normalized() * largura * 0.25, d.angle())
 		ci.draw_texture_rect_region(TEXTURA, Rect2(0.0, -alto * 0.5, comp + largura * 0.5, alto), fonte, cor)
 		ant = p
-	ci.draw_set_transform_matrix(Transform2D.IDENTITY)
+	ci.draw_set_transform_matrix(_base)
 
 
 static func laser(ci: CanvasItem, a: Vector2, b: Vector2, cor: Color, largura: float = 4.0) -> void:
@@ -122,9 +145,9 @@ static func laser(ci: CanvasItem, a: Vector2, b: Vector2, cor: Color, largura: f
 	# miolo de 12 px (±6) na célula de 128 px de altura
 	var fonte := Rect2(3.0 * C + 32.0, 3.0 * C, 64.0, C)
 	var alto := largura * C / 12.0
-	ci.draw_set_transform(a, d.angle(), Vector2.ONE)
+	_girar(ci, a, d.angle())
 	ci.draw_texture_rect_region(TEXTURA, Rect2(0.0, -alto * 0.5, comp, alto), fonte, cor)
-	ci.draw_set_transform_matrix(Transform2D.IDENTITY)
+	ci.draw_set_transform_matrix(_base)
 
 
 static func lasca(ci: CanvasItem, centro: Vector2, tam: Vector2, rot: float, cor: Color) -> void:
@@ -138,8 +161,11 @@ static func caco(ci: CanvasItem, centro: Vector2, raio: float, rot: float, cor: 
 
 
 ## A mira padrão do jogo (anel externo colorido, anel interno, ponto e 4
-## traços), igual em todas as fases.
+## traços), igual em todas as fases. Já sai ampliada (ESCALA_MIRA).
 static func mira(ci: CanvasItem, pos: Vector2, r1: float, r2: float, cor_ext: Color, cor_int: Color, cor_linha: Color = Color.WHITE, alfa: float = 1.0) -> void:
+	var dentro := _base != Transform2D.IDENTITY
+	if not dentro:
+		mira_inicio(ci, pos)
 	anel(ci, pos, r1, 2.6, cor_ext)
 	anel(ci, pos, r2, 1.2, cor_int)
 	circulo(ci, pos, 2.8, Color(1.0, 1.0, 1.0, 0.96 * alfa))
@@ -147,12 +173,19 @@ static func mira(ci: CanvasItem, pos: Vector2, r1: float, r2: float, cor_ext: Co
 	linha(ci, pos + Vector2(8, 0), pos + Vector2(26, 0), cor_linha, 2.0)
 	linha(ci, pos + Vector2(0, -26), pos + Vector2(0, -8), cor_linha, 2.0)
 	linha(ci, pos + Vector2(0, 8), pos + Vector2(0, 26), cor_linha, 2.0)
+	if not dentro:
+		mira_fim(ci)
 
 
 ## Anel de recarga em volta da mira (progresso 0..1, começa em cima).
 static func mira_recarga(ci: CanvasItem, pos: Vector2, progresso: float, raio: float = 34.0, espessura: float = 5.0) -> void:
+	var dentro := _base != Transform2D.IDENTITY
+	if not dentro:
+		mira_inicio(ci, pos)
 	var de := -PI * 0.5
 	var ate := de + TAU * clampf(progresso, 0.0, 1.0)
 	anel(ci, pos, raio, espessura, Color(0.10, 0.20, 0.28, 0.42))
 	arco(ci, pos, raio, de, ate, Color(0.30, 0.94, 1.0, 1.0), espessura)
 	arco(ci, pos, raio + 7.0, de, ate, Color(0.82, 0.98, 1.0, 0.55), 2.0)
+	if not dentro:
+		mira_fim(ci)

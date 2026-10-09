@@ -2868,6 +2868,7 @@ func _desenhar_mira() -> void:
 		cor_ext = Color(1.0, 0.68, 0.18, 0.98 * alpha_mira)
 
 	var ov: CanvasItem = alvo_overlay
+	Pincel.mira_inicio(ov, alvo_pos)
 	Pincel.anel(ov, alvo_pos, r1, 2.6, cor_ext)
 	Pincel.anel(ov, alvo_pos, r2, 1.2, cor_int)
 	Pincel.circulo(ov, alvo_pos, 2.8, Color(1.0, 1.0, 1.0, 0.96 * alpha_mira))
@@ -2896,6 +2897,7 @@ func _desenhar_mira() -> void:
 
 		Pincel.anel(ov, alvo_pos + ghost_offset, r1 + 1.2, 2.0, ghost_color)
 		Pincel.anel(ov, alvo_pos - ghost_offset * 0.7, r2 + 0.8, 1.0, ghost_color)
+	Pincel.mira_fim(ov)
 
 
 

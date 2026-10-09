@@ -7,6 +7,7 @@ class TargetData:
 	var tipo: String = ""
 	var pos: Vector2 = Vector2.ZERO
 	var vel: Vector2 = Vector2.ZERO
+	var vel_base: float = 150.0      # rapidez com que nasceu (as batidas não aceleram)
 	var idade: float = 0.0
 	var vida: float = 4.0
 	var raio: float = 48.0
@@ -45,7 +46,7 @@ var ranking_nome_btn_apagar: Button = null
 var ranking_nome_digitado: String = ""
 var ranking_nome_timer_label: Label = null
 var spawn_timer_continuo: float = 0.0
-var intervalo_spawn_continuo: float = 0.21
+var intervalo_spawn_continuo: float = 0.85
 
 const TeiaAlvo := preload("res://scripts/teia_alvo.gd")
 const Pincel := preload("res://scripts/pincel.gd")
@@ -84,13 +85,23 @@ var fim_tempo_voltar: float = 21.0
 
 @export_file("*.tscn") var cena_main_menu: String = "res://scenes/main.tscn"
 
-@export_file("*.ogv") var background_sol_video_path: String = "res://background_video/back_sun.ogv"
-@export_file("*.ogv") var background_lua_video_path: String = "res://background_video/back_moon.ogv"
+# Fundo: imagem fixa em alta (sem decodificar vídeo) + shader que anima só
+# os feixes, o cristal e o sol/lua (máscara RGB).
+const FUNDO_SOL := preload("res://sprites/deserto_sol.png")
+const FUNDO_LUA := preload("res://sprites/deserto_lua.png")
+const MASCARA_SOL := preload("res://sprites/deserto_sol_mascara.png")
+const MASCARA_LUA := preload("res://sprites/deserto_lua_mascara.png")
+const SHADER_FUNDO := preload("res://shaders/deserto_fundo.gdshader")
+const TEMPO_TROCA_FUNDO := 0.8
 
-@export var chance_troca_brasao_base: float = 0.28
-@export var chance_troca_brasao_max: float = 0.85
-@export var velocidade_minima_alvo: float = 120.0
-@export var intervalo_spawn_continuo_min: float = 0.10
+# Ritmo pensado para arma de luz numa TV: poucos alvos na tela, velocidade
+# que dá para acompanhar com a mira e troca de brasão que dá para perceber.
+@export var chance_troca_brasao_base: float = 0.15
+@export var chance_troca_brasao_max: float = 0.45
+@export var velocidade_minima_alvo: float = 70.0
+@export var intervalo_spawn_continuo_min: float = 0.45
+@export var velocidade_alvo_min: float = 120.0
+@export var velocidade_alvo_max: float = 185.0
 
 @export var tempo_partida: float = 120.0
 @export var tempo_troca_modo: float = 30.0
@@ -147,15 +158,14 @@ var mouse_delta_acumulado: Vector2 = Vector2.ZERO
 
 
 @onready var background_video_root: Node2D = $BackgroundVideo
-@onready var video_sol: VideoStreamPlayer = $BackgroundVideo/VideoSol
-@onready var video_lua: VideoStreamPlayer = $BackgroundVideo/VideoLua
+var fundo_sol: TextureRect = null
+var fundo_lua: TextureRect = null
+var _fundo_modo: String = ""
+var _tw_fundo: Tween = null
 
 @onready var target_root: Node2D = $Alvos
 @onready var sun_modelo: Area2D = $Alvos/Sun
 @onready var lua_modelo: Area2D = $Alvos/Lua
-
-var stream_bg_sol: VideoStream = null
-var stream_bg_lua: VideoStream = null
 
 var som_tiro: AudioStream = null
 var som_recharge: AudioStream = null
@@ -642,12 +652,6 @@ func _fx_tecla_ranking(btn: Button) -> void:
 
 
 func _carregar_assets() -> void:
-	if ResourceLoader.exists(background_sol_video_path):
-		stream_bg_sol = load(background_sol_video_path)
-
-	if ResourceLoader.exists(background_lua_video_path):
-		stream_bg_lua = load(background_lua_video_path)
-
 	if ResourceLoader.exists(som_tiro_path):
 		som_tiro = load(som_tiro_path)
 
@@ -726,21 +730,8 @@ func _configurar_background() -> void:
 		background_video_root.z_index = -1000
 		background_video_root.y_sort_enabled = false
 
-	if video_sol != null:
-		video_sol.visible = false
-		video_sol.expand = true
-		video_sol.loop = true
-		video_sol.z_index = -1000
-		video_sol.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		video_sol.process_mode = Node.PROCESS_MODE_ALWAYS
-
-	if video_lua != null:
-		video_lua.visible = false
-		video_lua.expand = true
-		video_lua.loop = true
-		video_lua.z_index = -1000
-		video_lua.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		video_lua.process_mode = Node.PROCESS_MODE_ALWAYS
+	fundo_sol = _criar_fundo("FundoSol", FUNDO_SOL, MASCARA_SOL, Color(1.0, 0.74, 0.34))
+	fundo_lua = _criar_fundo("FundoLua", FUNDO_LUA, MASCARA_LUA, Color(1.0, 0.28, 0.30))
 
 	if target_root != null:
 		target_root.z_index = 50
@@ -751,14 +742,31 @@ func _configurar_background() -> void:
 
 	if lua_modelo != null:
 		lua_modelo.z_index = 60
-	
-	if video_sol != null:
-		video_sol.focus_mode = Control.FOCUS_NONE
-
-	if video_lua != null:
-		video_lua.focus_mode = Control.FOCUS_NONE
 
 	_ajustar_background_full()
+
+
+func _criar_fundo(nome: String, textura: Texture2D, mascara: Texture2D, cor: Color) -> TextureRect:
+	var fundo := TextureRect.new()
+	fundo.name = nome
+	fundo.texture = textura
+	# preenche a tela inteira sem esticar: corta as sobras das laterais
+	fundo.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	fundo.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	fundo.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	fundo.focus_mode = Control.FOCUS_NONE
+	fundo.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+	fundo.visible = false
+	var mat := ShaderMaterial.new()
+	mat.shader = SHADER_FUNDO
+	mat.set_shader_parameter("mascara", mascara)
+	mat.set_shader_parameter("cor_energia", Vector3(cor.r, cor.g, cor.b))
+	fundo.material = mat
+	if background_video_root != null:
+		background_video_root.add_child(fundo)
+	else:
+		add_child(fundo)
+	return fundo
 
 
 func _on_viewport_size_changed() -> void:
@@ -769,38 +777,36 @@ func _on_viewport_size_changed() -> void:
 func _ajustar_background_full() -> void:
 	var tela: Vector2 = get_viewport_rect().size
 
-	if video_sol != null:
-		video_sol.position = Vector2.ZERO
-		video_sol.size = tela
-
-	if video_lua != null:
-		video_lua.position = Vector2.ZERO
-		video_lua.size = tela
+	for fundo in [fundo_sol, fundo_lua]:
+		if fundo != null:
+			fundo.position = Vector2.ZERO
+			fundo.size = tela
 
 
 func _aplicar_background_modo() -> void:
-	if video_sol != null:
-		video_sol.visible = false
-		video_sol.stop()
-
-	if video_lua != null:
-		video_lua.visible = false
-		video_lua.stop()
-
-	if modo_atual == MODO_SOL:
-		if video_sol != null:
-			if stream_bg_sol != null:
-				video_sol.stream = stream_bg_sol
-			video_sol.visible = true
-			video_sol.play()
-	else:
-		if video_lua != null:
-			if stream_bg_lua != null:
-				video_lua.stream = stream_bg_lua
-			video_lua.visible = true
-			video_lua.play()
-
 	_ajustar_background_full()
+	var entra: TextureRect = fundo_sol if modo_atual == MODO_SOL else fundo_lua
+	var sai: TextureRect = fundo_lua if modo_atual == MODO_SOL else fundo_sol
+	if entra == null or _fundo_modo == modo_atual:
+		return
+	var primeira := _fundo_modo == ""
+	_fundo_modo = modo_atual
+
+	if _tw_fundo != null and _tw_fundo.is_valid():
+		_tw_fundo.kill()
+
+	# o que entra fica por cima e aparece aos poucos; o outro some no fim
+	entra.get_parent().move_child(entra, -1)
+	entra.visible = true
+	if primeira or sai == null or not sai.visible:
+		entra.modulate.a = 1.0
+		if sai != null:
+			sai.visible = false
+		return
+	entra.modulate.a = 0.0
+	_tw_fundo = create_tween()
+	_tw_fundo.tween_property(entra, "modulate:a", 1.0, TEMPO_TROCA_FUNDO).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	_tw_fundo.tween_callback(func() -> void: sai.visible = false)
 
 
 func _configurar_hud() -> void:
@@ -1019,6 +1025,7 @@ func _desenhar_mira() -> void:
 	elif balas_no_cartucho <= 6:
 		cor_ext = Color(1.0, 0.68, 0.18, 0.98)
 
+	Pincel.mira_inicio(crosshair_overlay, mira_pos)
 	Pincel.mira(crosshair_overlay, mira_pos, r1, r2, cor_ext, cor_int)
 
 	if recarregando:
@@ -1028,6 +1035,7 @@ func _desenhar_mira() -> void:
 	elif balas_no_cartucho <= 0:
 		var pulso_alerta: float = 0.35 + (sin(aviso_recarga_t * 16.0) * 0.5 + 0.5) * 0.35
 		Pincel.anel(crosshair_overlay, mira_pos, 32.0, 4.0, Color(1.0, 0.15, 0.14, pulso_alerta))
+	Pincel.mira_fim(crosshair_overlay)
 
 
 func _configurar_modal_inicio() -> void:
@@ -2351,8 +2359,13 @@ func _atualizar_alvos(delta: float) -> void:
 			pos.y = tela.y - faixa_spawn_base_margem - raio_col
 			vel.y = -(abs(vel.y) + randf_range(20.0, 70.0))
 			vel.x += randf_range(-60.0, 60.0)
-		# VELOCIDADE MÍNIMA garantida
+		# as guinadas das bordas mudam a direção, não a rapidez
 		var velmag: float = vel.length()
+		var vel_teto: float = alvo.vel_base * 1.15
+		if velmag > vel_teto:
+			vel = vel * (vel_teto / velmag)
+			velmag = vel_teto
+		# VELOCIDADE MÍNIMA garantida
 		if velmag < velocidade_minima_alvo:
 			if velmag < 0.01:
 				var ang: float = randf_range(0.0, TAU)
@@ -2502,10 +2515,10 @@ func _aplicar_sensibilidade_global() -> void:
 
 
 func _max_alvos_para_modo() -> int:
-	var base: int = 13 if modo_atual == MODO_SOL else 15
+	var base: int = 5
 	if pontuacao_total >= 1500:
-		base += 5
-	return base + int(floor((nivel_dificuldade - 1.0) * 2.0))
+		base += 1
+	return mini(9, base + int(floor(nivel_dificuldade - 1.0)))
 
 
 
@@ -2544,7 +2557,7 @@ func _spawn_continuo(delta: float) -> void:
 	spawn_timer_continuo -= delta
 
 	var intervalo: float = intervalo_spawn_continuo
-	intervalo = max(intervalo_spawn_continuo_min, intervalo - (nivel_dificuldade * 0.030))
+	intervalo = max(intervalo_spawn_continuo_min, intervalo - (nivel_dificuldade - 1.0) * 0.07)
 
 	if spawn_timer_continuo <= 0.0:
 		spawn_timer_continuo = randf_range(intervalo * 0.65, intervalo * 1.35)
@@ -2562,10 +2575,10 @@ func _spawn_alvo() -> void:
 
 
 func _sortear_tipo_alvo() -> String:
-	var chance_correto: float = 0.52 if pontuacao_total < 1500 else 0.42
+	var chance_correto: float = 0.58 if pontuacao_total < 1500 else 0.50
 	# fica ainda mais hostil conforme dificuldade sobe
 	chance_correto -= (nivel_dificuldade - 1.0) * 0.03
-	chance_correto = clampf(chance_correto, 0.32, 0.62)
+	chance_correto = clampf(chance_correto, 0.40, 0.62)
 
 	if randf() < chance_correto:
 		return modo_atual
@@ -2628,19 +2641,23 @@ func _spawn_alvo_interno(tipo: String) -> void:
 			pos = Vector2(randf_range(120.0, tela.x - 120.0), y_min + 10.0)
 			vel = Vector2(randf_range(-130.0, 130.0), randf_range(180.0, 280.0))
 
-	# mais difícil: alvos mais rápidos
-	var mult_vel: float = 1.30 if pontuacao_total < 1500 else 1.75
-	vel *= mult_vel + nivel_dificuldade * 0.34
+	# só a direção vem do lado de entrada; a rapidez é a do ritmo atual
+	var rapidez: float = randf_range(velocidade_alvo_min, velocidade_alvo_max)
+	rapidez *= 1.0 + (nivel_dificuldade - 1.0) * 0.12
+	if pontuacao_total >= 1500:
+		rapidez *= 1.10
+	vel = vel.normalized() * rapidez
 
 	var alvo: TargetData = TargetData.new()
 	alvo.node = alvo_node
 	alvo.tipo = tipo
 	alvo.pos = pos
 	alvo.vel = vel
+	alvo.vel_base = rapidez
 	alvo.idade = 0.0
 
-	# vivem menos: pressão de tempo
-	alvo.vida = max(1.30, randf_range(2.2, 3.3) - nivel_dificuldade * 0.22)
+	# tempo de tela suficiente para mirar; encurta um pouco com o nível
+	alvo.vida = max(2.4, randf_range(3.6, 4.6) - (nivel_dificuldade - 1.0) * 0.2)
 
 	alvo.raio_inicial = randf_range(42.0, 52.0)
 	alvo.raio_final = max(24.0, alvo.raio_inicial - randf_range(8.0, 12.0))
@@ -2678,8 +2695,8 @@ func _spawn_alvo_interno(tipo: String) -> void:
 	if alvo.vida >= 1.8 and randf() < chance_troca:
 		# Quanto maior a chance, mais cedo a troca acontece (mais cruel).
 		# chance alta -> troca já em 25% da vida; chance baixa -> só lá pelos 70%.
-		var t_min: float = lerp(0.55, 0.25, chance_troca / chance_troca_brasao_max)
-		var t_max: float = lerp(0.80, 0.50, chance_troca / chance_troca_brasao_max)
+		var t_min: float = lerp(0.55, 0.35, chance_troca / chance_troca_brasao_max)
+		var t_max: float = lerp(0.80, 0.60, chance_troca / chance_troca_brasao_max)
 		alvo.tempo_para_trocar = alvo.vida * randf_range(t_min, t_max)
 		alvo.ja_trocou = false
 	else:

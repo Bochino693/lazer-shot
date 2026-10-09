@@ -4389,6 +4389,7 @@ func _desenhar_alvo_overlay() -> void:
 		cor_ext = Color(1.0, 0.68, 0.18, 0.98)
 
 	var ov: CanvasItem = alvo_overlay
+	Pincel.mira_inicio(ov, alvo_pos)
 	Pincel.anel(ov, alvo_pos, r1, 2.6, cor_ext)
 	Pincel.anel(ov, alvo_pos, r2, 1.2, cor_int)
 	Pincel.circulo(ov, alvo_pos, 2.8, Color(1.0, 1.0, 1.0, 0.96))
@@ -4412,6 +4413,7 @@ func _desenhar_alvo_overlay() -> void:
 	elif balas_no_cartucho <= 0:
 		var pulso_alerta: float = 0.35 + (sin(aviso_recarga_t * 16.0) * 0.5 + 0.5) * 0.35
 		Pincel.anel(ov, alvo_pos, 32.0, 4.0, Color(1.0, 0.15, 0.14, pulso_alerta))
+	Pincel.mira_fim(ov)
 
 
 

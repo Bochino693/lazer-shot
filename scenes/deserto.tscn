@@ -3,27 +3,11 @@
 [ext_resource type="Script" uid="uid://cqjfoe4hqd00r" path="res://scripts/deserto.gd" id="1_g7xrt"]
 [ext_resource type="PackedScene" uid="uid://bwa2dgshw5vqs" path="res://entities/sun.tscn" id="2_ocq4b"]
 [ext_resource type="PackedScene" uid="uid://cjtkcgimfbt3u" path="res://entities/lua.tscn" id="3_g7xrt"]
-[ext_resource type="VideoStream" uid="uid://cu324ip6f4jk" path="res://background_video/back_sun.ogv" id="3_vm0b5"]
-[ext_resource type="VideoStream" uid="uid://cccqvm5gc05o6" path="res://background_video/back-mooon.ogv" id="3_yk4lu"]
 
 [node name="Deserto" type="Node2D" unique_id=803490452]
 script = ExtResource("1_g7xrt")
 
 [node name="BackgroundVideo" type="Node2D" parent="." unique_id=1670005793]
-
-[node name="VideoSol" type="VideoStreamPlayer" parent="BackgroundVideo" unique_id=2144953343]
-offset_right = 40.0
-offset_bottom = 40.0
-stream = ExtResource("3_vm0b5")
-expand = true
-loop = true
-
-[node name="VideoLua" type="VideoStreamPlayer" parent="BackgroundVideo" unique_id=928335800]
-offset_right = 40.0
-offset_bottom = 40.0
-stream = ExtResource("3_yk4lu")
-expand = true
-loop = true
 
 [node name="Alvos" type="Node2D" parent="." unique_id=766917977]
 
