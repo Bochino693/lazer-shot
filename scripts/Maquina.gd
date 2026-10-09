@@ -69,6 +69,17 @@ var _som_ficha: AudioStreamPlayer
 var _bus_musica := -1
 var _bus_efeitos := -1
 
+const FONTE_PADRAO := "res://fonts/Exo2-Bold.ttf"
+
+
+func _init() -> void:
+	# Fonte padrão de todos os textos. É posta aqui, e não em
+	# gui/theme/custom_font do projeto, porque o Godot lê essa opção ANTES de
+	# importar os arquivos: numa pasta nova (geração do APK) dava "Error
+	# loading custom project font".
+	if ResourceLoader.exists(FONTE_PADRAO):
+		ThemeDB.get_default_theme().default_font = load(FONTE_PADRAO)
+
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS

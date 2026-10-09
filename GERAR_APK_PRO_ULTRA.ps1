@@ -188,8 +188,8 @@ if (Test-Path $ErrosLog) { Remove-Item -LiteralPath $ErrosLog -Force }
 $Argumentos = "--headless --path `"$Projeto`" --export-release `"Pro Ultra 4K Android 10`" `"$ApkExportado`""
 $Processo = Start-Process -FilePath $Godot.FullName -ArgumentList $Argumentos -NoNewWindow -Wait -PassThru -RedirectStandardOutput $Log -RedirectStandardError $ErrosLog
 
-if (Test-Path $Log) { Get-Content -LiteralPath $Log }
-if (Test-Path $ErrosLog) { Get-Content -LiteralPath $ErrosLog }
+if (Test-Path $Log) { Get-Content -LiteralPath $Log -Encoding UTF8 }
+if (Test-Path $ErrosLog) { Get-Content -LiteralPath $ErrosLog -Encoding UTF8 }
 
 $TextoLog = ""
 if (Test-Path $Log) { $TextoLog += [IO.File]::ReadAllText($Log) }

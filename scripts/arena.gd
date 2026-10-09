@@ -342,7 +342,7 @@ var intro_contagem_valor: int = 3
 @onready var timer_jogo: Timer   = $TimerJogo
 @onready var timer_spawn: Timer  = $TimerSpawn
 @onready var camada_alvos: Node2D = $CamadaAlvos
-@onready var alvo_inicial: Area2D = $CamadaAlvos/Alvo
+@onready var alvo_inicial: Area2D = get_node_or_null("CamadaAlvos/Alvo") as Area2D
  
  
 # ═══════════════════════════════════════════════════════════

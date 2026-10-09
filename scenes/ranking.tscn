@@ -1,6 +1,6 @@
 [gd_scene format=3 uid="uid://cgupxeiegsovk"]
 
-[ext_resource type="Script" uid="uid://cgocjemfp8j67" path="res://scripts/ranking.gd" id="1_tmhu6"]
+[ext_resource type="Script" uid="uid://cschcnuw0ho0r" path="res://scripts/ranking.gd" id="1_tmhu6"]
 
 [node name="Ranking" type="Control" unique_id=930942095]
 layout_mode = 3
