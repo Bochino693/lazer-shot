@@ -46,3 +46,59 @@ static func prop(obj: Object, nome: StringName, v: Variant) -> void:
 	if obj.get(nome) == v:
 		return
 	obj.set(nome, v)
+
+
+
+
+## Enquadra um vídeo de fundo sem esticar e sem cortar o que importa:
+## - proporção igual à da tela (as prévias 9:16): ocupa a tela inteira;
+## - mais largo que a tela (o fundo 2:3): aparece inteiro na largura e as
+##   faixas que sobram em cima e embaixo prolongam a primeira e a última
+##   linha do próprio vídeo (dois desenhos pequenos, sem decodificar nada);
+## - mais estreito: cobre a tela cortando as sobras de cima e de baixo.
+## A proporção vem do quadro decodificado; sem ele, `proporcao_padrao`.
+static func cobrir_video(v: VideoStreamPlayer, tela: Vector2, proporcao_padrao: float = 9.0 / 16.0) -> void:
+	var proporcao := proporcao_padrao
+	var tex := v.get_video_texture()
+	if tex != null and tex.get_height() > 0:
+		proporcao = float(tex.get_width()) / float(tex.get_height())
+	var tam := tela
+	var faixas := false
+	if absf(proporcao - tela.x / tela.y) > 0.02:
+		tam = Vector2(tela.x, tela.x / proporcao)
+		faixas = tam.y < tela.y and tex != null
+		if tam.y < tela.y and not faixas:
+			tam = Vector2(tela.y * proporcao, tela.y)
+	v.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	v.expand = true
+	v.scale = Vector2.ONE
+	v.position = ((tela - tam) * 0.5).round()
+	v.size = tam.round()
+
+	var alto := v.position.y
+	for lado in ["Cima", "Baixo"]:
+		var faixa := v.get_node_or_null("Faixa" + lado) as TextureRect
+		if faixas and faixa == null:
+			faixa = TextureRect.new()
+			faixa.name = "Faixa" + lado
+			faixa.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			faixa.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+			faixa.stretch_mode = TextureRect.STRETCH_SCALE
+			faixa.self_modulate = Color(0.55, 0.55, 0.55)
+			faixa.texture = AtlasTexture.new()
+			v.add_child(faixa)
+		if faixa == null:
+			continue
+		faixa.visible = faixas
+		if not faixas:
+			continue
+		var linhas := 3.0
+		var at := faixa.texture as AtlasTexture
+		at.atlas = tex
+		if lado == "Cima":
+			at.region = Rect2(0, 0, tex.get_width(), linhas)
+			faixa.position = Vector2(0, -alto)
+		else:
+			at.region = Rect2(0, tex.get_height() - linhas, tex.get_width(), linhas)
+			faixa.position = Vector2(0, v.size.y)
+		faixa.size = Vector2(v.size.x, alto + 1.0)

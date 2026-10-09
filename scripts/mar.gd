@@ -551,6 +551,7 @@ func _aplicar_sensibilidade_global() -> void:
 func _process(delta: float) -> void:
 	tempo_trava_input_arma = max(0.0, tempo_trava_input_arma - delta)
 	_atualizar_combo_hits(delta)
+	_ocultar_overlays_apagados()
 
 	if ranking_nome_ativo:
 		ranking_nome_tempo = max(0.0, ranking_nome_tempo - delta)
@@ -1836,6 +1837,18 @@ func _iniciar_timer_retorno_fim() -> void:
 	fim_retorno_timer = tempo_auto_retorno_menu_seg
 	_atualizar_texto_countdown_fim()
 
+
+
+## Flash e dano cobrem a tela inteira: apagados (alfa 0) ainda custavam três
+## camadas de tela cheia por quadro na placa de vídeo. Os tweens mexem na
+## cor; aqui eles só aparecem enquanto têm alguma cor.
+func _ocultar_overlays_apagados() -> void:
+	for ov: ColorRect in [flash_overlay, dano_overlay, dano_vinheta_overlay]:
+		if ov == null:
+			continue
+		var ligado: bool = ov.color.a * ov.modulate.a > 0.002
+		if ov.visible != ligado:
+			ov.visible = ligado
 
 
 func _processar_timer_retorno_fim(delta: float) -> void:

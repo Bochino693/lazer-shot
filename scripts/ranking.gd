@@ -293,6 +293,8 @@ func _criar_fundo() -> void:
 
 	if ResourceLoader.exists(CAMINHO_VIDEO_INIT):
 		video_fundo.stream = load(CAMINHO_VIDEO_INIT)
+		# cobre a tela sem esticar (o vídeo é 2:3)
+		Leve.cobrir_video(video_fundo, get_viewport_rect().size, 2.0 / 3.0)
 
 		await get_tree().process_frame
 
