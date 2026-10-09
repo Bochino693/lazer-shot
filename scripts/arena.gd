@@ -187,6 +187,9 @@ var fx_colisao: Array[Dictionary] = []
 var mira_pos: Vector2             = Vector2.ZERO
 var marcas_laser_parede: Array[Dictionary] = []
 var fx_layer_jogo: Node2D = null
+# As marcas na parede só mudam quando nasce uma (junto vem fumaça): sem
+# efeito animando, a camada fica como está em vez de redesenhar tudo.
+var _fx_parado: bool = false
 
  
  
@@ -441,7 +444,12 @@ func _process(delta: float) -> void:
 		marcas_laser_parede.pop_front()
 
 	if fx_layer_jogo != null:
-		fx_layer_jogo.queue_redraw()
+		if fx_colisao.size() > 0:
+			fx_layer_jogo.queue_redraw()
+			_fx_parado = false
+		elif not _fx_parado:
+			fx_layer_jogo.queue_redraw()   # último quadro, já sem a fumaça
+			_fx_parado = true
 
 	if jogo_ativo:
 		_atualizar_chat_rodape(delta)

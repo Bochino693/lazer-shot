@@ -543,6 +543,55 @@ func _tocar_ficha() -> void:
 func _criar_barramentos_de_audio() -> void:
 	_bus_musica = _bus("Musica")
 	_bus_efeitos = _bus("Efeitos")
+	# Analisador de espectro na música: os fundos pulsam com o som.
+	if AudioServer.get_bus_effect_count(_bus_musica) == 0:
+		var analisador := AudioEffectSpectrumAnalyzer.new()
+		analisador.buffer_length = 0.1
+		analisador.fft_size = AudioEffectSpectrumAnalyzer.FFT_SIZE_512
+		AudioServer.add_bus_effect(_bus_musica, analisador)
+
+
+## Energia da música agora (0..1), já suavizada: `grave` acompanha o bumbo e
+## o baixo, `batida` salta no começo de cada pancada e cai rápido. Para os
+## fundos pulsarem com o som. Calculado uma vez por quadro.
+var _som_quadro := -1
+var _som_grave := 0.0
+var _som_batida := 0.0
+var _som_media := 0.0
+
+
+func energia_musica() -> Vector2:
+	var q := Engine.get_process_frames()
+	if q == _som_quadro:
+		return Vector2(_som_grave, _som_batida)
+	_som_quadro = q
+	var dt := get_process_delta_time()
+	var bruto := 0.0
+	if _bus_musica >= 0 and AudioServer.get_bus_effect_count(_bus_musica) > 0:
+		var ef := AudioServer.get_bus_effect_instance(_bus_musica, 0) as AudioEffectSpectrumAnalyzerInstance
+		if ef != null:
+			var m := ef.get_magnitude_for_frequency_range(30.0, 160.0, AudioEffectSpectrumAnalyzerInstance.MAGNITUDE_AVERAGE)
+			var db := linear_to_db(maxf(m.length(), 0.00001))
+			bruto = clampf((db + 48.0) / 36.0, 0.0, 1.0)
+	# sobe rápido, desce devagar
+	var k := 1.0 - exp(-dt * (22.0 if bruto > _som_grave else 5.0))
+	_som_grave = lerpf(_som_grave, bruto, k)
+	# batida: quanto o grave passou da média recente
+	_som_media = lerpf(_som_media, bruto, 1.0 - exp(-dt * 1.5))
+	var pico := clampf((bruto - _som_media) * 3.0, 0.0, 1.0)
+	_som_batida = maxf(pico, _som_batida - dt * 3.5)
+	return Vector2(_som_grave, _som_batida)
+
+
+## energia_musica() que nunca para: sem música (ou com o volume zerado) um
+## pulso calmo, ~112 batidas por minuto, mantém os fundos vivos.
+func pulso_vivo() -> Vector2:
+	var e := energia_musica()
+	var fase := fmod(float(Time.get_ticks_msec()) * 0.001 * 112.0 / 60.0, 1.0)
+	var sint := maxf(0.0, 1.0 - fase * 3.0)
+	sint *= sint
+	var peso := 1.0 - clampf(e.x * 6.0, 0.0, 1.0)
+	return Vector2(maxf(e.x, (0.16 + 0.12 * sint) * peso), maxf(e.y, sint * 0.5 * peso))
 
 
 func _bus(nome: String) -> int:

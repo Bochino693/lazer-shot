@@ -2,7 +2,6 @@ extends Node2D
 
 @export_file("*.tscn") var cena_do_jogo: String = "res://scenes/cenarios.tscn"
 @export_file("*.tscn") var cena_demo: String = "res://scenes/demo.tscn"
-@export_file("*.ogv") var caminho_video_intro: String = "res://background_video/back_init.ogv"
 
 @export_file("*.tscn") var cena_ranking: String = "res://scenes/ranking.tscn"
 @export_file("*.tscn") var cena_admin: String = "res://scenes/admin.tscn"
@@ -21,13 +20,14 @@ const TEASERS: Array[String] = [
 @onready var parallax_bg: ParallaxBackground = $ParallaxBackground
 
 var video_layer: CanvasLayer = null
-var video_intro: VideoStreamPlayer = null
+# Fundo da abertura: imagem viva na placa de vídeo (antes era o vídeo
+# back_init, decodificado pelo processador a cada quadro).
+var fundo_vivo: FundoVivo = null
 # A prévia da vez já fica aberta e parada desde o início (tela escura da
-# transição): na hora dela entra por cima do vídeo inicial sem tranco.
+# transição): na hora dela entra por cima do fundo sem tranco. É o único
+# vídeo da abertura e só roda enquanto aparece.
 var video_teaser: VideoStreamPlayer = null
 var teaser_preparado: String = ""
-
-@export var video_intro_tamanho_base: Vector2 = Vector2(1920, 1080)
 @onready var meio_sprite: Sprite2D = $ParallaxBackground/MeioLayer/Sprite2D
 @onready var frente_sprite: Sprite2D = $ParallaxBackground/FrenteLayer/Sprite2D
 
@@ -83,8 +83,28 @@ func _ready() -> void:
 	rodada_mostrar_ranking = false
 	_preparar_teaser()
 
-	await get_tree().process_frame
+	# O efeito de abertura só começa com a tela pronta: depois da transição
+	# (ou do boot) e com os quadros já estáveis. Os primeiros quadros de uma
+	# tela nova são os mais pesados (shaders, texturas, 1º quadro do vídeo);
+	# o efeito rodando ali era o "tranco" da abertura. Até lá fica no preto.
+	await _esperar_tela_estavel()
 	_tocar_intro()
+
+
+func _esperar_tela_estavel() -> void:
+	var arvore := get_tree()
+	await arvore.process_frame
+	while TransicaoGlobal.em_transicao:
+		await arvore.process_frame
+	# 4 quadros seguidos dentro do ritmo (ou no máximo 0,8 s esperando)
+	var bons := 0
+	var inicio := Time.get_ticks_msec()
+	var antes := Time.get_ticks_usec()
+	while bons < 4 and Time.get_ticks_msec() - inicio < 800:
+		await arvore.process_frame
+		var agora := Time.get_ticks_usec()
+		bons = bons + 1 if (agora - antes) < 26000 else 0
+		antes = agora
 
 
 func _process(_delta: float) -> void:
@@ -186,24 +206,10 @@ func _garantir_video_intro() -> void:
 		video_layer.layer = -100
 		add_child(video_layer)
 
-	if video_intro == null:
-		video_intro = VideoStreamPlayer.new()
-		video_intro.name = "VideoIntroPlayer"
-		video_intro.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		video_intro.expand = true
-		video_intro.loop = true
-		video_intro.visible = true
-		video_layer.add_child(video_intro)
-
-	if video_intro.stream == null:
-		if ResourceLoader.exists(caminho_video_intro):
-			video_intro.stream = load(caminho_video_intro)
-		else:
-			push_error("Vídeo não encontrado: " + caminho_video_intro)
-			return
-
-	if not video_intro.is_playing():
-		video_intro.play()
+	if fundo_vivo == null:
+		fundo_vivo = FundoVivo.new(["init"])
+		video_layer.add_child(fundo_vivo)
+		fundo_vivo.mostrar("init")
 
 
 func _preparar_teaser() -> void:
@@ -228,12 +234,8 @@ func _preparar_teaser() -> void:
 func _ajustar_video_intro(tela: Vector2) -> void:
 	if video_teaser != null:
 		Leve.cobrir_video(video_teaser, tela)
-	if video_intro == null:
-		return
-
-	# cobre a tela sem esticar (o vídeo de fundo é 2:3, as prévias 9:16)
-	Leve.cobrir_video(video_intro, tela)
-	video_intro.visible = true
+	if fundo_vivo != null:
+		fundo_vivo.ajustar()
 
 
 func _carregar_textura_no_sprite(sprite: Sprite2D, caminho: String) -> void:
@@ -547,23 +549,21 @@ func _tocar_teaser_atrativo() -> void:
 	pressione.scale = Vector2.ONE
 	_iniciar_pisca_pressione()
 
-	if video_teaser != null and caminho == teaser_preparado:
-		# o vídeo inicial congela e a prévia (já aberta) surge por cima
+	if video_teaser != null:
+		if caminho != teaser_preparado:
+			video_teaser.stream = load(caminho)
+			Leve.cobrir_video(video_teaser, get_viewport_rect().size)
+		# a prévia (já aberta) surge por cima do fundo vivo, que então
+		# deixa de ser desenhado
 		video_teaser.visible = true
 		video_teaser.modulate.a = 0.0
 		video_teaser.play()
 		var tw := create_tween()
 		tw.tween_property(video_teaser, "modulate:a", 1.0, 0.45).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 		tw.tween_callback(func() -> void:
-			if video_intro != null:
-				video_intro.paused = true
-				video_intro.visible = false
+			if fundo_vivo != null:
+				fundo_vivo.visible = false
 		)
-	elif video_intro != null:
-		video_intro.stop()
-		video_intro.stream = load(caminho)
-		_ajustar_video_intro(get_viewport_rect().size)
-		video_intro.play()
 
 	_rodar_teaser_e_ir_ranking()
 
@@ -744,8 +744,8 @@ func _exit_tree() -> void:
 		tween_audio_intro.kill()
 	if tween_audio_bg != null:
 		tween_audio_bg.kill()
-	if video_intro != null and video_intro.is_playing():
-		video_intro.stop()
+	if video_teaser != null and video_teaser.is_playing():
+		video_teaser.stop()
 
 	if audio_intro_player != null and audio_intro_player.playing:
 		audio_intro_player.stop()

@@ -20,10 +20,8 @@ const CAMINHO_IMG_2: String = "res://sprites/cene_mar.png"
 const CAMINHO_IMG_3: String = "res://sprites/cene_bar.png"
 const CAMINHO_IMG_4: String = "res://sprites/cene_arena.png"
 
-const CAMINHO_TEASER_DESERTO: String = "res://background_video/teaser_desert.ogv"
-const CAMINHO_TEASER_MAR: String = "res://background_video/teaser_mar.ogv"
-const CAMINHO_TEASER_BAR: String = "res://background_video/teaser_bar.ogv"
-const CAMINHO_TEASER_ARENA: String = "res://background_video/teaser_arena.ogv"
+# Fundo vivo de cada cartão (mesma ordem de card_1..card_4 e CENA_CENARIO_1..4).
+const FUNDO_CARDS: Array[String] = ["deserto", "mar", "bar", "arena"]
 
 const DIFICULDADES: Array[int] = [2, 2, 3, 3]
 
@@ -41,9 +39,8 @@ const META_SENS_MOUSE: String = "sensibilidade_mouse"
 const FONTE_GOOGLE: String = "res://fonts/Exo2-Bold.ttf"
 var fonte_google: FontFile = null
 
-@export_file("*.ogv") var caminho_video_background: String = "res://background_video/back_init.ogv"
-
-@onready var background: VideoStreamPlayer = $Background
+# Fundo: imagem viva na placa de vídeo (sem decodificar vídeo no processador).
+var background: FundoVivo = null
 @onready var titulo: Label = $Titulo
 @onready var grid: GridContainer = $GridContainer
 @onready var botao_ranking: Button = $BotaoRanking
@@ -121,12 +118,6 @@ var estrelas_4: HBoxContainer = null
 # sai congela no último quadro enquanto o novo surge por cima. Nenhuma troca
 # recarrega arquivo nem reinicia vídeo, e o hover precisa parar no card um
 # instante antes de trocar (passar a mira por cima não dispara nada).
-var _videos: Dictionary = {}            # caminho -> VideoStreamPlayer
-var _video_atual: String = ""
-var _video_desejado: String = ""
-var _video_espera: float = 0.0
-var _video_atraso: float = 0.22
-var _video_tw: Tween = null
 
 var ranking_hover_ativo: bool = false
 var sens_hover_ativo: bool = false
@@ -225,9 +216,6 @@ func _preparar_abertura_suave() -> void:
 	fade_rect.color = Color.BLACK
 	fade_rect.visible = true
 
-	if background != null:
-		background.modulate.a = 0.0
-
 	if contador_panel != null:
 		contador_panel.modulate.a = 0.0
 		contador_panel.scale = Vector2(0.94, 0.94)
@@ -268,9 +256,6 @@ func _animar_abertura_suave() -> void:
 
 	var tw := create_tween()
 	tw.set_parallel(true)
-
-	if background != null:
-		tw.tween_property(background, "modulate:a", 1.0, 0.38)
 
 	if fade_rect != null:
 		tw.tween_property(fade_rect, "color:a", 0.0, 0.52)
@@ -389,15 +374,11 @@ func _aplicar_sensibilidade_menu() -> void:
 
 
 func _exit_tree() -> void:
-	if background != null and background.is_playing():
-		background.stop()
-
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 
 
 func _process(delta: float) -> void:
 	tempo_trava_input_menu = max(0.0, tempo_trava_input_menu - delta)
-	_orquestrar_videos(delta)
 	_atualizar_mira_menu(delta)
  
 	alvo_anim_t += delta
@@ -719,46 +700,17 @@ func _configurar_base_fundo() -> void:
 
 
 func _configurar_background() -> void:
-	if background == null:
-		return
-
-	background.visible = true
-	background.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	background.set_anchors_preset(Control.PRESET_FULL_RECT)
-	background.offset_left = 0.0
-	background.offset_top = 0.0
-	background.offset_right = 0.0
-	background.offset_bottom = 0.0
-	background.position = Vector2.ZERO
-	background.size = get_viewport_rect().size
-	background.scale = Vector2.ONE
-	background.expand = true
-	background.loop = true
-
-	if ResourceLoader.exists(caminho_video_background):
-		background.stream = load(caminho_video_background)
-		background.play()
-		_videos[caminho_video_background] = background
-		_video_atual = caminho_video_background
-		_video_desejado = caminho_video_background
-	else:
-		push_error("Vídeo de background não encontrado: " + caminho_video_background)
-
-	# Abrir um vídeo (ler o cabeçalho e preparar o decodificador) custa um
-	# tranco; aqui no _ready a tela ainda está escura (transição), então as
-	# prévias já ficam prontas e paradas, sem tranco depois.
-	for caminho in [CAMINHO_TEASER_DESERTO, CAMINHO_TEASER_MAR, CAMINHO_TEASER_BAR, CAMINHO_TEASER_ARENA]:
-		if ResourceLoader.exists(caminho):
-			_abrir_video(caminho)
+	# Fundo vivo com todos os fundos do menu já prontos: o da abertura e o de
+	# cada cenário (o que a mira aponta aparece atrás dos cartões).
+	background = FundoVivo.new(["init"] + FUNDO_CARDS)
+	add_child(background)
+	move_child(background, 1 if fundo_preto != null else 0)
+	background.mostrar("init")
 
 
 func _ajustar_background_fullscreen() -> void:
-	if background == null:
-		return
-	# cobre a tela sem esticar (o vídeo de fundo é 2:3, as prévias 9:16)
-	var tela := get_viewport_rect().size
-	for v: VideoStreamPlayer in _videos.values():
-		Leve.cobrir_video(v, tela)
+	if background != null:
+		background.ajustar()
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -836,7 +788,9 @@ func _configurar_cards() -> void:
 func _atualizar_hover_cards_por_alvo() -> void:
 	if aleatorio_em_andamento or entrada_bloqueada or modal_ativo or modal_sens_ativo:
 		_resetar_hover_cards()
-		_pedir_video(caminho_video_background, true)
+		# roleta e escolha de dificuldade mostram o cenário delas
+		if modal_sens_ativo:
+			_mostrar_fundo("init", true)
 		return
 
 	var cards: Array[Panel] = [card_1, card_2, card_3, card_4]
@@ -858,7 +812,7 @@ func _atualizar_hover_cards_por_alvo() -> void:
 	if card_hover_atual != null:
 		_on_hover_cenario(null, card_hover_atual)
 	else:
-		_pedir_video(caminho_video_background, false)
+		_mostrar_fundo("init")
 
 
 func _resetar_hover_cards() -> void:
@@ -1451,22 +1405,17 @@ func _on_hover_cenario(_botao: TextureButton, card: Panel) -> void:
 		return
 
 	var indice: int = 0
-	var video_hover: String = caminho_video_background
 
 	if card == card_1:
 		indice = 0
-		video_hover = CAMINHO_TEASER_DESERTO
 	elif card == card_2:
 		indice = 1
-		video_hover = CAMINHO_TEASER_MAR
 	elif card == card_3:
 		indice = 2
-		video_hover = CAMINHO_TEASER_BAR
 	elif card == card_4:
 		indice = 3
-		video_hover = CAMINHO_TEASER_ARENA
 
-	_pedir_video(video_hover, false)
+	_mostrar_fundo(FUNDO_CARDS[indice])
 
 	_aplicar_estilo_card_por_indice(card, indice, true)
 
@@ -1498,79 +1447,11 @@ func _on_hover_cenario(_botao: TextureButton, card: Panel) -> void:
 
 
 
-## Pede um vídeo de fundo; a troca acontece em _orquestrar_videos.
-## imediato = sem esperar o hover parar (modal, roleta).
-func _pedir_video(caminho: String, imediato: bool = false) -> void:
-	if caminho == "" or not (caminho in _videos):
-		return
-	if caminho != _video_desejado:
-		_video_desejado = caminho
-		_video_espera = 0.0
-	if imediato:
-		_video_espera = maxf(_video_espera, _video_atraso)
-
-
-func _orquestrar_videos(delta: float) -> void:
-	# troca quando o pedido ficou parado o bastante e não há troca no meio
-	if _video_desejado == _video_atual or not (_video_desejado in _videos):
-		_video_espera = 0.0
-		return
-	_video_espera += delta
-	if _video_espera >= _video_atraso and not _video_trocando():
-		_mostrar_video(_video_desejado)
-
-
-func _video_trocando() -> bool:
-	return _video_tw != null and _video_tw.is_valid() and _video_tw.is_running()
-
-
-func _abrir_video(caminho: String) -> void:
-	if caminho in _videos:
-		return
-	var v := VideoStreamPlayer.new()
-	v.name = "Video_" + caminho.get_file().get_basename()
-	v.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	v.loop = true
-	v.visible = false
-	v.modulate.a = 0.0
-	v.stream = load(caminho)   # já está na memória (pré-carga da transição)
-	add_child(v)
-	move_child(v, background.get_index() + 1 if background != null else 0)
-	Leve.cobrir_video(v, get_viewport_rect().size)
-	_videos[caminho] = v
-
-
-func _mostrar_video(caminho: String) -> void:
-	var novo: VideoStreamPlayer = _videos[caminho]
-	var velho: VideoStreamPlayer = _videos.get(_video_atual)
-	_video_atual = caminho
-	_video_espera = 0.0
-
-	# o que sai para de decodificar já (fica parado no último quadro)
-	if velho != null and velho != novo:
-		velho.paused = true
-
-	# o novo entra por cima dos outros vídeos, continuando de onde parou
-	var topo := novo.get_index()
-	for v: VideoStreamPlayer in _videos.values():
-		topo = maxi(topo, v.get_index())
-	move_child(novo, topo)
-	novo.visible = true
-	novo.modulate.a = 0.0
-	if novo.is_playing():
-		novo.paused = false
-	else:
-		novo.paused = false
-		novo.play()
-
-	_video_tw = create_tween()
-	_video_tw.tween_property(novo, "modulate:a", 1.0, 0.30).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-	_video_tw.tween_callback(func() -> void:
-		for v: VideoStreamPlayer in _videos.values():
-			if v != novo:
-				v.visible = false
-	)
-
+## Pede o fundo; o FundoVivo espera o pedido parar e cruza suave.
+## imediato = sem esperar (modal, sensibilidade).
+func _mostrar_fundo(chave: String, imediato: bool = false) -> void:
+	if background != null:
+		background.mostrar(chave, imediato)
 
 
 func _on_sair_hover_cenario(_botao: TextureButton, card: Panel) -> void:
@@ -1853,6 +1734,7 @@ func _modo_aleatorio_async() -> void:
 				c.scale = Vector2.ONE
 		Leve.stylebox(card_atual, "panel", estilo_card_destaque)
 		card_atual.scale = Vector2(1.04, 1.04)
+		_mostrar_fundo(FUNDO_CARDS[ordem[(p0 + i) % ordem.size()]])
 		_tocar_choice()
 		var espera: float = 0.05 + float(i * i) * 0.0011
 		await get_tree().create_timer(espera).timeout
@@ -1894,6 +1776,9 @@ func _abrir_modal_dificuldade(cena_destino: String) -> void:
 		return
 	modal_cena_destino = cena_destino
 	modal_ativo = true
+	var i_cena: int = [CENA_CENARIO_1, CENA_CENARIO_2, CENA_CENARIO_3, CENA_CENARIO_4].find(cena_destino)
+	if i_cena >= 0:
+		_mostrar_fundo(FUNDO_CARDS[i_cena], true)
 	modal_tempo_restante = TEMPO_ESCOLHA_DIFICULDADE
 	auto_timer_ativo = false
 	entrada_bloqueada = true

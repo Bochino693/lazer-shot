@@ -162,6 +162,16 @@ var mouse_delta_acumulado: Vector2 = Vector2.ZERO
 @onready var background_video_root: Node2D = $BackgroundVideo
 var fundo_sol: TextureRect = null
 var fundo_lua: TextureRect = null
+# Vida do fundo: faíscas saindo do cristal, poeira no ar e a onda de luz que
+# sai do cristal a cada batida da música (ver shaders/deserto_fundo.gdshader).
+var _faiscas_energia: CPUParticles2D = null
+var _poeira: CPUParticles2D = null
+var _onda_som: float = 9.0
+# HUD: só refaz estilo e barra de munição quando algo muda (antes era todo
+# quadro, e o estilo do modo apagava o aviso vermelho/laranja do TEMPO).
+var _hud_estilo_modo: String = ""
+var _barra_balas: int = -1
+var _barra_tam: Vector2 = Vector2.ZERO
 var _fundo_modo: String = ""
 var _tw_fundo: Tween = null
 
@@ -329,6 +339,7 @@ func _process(delta: float) -> void:
 		Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 
 	_atualizar_mira_hibrida(delta)
+	_animar_fundo_vivo(delta)
 
 	if ranking_nome_ativo and nome_ranking != null:
 		nome_ranking.mira(mira_pos)
@@ -659,6 +670,7 @@ func _configurar_background() -> void:
 
 	fundo_sol = _criar_fundo("FundoSol", FUNDO_SOL, MASCARA_SOL, Color(1.0, 0.74, 0.34))
 	fundo_lua = _criar_fundo("FundoLua", FUNDO_LUA, MASCARA_LUA, Color(1.0, 0.28, 0.30))
+	_criar_vida_fundo()
 
 	if target_root != null:
 		target_root.z_index = 50
@@ -696,6 +708,82 @@ func _criar_fundo(nome: String, textura: Texture2D, mascara: Texture2D, cor: Col
 	return fundo
 
 
+func _criar_vida_fundo() -> void:
+	var pai: Node = background_video_root if background_video_root != null else self
+	var rampa := Gradient.new()
+	rampa.offsets = PackedFloat32Array([0.0, 0.2, 0.75, 1.0])
+	rampa.colors = PackedColorArray([Color(1, 1, 1, 0), Color(1, 1, 1, 1), Color(1, 1, 1, 0.5), Color(1, 1, 1, 0)])
+	var soma := CanvasItemMaterial.new()
+	soma.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
+	var ponto := FundoVivo.brilho_redondo()
+
+	# faíscas de energia subindo do cristal
+	var f := CPUParticles2D.new()
+	f.name = "FaiscasEnergia"
+	f.amount = 34
+	f.lifetime = 2.8
+	f.preprocess = 2.8
+	f.emission_shape = CPUParticles2D.EMISSION_SHAPE_SPHERE
+	f.emission_sphere_radius = 70.0
+	f.direction = Vector2(0, -1)
+	f.spread = 40.0
+	f.gravity = Vector2(0, -18)
+	f.initial_velocity_min = 40.0
+	f.initial_velocity_max = 120.0
+	f.scale_amount_min = 0.40
+	f.scale_amount_max = 1.05
+	f.texture = ponto
+	f.color_ramp = rampa
+	f.material = soma
+	f.z_index = 1   # sempre na frente da imagem (a troca sol/lua a põe por último)
+	pai.add_child(f)
+	_faiscas_energia = f
+
+	# poeira dourada atravessando devagar
+	var p := CPUParticles2D.new()
+	p.name = "Poeira"
+	p.amount = 22
+	p.lifetime = 10.0
+	p.preprocess = 10.0
+	p.emission_shape = CPUParticles2D.EMISSION_SHAPE_RECTANGLE
+	p.direction = Vector2(1, -0.12)
+	p.spread = 10.0
+	p.gravity = Vector2.ZERO
+	p.initial_velocity_min = 18.0
+	p.initial_velocity_max = 46.0
+	p.scale_amount_min = 0.15
+	p.scale_amount_max = 0.45
+	p.texture = ponto
+	p.color_ramp = rampa
+	p.material = soma
+	p.z_index = 1
+	pai.add_child(p)
+	_poeira = p
+
+
+## Ponto da imagem do fundo (0..1) na tela, com o corte de "cobrir a tela".
+func _uv_fundo_na_tela(uv: Vector2) -> Vector2:
+	var tela: Vector2 = get_viewport_rect().size
+	var img := Vector2(FUNDO_SOL.get_width(), FUNDO_SOL.get_height())
+	var tam: Vector2 = img * maxf(tela.x / img.x, tela.y / img.y)
+	return (tela - tam) * 0.5 + uv * tam
+
+
+func _animar_fundo_vivo(delta: float) -> void:
+	var som := Maquina.pulso_vivo()
+	if som.y > 0.55 and _onda_som > 0.62:
+		_onda_som = 0.0
+	_onda_som = minf(_onda_som + delta * 0.85, 9.0)
+	for fundo: TextureRect in [fundo_sol, fundo_lua]:
+		if fundo != null and fundo.visible:
+			var mat := fundo.material as ShaderMaterial
+			mat.set_shader_parameter("grave", som.x)
+			mat.set_shader_parameter("batida", som.y)
+			mat.set_shader_parameter("onda", _onda_som)
+	if _faiscas_energia != null:
+		_faiscas_energia.speed_scale = 1.0 + som.y * 1.3
+
+
 func _on_viewport_size_changed() -> void:
 	_ajustar_background_full()
 	_ajustar_layout()
@@ -708,12 +796,21 @@ func _ajustar_background_full() -> void:
 		if fundo != null:
 			fundo.position = Vector2.ZERO
 			fundo.size = tela
+	if _faiscas_energia != null:
+		_faiscas_energia.position = _uv_fundo_na_tela(Vector2(0.5, 0.50))
+	if _poeira != null:
+		_poeira.position = Vector2(-20.0, tela.y * 0.62)
+		_poeira.emission_rect_extents = Vector2(20.0, tela.y * 0.30)
 
 
 func _aplicar_background_modo() -> void:
 	_ajustar_background_full()
 	var entra: TextureRect = fundo_sol if modo_atual == MODO_SOL else fundo_lua
 	var sai: TextureRect = fundo_lua if modo_atual == MODO_SOL else fundo_sol
+	if _faiscas_energia != null:
+		_faiscas_energia.color = Color(1.0, 0.80, 0.42) if modo_atual == MODO_SOL else Color(1.0, 0.42, 0.40)
+	if _poeira != null:
+		_poeira.color = Color(1.0, 0.86, 0.6, 0.55) if modo_atual == MODO_SOL else Color(0.75, 0.85, 1.0, 0.45)
 	if entra == null or _fundo_modo == modo_atual:
 		return
 	var primeira := _fundo_modo == ""
@@ -1132,7 +1229,7 @@ func _criar_preview_do_modelo(modelo: Area2D) -> Area2D:
 	if modelo == null:
 		return null
 
-	var area: Area2D = modelo.duplicate() as Area2D
+	var area: Area2D = _copiar_modelo(modelo)
 	if area == null:
 		return null
 
@@ -1463,6 +1560,7 @@ func _ajustar_layout() -> void:
 		fim_footer.position = fim_panel.position + Vector2(45.0, fim_panel.size.y - 92.0)
 		fim_footer.size = Vector2(fim_panel.size.x - 90.0, 58.0)
 
+	_hud_estilo_modo = ""   # o layout mexe nas fontes dos cartões: reaplica o estilo do modo
 	_atualizar_barra_municao()
 	_ajustar_layout_modal_inicio_imagem()
 
@@ -1625,6 +1723,10 @@ func _atualizar_barra_municao() -> void:
 	var card_municao: Panel = hud_root.get_node("CardMunicao") as Panel
 	if card_municao == null:
 		return
+	if not recarregando and balas_no_cartucho == _barra_balas and card_municao.size == _barra_tam:
+		return
+	_barra_balas = -1 if recarregando else balas_no_cartucho
+	_barra_tam = card_municao.size
 
 	var margem_x: float = 14.0
 	var margem_topo: float = 48.0
@@ -2273,6 +2375,14 @@ func _spawn_continuo(delta: float) -> void:
 
 
 
+## Cópia de um alvo-modelo. O duplicate() padrão reinstancia a cena do
+## alvo inteira (sun.tscn/lua.tscn): ~1,5 ms por alvo aqui, ~10 ms na TV Box,
+## um engasgo a cada alvo novo. Copiar só os nós dá o mesmo alvo (mesmas
+## animações e imagens, compartilhadas) em ~0,1 ms.
+func _copiar_modelo(modelo: Area2D) -> Area2D:
+	return modelo.duplicate(Node.DUPLICATE_SIGNALS | Node.DUPLICATE_GROUPS | Node.DUPLICATE_SCRIPTS) as Area2D
+
+
 func _spawn_alvo_forcado(tipo: String) -> void:
 	_spawn_alvo_interno(tipo)
 
@@ -2299,7 +2409,7 @@ func _spawn_alvo_interno(tipo: String) -> void:
 	if modelo == null:
 		return
 
-	var alvo_node: Area2D = modelo.duplicate() as Area2D
+	var alvo_node: Area2D = _copiar_modelo(modelo)
 	if alvo_node == null:
 		return
 
@@ -2472,7 +2582,7 @@ func _trocar_tipo_alvo(alvo: TargetData) -> void:
 	if modelo == null:
 		return
 
-	var novo_node: Area2D = modelo.duplicate() as Area2D
+	var novo_node: Area2D = _copiar_modelo(modelo)
 	if novo_node == null:
 		return
 
@@ -3211,8 +3321,9 @@ func _fonte_valor(lbl: Label, tamanho: int, cor: Color) -> void:
 
 
 func _atualizar_estilo_hud_por_modo() -> void:
-	if hud_root == null:
+	if hud_root == null or _hud_estilo_modo == modo_atual:
 		return
+	_hud_estilo_modo = modo_atual
 
 	var cor_neon: Color = COR_SOL
 	var cor_texto: Color = Color(1.0, 0.88, 0.28, 1.0)

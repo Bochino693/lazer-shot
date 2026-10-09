@@ -17,6 +17,7 @@ var largura_anel := 2.2
 var largura_linha := 1.3
 var alfa_anel := 0.20
 var alfa_linha := 0.16
+var _degrau := -1
 
 
 func _init() -> void:
@@ -40,7 +41,14 @@ func configurar(p_cor: Color, p_raio_anel: float, p_aneis: int, p_passo_anel: fl
 
 
 ## Mesma regra de antes: a teia acende e engrossa conforme o alvo envelhece.
+## Em 24 degraus: redesenha ~6 vezes por segundo e não todo quadro (a
+## diferença entre um quadro e outro não aparece, o custo sim).
 func ajustar_progresso(p_cor: Color, progresso: float) -> void:
+	var degrau := int(progresso * 24.0)
+	if degrau == _degrau and p_cor == cor:
+		return
+	_degrau = degrau
+	progresso = float(degrau) / 24.0
 	var alfa := lerpf(0.12, 0.62, progresso)
 	cor = p_cor
 	largura_anel = lerpf(1.5, 2.8, progresso)

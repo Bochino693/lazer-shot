@@ -17,13 +17,65 @@ EXTS = ("png", "jpg", "jpeg", "webp", "svg", "wav", "ogg", "mp3", "ttf", "otf",
         "tres", "res", "tscn", "ogv")
 LITERAL = re.compile(r'"(res://[^"%{}*]+\.(?:' + "|".join(EXTS) + r'))"')
 SCRIPT = re.compile(r'\[ext_resource type="Script"[^\]]*path="(res://[^"]+\.gd)"')
+CLASSE = re.compile(r'^class_name\s+(\w+)', re.M)
+# FundoVivo carrega só os fundos pedidos: FundoVivo.new(["init", ...]).
+FUNDO_VIVO = "res://scripts/fundo_vivo.gd"
+FUNDO_ITEM = re.compile(r'^\t"(\w+)": \["(res://[^"]+)", "(res://[^"]+)"', re.M)
 
 
 def arquivo(res):
     return os.path.join(RAIZ, res[len("res://"):])
 
 
+def classes():
+    """class_name -> script (componentes criados por código, ex.: FundoVivo)."""
+    mapa = {}
+    pasta = os.path.join(RAIZ, "scripts")
+    for nome in sorted(os.listdir(pasta)):
+        if nome.endswith(".gd"):
+            with open(os.path.join(pasta, nome), encoding="utf-8") as f:
+                m = CLASSE.search(f.read())
+            if m:
+                mapa[m.group(1)] = "res://scripts/" + nome
+    return mapa
+
+
+def scripts_usados(iniciais, mapa):
+    """Os scripts da tela e os componentes (class_name) que eles usam."""
+    vistos = []
+    fila = list(iniciais)
+    while fila:
+        s = fila.pop(0)
+        if s in vistos or not os.path.exists(arquivo(s)):
+            continue
+        vistos.append(s)
+        with open(arquivo(s), encoding="utf-8") as f:
+            texto = f.read()
+        for nome, caminho in mapa.items():
+            if caminho not in vistos and re.search(r"\b" + nome + r"\b", texto):
+                fila.append(caminho)
+    return vistos
+
+
+def fundos_vivos():
+    with open(arquivo(FUNDO_VIVO), encoding="utf-8") as f:
+        return {m.group(1): [m.group(2), m.group(3)] for m in FUNDO_ITEM.finditer(f.read())}
+
+
+def literais_fundo_vivo(texto, fundos):
+    """Arquivos dos fundos que este script pede ao FundoVivo (chaves entre aspas)."""
+    if "FundoVivo.new(" not in texto:
+        return []
+    saida = []
+    for chave, arqs in fundos.items():
+        if '"%s"' % chave in texto:
+            saida += arqs
+    return saida
+
+
 def main():
+    mapa = classes()
+    fundos = fundos_vivos()
     pasta = os.path.join(RAIZ, "scenes")
     lista = {}
     for nome in sorted(os.listdir(pasta)):
@@ -33,18 +85,19 @@ def main():
         with open(os.path.join(pasta, nome), encoding="utf-8") as f:
             scripts = SCRIPT.findall(f.read())
         achados = []
-        for s in scripts:
+        for s in scripts_usados(scripts, mapa):
             caminho = arquivo(s)
-            if not os.path.exists(caminho):
-                continue
             with open(caminho, encoding="utf-8") as f:
-                for res in LITERAL.findall(f.read()):
-                    # outras telas não: só o que esta tela usa
-                    if res.startswith("res://scenes/") or res == cena:
-                        continue
-                    if not os.path.exists(arquivo(res)) or res in achados:
-                        continue
-                    achados.append(res)
+                texto = f.read()
+            if s == FUNDO_VIVO:
+                continue   # os fundos entram pelas chaves pedidas (abaixo)
+            for res in LITERAL.findall(texto) + literais_fundo_vivo(texto, fundos):
+                # outras telas não: só o que esta tela usa
+                if res.startswith("res://scenes/") or res == cena:
+                    continue
+                if not os.path.exists(arquivo(res)) or res in achados:
+                    continue
+                achados.append(res)
         if achados:
             lista[cena] = achados
 
