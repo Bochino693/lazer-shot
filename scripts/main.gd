@@ -111,7 +111,9 @@ func _unhandled_input(event: InputEvent) -> void:
 				return
 
 	if _evento_start(event):
-		_iniciar_com_confirmacao()
+		# Modo crédito: só começa se houver crédito (desconta aqui).
+		if Maquina.cobrar():
+			_iniciar_com_confirmacao()
 
 
 func _abrir_tela_admin() -> void:
@@ -140,7 +142,7 @@ func _abrir_tela_admin() -> void:
 	_mostrar_ponteiro_mouse()
 
 	get_tree().set_meta("admin_origem", "main")
-	get_tree().change_scene_to_file(cena_admin)
+	TransicaoGlobal.trocar_cena(cena_admin)
 
 
 # ─────────────────────────────────────────────
@@ -255,7 +257,9 @@ func _configurar_canvas() -> void:
 	pressione.offset_bottom = -35.0
 	pressione.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	pressione.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	pressione.text = "INSERT COIN"
+	pressione.text = Maquina.texto_chamada()
+	if not Maquina.creditos_mudaram.is_connected(_ao_mudar_creditos):
+		Maquina.creditos_mudaram.connect(_ao_mudar_creditos)
 	pressione.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	Leve.font_size(pressione, "font_size", 34)
 	Leve.color(pressione, "font_color", Color(1, 1, 1, 1))
@@ -274,7 +278,9 @@ func _configurar_canvas() -> void:
 	flash_intro.offset_top = 0.0
 	flash_intro.offset_right = 0.0
 	flash_intro.offset_bottom = 0.0
-	flash_intro.color = Color(1, 1, 1, 1)
+	# A abertura nasce do preto (a transição chega no preto); os riscos do
+	# glitch passam por cima e o vídeo aparece. Sem tela branca chapada.
+	flash_intro.color = Color(0, 0, 0, 1)
 	flash_intro.modulate = Color(1, 1, 1, 1)
 
 
@@ -460,6 +466,11 @@ func _iniciar_timer_intro() -> void:
 	if transicionando:
 		return
 
+	# Configuração: vídeos de demonstração desligados pulam direto para o ranking.
+	if not bool(get_tree().get_meta("admin_demo_ativa", true)):
+		_ir_para_ranking_atrativo()
+		return
+
 	_tocar_teaser_atrativo()
 
 
@@ -533,6 +544,11 @@ func _rodar_teaser_e_ir_ranking() -> void:
 
 
 func _ir_para_ranking_atrativo() -> void:
+	# Configuração: ranking desligado na abertura recomeça a abertura.
+	if not bool(get_tree().get_meta("admin_ranking_ativo", true)):
+		_trocar_cena_com_saida(scene_file_path)
+		return
+
 	if cena_ranking == "":
 		_mostrar_tela_inicial()
 		return
@@ -640,10 +656,8 @@ func _trocar_cena_com_saida(caminho_cena: String) -> void:
 
 	_ocultar_ponteiro_mouse()
 
-	if Engine.has_singleton("TransicaoGlobal"):
-		TransicaoGlobal.trocar_cena(caminho_cena)
-	else:
-		get_tree().change_scene_to_file(caminho_cena)
+	# A tela já está preta (flash_intro): troca sem escurecer de novo.
+	TransicaoGlobal.trocar_cena(caminho_cena, 0.0)
 
 
 
@@ -734,3 +748,8 @@ func _ocultar_ponteiro_mouse() -> void:
 
 func _mostrar_ponteiro_mouse() -> void:
 	Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
+
+
+func _ao_mudar_creditos(_creditos: int) -> void:
+	if pressione != null and is_instance_valid(pressione):
+		pressione.text = Maquina.texto_chamada()

@@ -1,5 +1,6 @@
 extends Control
 
+const Pincel := preload("res://scripts/pincel.gd")
 const CENA_MENU: String = "res://scenes/cenarios.tscn"
 const MAX_RANKING: int = 20
 
@@ -176,7 +177,9 @@ func _criar_insert_coin_atrativo() -> void:
 
 	if insert_coin_label == null:
 		insert_coin_label = Label.new()
-		insert_coin_label.text = "INSERT COIN"
+		insert_coin_label.text = Maquina.texto_chamada()
+		if not Maquina.creditos_mudaram.is_connected(_ao_mudar_creditos):
+			Maquina.creditos_mudaram.connect(_ao_mudar_creditos)
 		insert_coin_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		insert_coin_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		insert_coin_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -207,7 +210,7 @@ func _auto_voltar_atrativo() -> void:
 	if get_tree().has_meta("ranking_origem"):
 		get_tree().remove_meta("ranking_origem")
 
-	get_tree().change_scene_to_file(CENA_INICIO)
+	TransicaoGlobal.trocar_cena(CENA_INICIO)
 
 
 
@@ -324,6 +327,10 @@ func _iniciar_jogo_pelo_insert_coin() -> void:
 	if transicionando_insert:
 		return
 
+	# Modo crédito: só entra no jogo se houver crédito (desconta aqui).
+	if not Maquina.cobrar():
+		return
+
 	if get_tree().has_meta("ranking_origem"):
 		get_tree().remove_meta("ranking_origem")
 
@@ -332,7 +339,7 @@ func _iniciar_jogo_pelo_insert_coin() -> void:
 	await _efeito_insert_coin_confirmado()
 
 	if ResourceLoader.exists(CENA_MENU):
-		get_tree().change_scene_to_file(CENA_MENU)
+		TransicaoGlobal.trocar_cena(CENA_MENU)
 
 
 func _criar_painel() -> void:
@@ -621,6 +628,7 @@ func _configurar_alvo_overlay() -> void:
 	alvo_overlay = Control.new()
 	alvo_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
 	alvo_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	alvo_overlay.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	alvo_layer.add_child(alvo_overlay)
 	alvo_overlay.draw.connect(_desenhar_alvo_overlay)
 
@@ -630,19 +638,16 @@ func _desenhar_alvo_overlay() -> void:
 	var pulso := 1.0 + sin(alvo_anim_t * 6.0) * 0.08
 	var raio := 18.0 * pulso
 
-	alvo_overlay.draw_arc(alvo_pos, raio, 0.0, TAU, 40, Color(1.0, 0.12, 0.08), 2.8, true)
-	alvo_overlay.draw_arc(alvo_pos, raio * 0.52, 0.0, TAU, 28, Color.WHITE, 1.4, true)
-	alvo_overlay.draw_circle(alvo_pos, 3.4 * pulso, Color(1.0, 0.12, 0.08))
+	Pincel.anel(alvo_overlay, alvo_pos, raio, 2.8, Color(1.0, 0.12, 0.08))
+	Pincel.anel(alvo_overlay, alvo_pos, raio * 0.52, 1.4, Color.WHITE)
+	Pincel.circulo(alvo_overlay, alvo_pos, 3.4 * pulso, Color(1.0, 0.12, 0.08))
 
 	var l := 13.0 * pulso
 	var e := 7.0 * pulso
-	alvo_overlay.draw_line(alvo_pos + Vector2(-l - e, 0), alvo_pos + Vector2(-e, 0), Color.WHITE, 2.2)
-	alvo_overlay.draw_line(alvo_pos + Vector2(e, 0), alvo_pos + Vector2(l + e, 0), Color.WHITE, 2.2)
-	alvo_overlay.draw_line(alvo_pos + Vector2(0, -l - e), alvo_pos + Vector2(0, -e), Color.WHITE, 2.2)
-	alvo_overlay.draw_line(alvo_pos + Vector2(0, e), alvo_pos + Vector2(0, l + e), Color.WHITE, 2.2)
-
-
-
+	Pincel.linha(alvo_overlay, alvo_pos + Vector2(-l - e, 0), alvo_pos + Vector2(-e, 0), Color.WHITE, 2.2)
+	Pincel.linha(alvo_overlay, alvo_pos + Vector2(e, 0), alvo_pos + Vector2(l + e, 0), Color.WHITE, 2.2)
+	Pincel.linha(alvo_overlay, alvo_pos + Vector2(0, -l - e), alvo_pos + Vector2(0, -e), Color.WHITE, 2.2)
+	Pincel.linha(alvo_overlay, alvo_pos + Vector2(0, e), alvo_pos + Vector2(0, l + e), Color.WHITE, 2.2)
 func _criar_linha_ranking(posicao: int, nome: String, cenario: String, modo: String, pontos: int, precisao: int) -> Panel:
 	var linha := Panel.new()
 
@@ -1066,7 +1071,7 @@ func _reiniciar_video_fundo() -> void:
 
 func _voltar_menu() -> void:
 	if ResourceLoader.exists(CENA_MENU):
-		get_tree().change_scene_to_file(CENA_MENU)
+		TransicaoGlobal.trocar_cena(CENA_MENU)
 
 
 func _iniciar_musica_ranking() -> void:
@@ -1090,3 +1095,8 @@ func _iniciar_musica_ranking() -> void:
 func _reiniciar_musica_ranking() -> void:
 	if audio_ranking != null:
 		audio_ranking.play()
+
+
+func _ao_mudar_creditos(_creditos: int) -> void:
+	if insert_coin_label != null and is_instance_valid(insert_coin_label):
+		insert_coin_label.text = Maquina.texto_chamada()

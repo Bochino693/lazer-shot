@@ -2,13 +2,13 @@
 
 importer="font_data_dynamic"
 type="FontFile"
-uid="uid://bi57f6jcbka1c"
-path="res://.godot/imported/Orbitron-Bold.ttf-0641ced18c20253d044804e6095fd514.fontdata"
+uid="uid://bmavvxgyrmsif"
+path="res://.godot/imported/Exo2-Bold.ttf-c2f52cce71df411805e5bcf1055e3102.fontdata"
 
 [deps]
 
-source_file="res://fonts/Orbitron-Bold.ttf"
-dest_files=["res://.godot/imported/Orbitron-Bold.ttf-0641ced18c20253d044804e6095fd514.fontdata"]
+source_file="res://fonts/Exo2-Bold.ttf"
+dest_files=["res://.godot/imported/Exo2-Bold.ttf-c2f52cce71df411805e5bcf1055e3102.fontdata"]
 
 [params]
 

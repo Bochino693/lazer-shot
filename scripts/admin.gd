@@ -1,567 +1,422 @@
 extends Control
 
-const CONFIG_PATH: String = "user://config_admin.cfg"
+## CONFIGURAÇÕES DA MÁQUINA (abre com F10 ou segurando o SELECT 3 s na
+## abertura). Feita para a arma: aponte e atire nos botões (ou use mouse,
+## setas + START/ENTER). Tudo é guardado pela Maquina em
+## user://config_admin.cfg.
 
-@export_file("*.tscn") var cena_voltar: String = "res://scenes/main.tscn"
+const Pincel := preload("res://scripts/pincel.gd")
+const CENA_SAIDA := "res://scenes/main.tscn"
+const FONTE_TITULO := "res://fonts/Exo2-ExtraBold.ttf"
 
-const PADRAO_TEMPO_PARTIDA: int = 120
-const PADRAO_TEMPO_MODAL_FINAL: int = 21
-const PADRAO_TEMPO_RANKING_NOME: int = 50
-const PADRAO_TEMPO_INTRO_MAIN: int = 40
-const PADRAO_TEMPO_TEASER: int = 20
-const PADRAO_VOLUME_MUSICA: float = -5.0
-const PADRAO_VOLUME_FX: float = 0.0
-const PADRAO_DEMO_ATIVA: bool = true
-const PADRAO_RANKING_ATIVO: bool = true
-const PADRAO_DIFICULDADE: String = "facil"
-const PADRAO_IDIOMA: String = "pt_br"
+const COR_FUNDO := Color(0.035, 0.045, 0.075)
+const COR_CARTAO := Color(0.075, 0.095, 0.15)
+const COR_BOTAO := Color(0.13, 0.16, 0.24)
+const COR_DESTAQUE := Color(1.0, 0.27, 0.2)
+const COR_OK := Color(0.2, 0.82, 0.45)
+const COR_TEXTO := Color(0.93, 0.95, 1.0)
+const COR_APAGADO := Color(0.6, 0.66, 0.78)
 
-var cfg := ConfigFile.new()
+@export_file("*.tscn") var cena_voltar: String = CENA_SAIDA
 
-var tempo_partida: int = PADRAO_TEMPO_PARTIDA
-var tempo_modal_final: int = PADRAO_TEMPO_MODAL_FINAL
-var tempo_ranking_nome: int = PADRAO_TEMPO_RANKING_NOME
-var tempo_intro_main: int = PADRAO_TEMPO_INTRO_MAIN
-var tempo_teaser: int = PADRAO_TEMPO_TEASER
-var volume_musica: float = PADRAO_VOLUME_MUSICA
-var volume_fx: float = PADRAO_VOLUME_FX
-var demo_ativa: bool = PADRAO_DEMO_ATIVA
-var ranking_ativo: bool = PADRAO_RANKING_ATIVO
-var dificuldade_padrao: String = PADRAO_DIFICULDADE
-var idioma: String = PADRAO_IDIOMA
-
-var root_panel: Panel
-var titulo: Label
-var grid: GridContainer
-var status_label: Label
-var toast_label: Label
-var toast_tween: Tween = null
-
-var campo_tempo_partida: SpinBox
-var campo_tempo_modal_final: SpinBox
-var campo_tempo_ranking_nome: SpinBox
-var campo_tempo_intro_main: SpinBox
-var campo_tempo_teaser: SpinBox
-var campo_volume_musica: SpinBox
-var campo_volume_fx: SpinBox
-var campo_demo_ativa: CheckButton
-var campo_ranking_ativo: CheckButton
-var campo_dificuldade: OptionButton
-var campo_idioma: OptionButton
+var _atualizadores: Array[Callable] = []
+var _botoes: Array[Button] = []
+var _rotulo_contadores: Label
+var _aviso: Label
+var _mira: Control
+var _aprendendo := ""
+var _aprender_t := 0.0
+var _rotulos_botao := {}
+var _confirmar := {}
+var _saindo := false
 
 
 func _ready() -> void:
-	Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
-	_carregar_config()
+	Input.set_mouse_mode(Input.MOUSE_MODE_HIDDEN)
+	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_criar_interface()
-	_aplicar_config_global()
-	_atualizar_status()
+	_atualizar_tudo()
 
 
-func _unhandled_input(event: InputEvent) -> void:
-	if event is InputEventKey:
-		var key := event as InputEventKey
-		if key.pressed and not key.echo:
-			if key.keycode == KEY_ESCAPE or key.keycode == KEY_F10:
-				_voltar_main()
-
-
-func _carregar_config() -> void:
-	var err := cfg.load(CONFIG_PATH)
-
-	if err != OK:
-		_salvar_config_padrao()
-		return
-
-	tempo_partida = int(cfg.get_value("jogo", "tempo_partida", PADRAO_TEMPO_PARTIDA))
-	tempo_modal_final = int(cfg.get_value("jogo", "tempo_modal_final", PADRAO_TEMPO_MODAL_FINAL))
-	tempo_ranking_nome = int(cfg.get_value("ranking", "tempo_nome", PADRAO_TEMPO_RANKING_NOME))
-	tempo_intro_main = int(cfg.get_value("main", "tempo_intro", PADRAO_TEMPO_INTRO_MAIN))
-	tempo_teaser = int(cfg.get_value("main", "tempo_teaser", PADRAO_TEMPO_TEASER))
-	volume_musica = float(cfg.get_value("audio", "volume_musica", PADRAO_VOLUME_MUSICA))
-	volume_fx = float(cfg.get_value("audio", "volume_fx", PADRAO_VOLUME_FX))
-	demo_ativa = bool(cfg.get_value("main", "demo_ativa", PADRAO_DEMO_ATIVA))
-	ranking_ativo = bool(cfg.get_value("ranking", "ranking_ativo", PADRAO_RANKING_ATIVO))
-	dificuldade_padrao = str(cfg.get_value("jogo", "dificuldade_padrao", PADRAO_DIFICULDADE))
-	idioma = str(cfg.get_value("sistema", "idioma", PADRAO_IDIOMA))
-
-
-func _salvar_config_padrao() -> void:
-	cfg.set_value("jogo", "tempo_partida", tempo_partida)
-	cfg.set_value("jogo", "tempo_modal_final", tempo_modal_final)
-	cfg.set_value("jogo", "dificuldade_padrao", dificuldade_padrao)
-
-	cfg.set_value("ranking", "tempo_nome", tempo_ranking_nome)
-	cfg.set_value("ranking", "ranking_ativo", ranking_ativo)
-
-	cfg.set_value("main", "tempo_intro", tempo_intro_main)
-	cfg.set_value("main", "tempo_teaser", tempo_teaser)
-	cfg.set_value("main", "demo_ativa", demo_ativa)
-
-	cfg.set_value("audio", "volume_musica", volume_musica)
-	cfg.set_value("audio", "volume_fx", volume_fx)
-
-	cfg.set_value("sistema", "idioma", idioma)
-
-	cfg.save(CONFIG_PATH)
-
-
-func _ler_valor_spin(spin: SpinBox, padrao: float) -> float:
-	if spin == null:
-		return padrao
-
-	var line := spin.get_line_edit()
-	if line != null:
-		var texto := line.text.strip_edges()
-		if texto != "":
-			spin.value = clamp(texto.to_float(), spin.min_value, spin.max_value)
-
-	spin.release_focus()
-	return spin.value
-
-
-func _ler_campos_da_tela() -> void:
-	tempo_partida = int(_ler_valor_spin(campo_tempo_partida, tempo_partida))
-	tempo_modal_final = int(_ler_valor_spin(campo_tempo_modal_final, tempo_modal_final))
-	tempo_ranking_nome = int(_ler_valor_spin(campo_tempo_ranking_nome, tempo_ranking_nome))
-	tempo_intro_main = int(_ler_valor_spin(campo_tempo_intro_main, tempo_intro_main))
-	tempo_teaser = int(_ler_valor_spin(campo_tempo_teaser, tempo_teaser))
-
-	volume_musica = float(_ler_valor_spin(campo_volume_musica, volume_musica))
-	volume_fx = float(_ler_valor_spin(campo_volume_fx, volume_fx))
-
-	if campo_demo_ativa != null:
-		demo_ativa = campo_demo_ativa.button_pressed
-
-	if campo_ranking_ativo != null:
-		ranking_ativo = campo_ranking_ativo.button_pressed
-
-	if campo_dificuldade != null:
-		dificuldade_padrao = "dificil" if campo_dificuldade.selected == 1 else "facil"
-
-	if campo_idioma != null:
-		match campo_idioma.selected:
-			1:
-				idioma = "en"
-			2:
-				idioma = "es"
-			_:
-				idioma = "pt_br"
-
-
-func _salvar_config() -> void:
-	_ler_campos_da_tela()
-
-	cfg.set_value("jogo", "tempo_partida", tempo_partida)
-	cfg.set_value("jogo", "tempo_modal_final", tempo_modal_final)
-	cfg.set_value("jogo", "dificuldade_padrao", dificuldade_padrao)
-
-	cfg.set_value("ranking", "tempo_nome", tempo_ranking_nome)
-	cfg.set_value("ranking", "ranking_ativo", ranking_ativo)
-
-	cfg.set_value("main", "tempo_intro", tempo_intro_main)
-	cfg.set_value("main", "tempo_teaser", tempo_teaser)
-	cfg.set_value("main", "demo_ativa", demo_ativa)
-
-	cfg.set_value("audio", "volume_musica", volume_musica)
-	cfg.set_value("audio", "volume_fx", volume_fx)
-
-	cfg.set_value("sistema", "idioma", idioma)
-
-	var err := cfg.save(CONFIG_PATH)
-	
-	print("ADMIN SALVO EM: ", ProjectSettings.globalize_path(CONFIG_PATH))
-	print("TEMPO PARTIDA SALVO: ", tempo_partida)
-	print("TEMPO MODAL FINAL SALVO: ", tempo_modal_final)
-
-	if err != OK:
-		_mostrar_toast("ERRO AO SALVAR CONFIGURAÇÕES!")
-		push_error("Erro ao salvar config_admin.cfg: %s" % err)
-		return
-
-	_aplicar_config_global()
-	_atualizar_status()
-	_mostrar_toast("CONFIGURAÇÕES SALVAS COM SUCESSO!")
-
-
-func _aplicar_config_global() -> void:
-	get_tree().set_meta("admin_tempo_partida", tempo_partida)
-	get_tree().set_meta("admin_tempo_modal_final", tempo_modal_final)
-	get_tree().set_meta("admin_tempo_ranking_nome", tempo_ranking_nome)
-	get_tree().set_meta("admin_tempo_intro_main", tempo_intro_main)
-	get_tree().set_meta("admin_tempo_teaser", tempo_teaser)
-	get_tree().set_meta("admin_volume_musica", volume_musica)
-	get_tree().set_meta("admin_volume_fx", volume_fx)
-	get_tree().set_meta("admin_demo_ativa", demo_ativa)
-	get_tree().set_meta("admin_ranking_ativo", ranking_ativo)
-	get_tree().set_meta("modo_dificuldade", dificuldade_padrao)
-	get_tree().set_meta("admin_idioma", idioma)
-
-
+# ================================================================ interface
 func _criar_interface() -> void:
-	set_anchors_preset(Control.PRESET_FULL_RECT)
+	var fundo := ColorRect.new()
+	fundo.color = COR_FUNDO
+	fundo.set_anchors_preset(Control.PRESET_FULL_RECT)
+	fundo.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(fundo)
 
-	var bg := ColorRect.new()
-	bg.color = Color(0.005, 0.005, 0.008, 1.0)
-	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	add_child(bg)
+	var faixa := ColorRect.new()
+	faixa.color = COR_DESTAQUE
+	faixa.anchor_right = 1.0
+	faixa.offset_bottom = 6.0
+	faixa.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(faixa)
 
-	root_panel = Panel.new()
-	root_panel.size = Vector2(980, 1260)
-	root_panel.position = (get_viewport_rect().size - root_panel.size) * 0.5
-	add_child(root_panel)
+	var margem := MarginContainer.new()
+	margem.set_anchors_preset(Control.PRESET_FULL_RECT)
+	for lado in ["left", "right"]:
+		margem.add_theme_constant_override("margin_" + lado, 36)
+	margem.add_theme_constant_override("margin_top", 24)
+	margem.add_theme_constant_override("margin_bottom", 18)
+	add_child(margem)
 
+	var coluna := VBoxContainer.new()
+	coluna.add_theme_constant_override("separation", 6)
+	margem.add_child(coluna)
+
+	# Cabeçalho
+	var topo := HBoxContainer.new()
+	coluna.add_child(topo)
+	var titulos := VBoxContainer.new()
+	titulos.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	titulos.add_theme_constant_override("separation", 0)
+	topo.add_child(titulos)
+	var titulo := _rotulo("CONFIGURAÇÕES", 54, COR_TEXTO)
+	if ResourceLoader.exists(FONTE_TITULO):
+		titulo.add_theme_font_override("font", load(FONTE_TITULO))
+	titulos.add_child(titulo)
+	titulos.add_child(_rotulo("LAZER SHOT  ·  aponte a arma e atire nos botões", 20, COR_APAGADO))
+	var direita := VBoxContainer.new()
+	direita.alignment = BoxContainer.ALIGNMENT_CENTER
+	topo.add_child(direita)
+	_rotulo_contadores = _rotulo("", 20, COR_APAGADO)
+	_rotulo_contadores.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	direita.add_child(_rotulo_contadores)
+	var zerar_cont := _botao("ZERAR CONTADORES", func(): _com_confirmacao("contadores", func():
+		Maquina.definir("maquina/total_fichas", 0)
+		Maquina.definir("maquina/total_partidas", 0)
+		_atualizar_tudo()), 18)
+	zerar_cont.size_flags_horizontal = Control.SIZE_SHRINK_END
+	direita.add_child(zerar_cont)
+
+	# MÁQUINA
+	_secao(coluna, "MÁQUINA")
+	_opcoes(coluna, "Modo de jogo", "livre: START sem cobrar  ·  crédito: ficha pelo SELECT", "maquina/modo", [["livre", "LIVRE"], ["credito", "CRÉDITO"]])
+	_passos(coluna, "Créditos por partida", "", "maquina/creditos_por_partida", 1, 10, 1, func(v): return "%d" % v)
+	var linha_cred := _passos(coluna, "Créditos na máquina", "", "maquina/creditos", 0, 99, 1, func(v): return "%02d" % v)
+	linha_cred.add_child(_botao("ZERAR", func():
+		Maquina.definir("maquina/creditos", 0)
+		_atualizar_tudo(), 20))
+
+	# PARTIDA
+	_secao(coluna, "PARTIDA")
+	_passos(coluna, "Tempo de partida", "", "jogo/tempo_partida", 30, 600, 10, func(v): return "%d:%02d" % [int(v) / 60, int(v) % 60])
+	_opcoes(coluna, "Dificuldade", "difícil: sem mira na tela", "jogo/dificuldade_padrao", [["facil", "FÁCIL"], ["dificil", "DIFÍCIL"]])
+	_passos(coluna, "Tela de resultado", "volta sozinha depois de", "jogo/tempo_modal_final", 5, 120, 1, func(v): return "%d s" % v)
+	_passos(coluna, "Nome no ranking", "tempo para digitar", "ranking/tempo_nome", 10, 120, 5, func(v): return "%d s" % v)
+
+	# ABERTURA
+	_secao(coluna, "ABERTURA")
+	_passos(coluna, "Tempo da abertura", "", "main/tempo_intro", 10, 300, 5, func(v): return "%d s" % v)
+	_passos(coluna, "Tempo do vídeo", "", "main/tempo_teaser", 5, 120, 5, func(v): return "%d s" % v)
+	_opcoes(coluna, "Vídeos de demonstração", "", "main/demo_ativa", [[true, "LIGADO"], [false, "DESLIGADO"]])
+	_opcoes(coluna, "Ranking na abertura", "", "ranking/ranking_ativo", [[true, "LIGADO"], [false, "DESLIGADO"]])
+
+	# SOM
+	_secao(coluna, "SOM")
+	_volume(coluna, "Música", "audio/volume_musica")
+	_volume(coluna, "Efeitos", "audio/volume_fx")
+
+	# CONTROLES
+	_secao(coluna, "CONTROLES (ZERO DELAY)")
+	_aprender(coluna, "Botão START", "começa a partida", "start")
+	_aprender(coluna, "Botão SELECT", "ficha / crédito", "select")
+
+	# Rodapé
+	var espaco := Control.new()
+	espaco.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	coluna.add_child(espaco)
+	_aviso = _rotulo("", 22, COR_APAGADO)
+	_aviso.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	coluna.add_child(_aviso)
+	var rodape := HBoxContainer.new()
+	rodape.add_theme_constant_override("separation", 14)
+	coluna.add_child(rodape)
+	var salvar := _botao("SALVAR E SAIR", _salvar_e_sair, 28, COR_OK)
+	salvar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	salvar.custom_minimum_size.y = 66
+	rodape.add_child(salvar)
+	var sair := _botao("SAIR SEM SALVAR", _sair_sem_salvar, 22)
+	sair.custom_minimum_size = Vector2(250, 66)
+	rodape.add_child(sair)
+	var padrao := _botao("PADRÃO", func(): _com_confirmacao("padrao", func():
+		Maquina.restaurar_padrao()
+		_atualizar_tudo()
+		_mostrar_aviso("Valores de fábrica (salve para valer)", COR_TEXTO)), 22)
+	padrao.custom_minimum_size = Vector2(170, 66)
+	rodape.add_child(padrao)
+	var dica := _rotulo("F10 ou segure o SELECT 3 s na abertura para voltar aqui", 17, Color(COR_APAGADO, 0.7))
+	dica.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	coluna.add_child(dica)
+
+	salvar.grab_focus()
+
+	# Mira da arma por cima de tudo
+	var camada := CanvasLayer.new()
+	camada.layer = 50
+	add_child(camada)
+	_mira = Control.new()
+	_mira.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_mira.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_mira.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	_mira.draw.connect(_desenhar_mira)
+	camada.add_child(_mira)
+
+
+func _secao(pai: Control, texto: String) -> void:
+	var r := _rotulo(texto, 19, COR_DESTAQUE)
+	r.custom_minimum_size.y = 28
+	r.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
+	pai.add_child(r)
+
+
+## Cartão de uma linha: título (e dica) à esquerda, controles à direita.
+func _linha(pai: Control, titulo: String, dica: String) -> HBoxContainer:
+	var cartao := PanelContainer.new()
 	var estilo := StyleBoxFlat.new()
-	estilo.bg_color = Color(0.02, 0.02, 0.03, 0.98)
-	estilo.border_color = Color(1.0, 0.02, 0.02, 1.0)
-	estilo.border_width_left = 4
-	estilo.border_width_top = 4
-	estilo.border_width_right = 4
-	estilo.border_width_bottom = 4
-	estilo.corner_radius_top_left = 28
-	estilo.corner_radius_top_right = 28
-	estilo.corner_radius_bottom_left = 28
-	estilo.corner_radius_bottom_right = 28
-	Leve.stylebox(root_panel, "panel", estilo)
-
-	titulo = Label.new()
-	titulo.text = "ADMINISTRAÇÃO DO JOGO"
-	titulo.position = Vector2(40, 30)
-	titulo.size = Vector2(900, 70)
-	titulo.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	titulo.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	Leve.font_size(titulo, "font_size", 44)
-	Leve.color(titulo, "font_color", Color.WHITE)
-	Leve.color(titulo, "font_outline_color", Color(0.9, 0.0, 0.0))
-	Leve.constant(titulo, "outline_size", 7)
-	root_panel.add_child(titulo)
-
-	grid = GridContainer.new()
-	grid.columns = 1
-	grid.position = Vector2(60, 130)
-	grid.size = Vector2(860, 890)
-	Leve.constant(grid, "v_separation", 15)
-	root_panel.add_child(grid)
-
-	campo_tempo_partida = _add_linha_numero("TEMPO DA PARTIDA", tempo_partida, 30, 300, 10, func(v): tempo_partida = v)
-	campo_tempo_modal_final = _add_linha_numero("TEMPO MODAL FINAL", tempo_modal_final, 5, 60, 1, func(v): tempo_modal_final = v)
-	campo_tempo_ranking_nome = _add_linha_numero("TEMPO PARA NOME NO RANKING", tempo_ranking_nome, 10, 120, 5, func(v): tempo_ranking_nome = v)
-	campo_tempo_intro_main = _add_linha_numero("TEMPO INTRO DA MAIN", tempo_intro_main, 5, 120, 5, func(v): tempo_intro_main = v)
-	campo_tempo_teaser = _add_linha_numero("TEMPO DE CADA TEASER", tempo_teaser, 5, 60, 5, func(v): tempo_teaser = v)
-	campo_volume_musica = _add_linha_float("VOLUME MÚSICA DB", volume_musica, -40.0, 10.0, 1.0, func(v): volume_musica = v)
-	campo_volume_fx = _add_linha_float("VOLUME EFEITOS DB", volume_fx, -40.0, 15.0, 1.0, func(v): volume_fx = v)
-	campo_demo_ativa = _add_linha_bool("DEMO AUTOMÁTICA", demo_ativa, func(v): demo_ativa = v)
-	campo_ranking_ativo = _add_linha_bool("RANKING ATIVO", ranking_ativo, func(v): ranking_ativo = v)
-	campo_dificuldade = _add_linha_dificuldade()
-	campo_idioma = _add_linha_idioma()
-
-	var btn_salvar := _criar_botao("SALVAR CONFIGURAÇÕES", Color(0.0, 0.45, 0.16, 1.0))
-	btn_salvar.position = Vector2(90, 1040)
-	btn_salvar.size = Vector2(360, 70)
-	btn_salvar.pressed.connect(_salvar_config)
-	root_panel.add_child(btn_salvar)
-
-	var btn_padrao := _criar_botao("RESTAURAR PADRÃO", Color(0.35, 0.22, 0.0, 1.0))
-	btn_padrao.position = Vector2(530, 1040)
-	btn_padrao.size = Vector2(360, 70)
-	btn_padrao.pressed.connect(_restaurar_padrao)
-	root_panel.add_child(btn_padrao)
-
-	var btn_voltar := _criar_botao("VOLTAR", Color(0.55, 0.0, 0.0, 1.0))
-	btn_voltar.position = Vector2(310, 1130)
-	btn_voltar.size = Vector2(360, 70)
-	btn_voltar.pressed.connect(_voltar_main)
-	root_panel.add_child(btn_voltar)
-
-	status_label = Label.new()
-	status_label.position = Vector2(60, 1210)
-	status_label.size = Vector2(860, 38)
-	status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	status_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	Leve.font_size(status_label, "font_size", 22)
-	Leve.color(status_label, "font_color", Color(0.25, 1.0, 0.45))
-	root_panel.add_child(status_label)
-
-	_criar_toast()
-
-
-func _add_linha_numero(nome: String, valor: int, minimo: int, maximo: int, passo: int, callback: Callable) -> SpinBox:
+	estilo.bg_color = COR_CARTAO
+	estilo.set_corner_radius_all(14)
+	estilo.content_margin_left = 20
+	estilo.content_margin_right = 12
+	estilo.content_margin_top = 4
+	estilo.content_margin_bottom = 4
+	cartao.add_theme_stylebox_override("panel", estilo)
+	pai.add_child(cartao)
 	var linha := HBoxContainer.new()
-	linha.custom_minimum_size = Vector2(860, 60)
-	Leve.constant(linha, "separation", 18)
-	grid.add_child(linha)
-
-	var lbl := _criar_label(nome)
-	linha.add_child(lbl)
-
-	var spin := SpinBox.new()
-	spin.min_value = minimo
-	spin.max_value = maximo
-	spin.step = passo
-	spin.value = valor
-	spin.custom_minimum_size = Vector2(210, 54)
-	Leve.font_size(spin, "font_size", 24)
-	spin.value_changed.connect(func(v): callback.call(int(v)))
-	linha.add_child(spin)
-
-	return spin
+	linha.add_theme_constant_override("separation", 10)
+	cartao.add_child(linha)
+	var textos := VBoxContainer.new()
+	textos.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	textos.alignment = BoxContainer.ALIGNMENT_CENTER
+	textos.add_theme_constant_override("separation", -4)
+	linha.add_child(textos)
+	textos.add_child(_rotulo(titulo, 26, COR_TEXTO))
+	if dica != "":
+		textos.add_child(_rotulo(dica, 16, COR_APAGADO))
+	return linha
 
 
-func _add_linha_float(nome: String, valor: float, minimo: float, maximo: float, passo: float, callback: Callable) -> SpinBox:
-	var linha := HBoxContainer.new()
-	linha.custom_minimum_size = Vector2(860, 60)
-	Leve.constant(linha, "separation", 18)
-	grid.add_child(linha)
-
-	var lbl := _criar_label(nome)
-	linha.add_child(lbl)
-
-	var spin := SpinBox.new()
-	spin.min_value = minimo
-	spin.max_value = maximo
-	spin.step = passo
-	spin.value = valor
-	spin.custom_minimum_size = Vector2(210, 54)
-	Leve.font_size(spin, "font_size", 24)
-	spin.value_changed.connect(func(v): callback.call(float(v)))
-	linha.add_child(spin)
-
-	return spin
+func _passos(pai: Control, titulo: String, dica: String, chave: String, minimo: int, maximo: int, passo: int, formato: Callable) -> HBoxContainer:
+	var linha := _linha(pai, titulo, dica)
+	var valor := _rotulo("", 30, COR_TEXTO)
+	valor.custom_minimum_size.x = 120
+	valor.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var mudar := func(d: int):
+		var v := clampi(int(Maquina.valor(chave)) + d, minimo, maximo)
+		Maquina.definir(chave, v)
+		_atualizar_tudo()
+	linha.add_child(_botao("−", func(): mudar.call(-passo), 34, COR_BOTAO, Vector2(74, 50)))
+	linha.add_child(valor)
+	linha.add_child(_botao("+", func(): mudar.call(passo), 34, COR_BOTAO, Vector2(74, 50)))
+	_atualizadores.append(func(): valor.text = formato.call(int(Maquina.valor(chave))))
+	return linha
 
 
-func _add_linha_bool(nome: String, valor: bool, callback: Callable) -> CheckButton:
-	var linha := HBoxContainer.new()
-	linha.custom_minimum_size = Vector2(860, 60)
-	Leve.constant(linha, "separation", 18)
-	grid.add_child(linha)
-
-	var lbl := _criar_label(nome)
-	linha.add_child(lbl)
-
-	var check := CheckButton.new()
-	check.button_pressed = valor
-	check.text = "ATIVO"
-	check.custom_minimum_size = Vector2(210, 54)
-	Leve.font_size(check, "font_size", 24)
-	check.toggled.connect(func(v): callback.call(v))
-	linha.add_child(check)
-
-	return check
+func _opcoes(pai: Control, titulo: String, dica: String, chave: String, lista: Array) -> HBoxContainer:
+	var linha := _linha(pai, titulo, dica)
+	for par in lista:
+		var v = par[0]
+		var b := _botao(par[1], func():
+			Maquina.definir(chave, v)
+			_atualizar_tudo(), 22, COR_BOTAO, Vector2(170, 50))
+		b.toggle_mode = true
+		linha.add_child(b)
+		_atualizadores.append(func(): b.set_pressed_no_signal(Maquina.valor(chave) == v))
+	return linha
 
 
-func _add_linha_dificuldade() -> OptionButton:
-	var linha := HBoxContainer.new()
-	linha.custom_minimum_size = Vector2(860, 60)
-	Leve.constant(linha, "separation", 18)
-	grid.add_child(linha)
-
-	var lbl := _criar_label("DIFICULDADE PADRÃO")
-	linha.add_child(lbl)
-
-	var opt := OptionButton.new()
-	opt.custom_minimum_size = Vector2(210, 54)
-	Leve.font_size(opt, "font_size", 24)
-	opt.add_item("FÁCIL")
-	opt.add_item("DIFÍCIL")
-
-	opt.select(1 if dificuldade_padrao == "dificil" else 0)
-
-	opt.item_selected.connect(func(idx):
-		dificuldade_padrao = "dificil" if idx == 1 else "facil"
-	)
-
-	linha.add_child(opt)
-
-	return opt
+func _volume(pai: Control, titulo: String, chave: String) -> void:
+	var linha := _linha(pai, titulo, "")
+	var valor := _rotulo("", 30, COR_TEXTO)
+	valor.custom_minimum_size.x = 120
+	valor.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var mudar := func(d: int):
+		var p := clampi(_db_para_pct(float(Maquina.valor(chave))) + d, 0, 100)
+		Maquina.definir(chave, _pct_para_db(p))
+		Maquina.aplicar()
+		_atualizar_tudo()
+	linha.add_child(_botao("−", func(): mudar.call(-10), 34, COR_BOTAO, Vector2(74, 50)))
+	linha.add_child(valor)
+	linha.add_child(_botao("+", func(): mudar.call(10), 34, COR_BOTAO, Vector2(74, 50)))
+	_atualizadores.append(func(): valor.text = "%d%%" % _db_para_pct(float(Maquina.valor(chave))))
 
 
-func _add_linha_idioma() -> OptionButton:
-	var linha := HBoxContainer.new()
-	linha.custom_minimum_size = Vector2(860, 60)
-	Leve.constant(linha, "separation", 18)
-	grid.add_child(linha)
-
-	var lbl := _criar_label("IDIOMA")
-	linha.add_child(lbl)
-
-	var opt := OptionButton.new()
-	opt.custom_minimum_size = Vector2(210, 54)
-	Leve.font_size(opt, "font_size", 22)
-
-	opt.add_item("PORTUGUÊS BR")
-	opt.add_item("ENGLISH")
-	opt.add_item("ESPAÑOL")
-
-	if idioma == "en":
-		opt.select(1)
-	elif idioma == "es":
-		opt.select(2)
-	else:
-		opt.select(0)
-
-	opt.item_selected.connect(func(idx):
-		if idx == 1:
-			idioma = "en"
-		elif idx == 2:
-			idioma = "es"
-		else:
-			idioma = "pt_br"
-	)
-
-	linha.add_child(opt)
-
-	return opt
+func _aprender(pai: Control, titulo: String, dica: String, qual: String) -> void:
+	var linha := _linha(pai, titulo, dica)
+	var valor := _rotulo("", 24, COR_TEXTO)
+	valor.custom_minimum_size.x = 250
+	valor.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	linha.add_child(valor)
+	_rotulos_botao[qual] = valor
+	linha.add_child(_botao("APRENDER", func():
+		_aprendendo = qual
+		_aprender_t = 8.0
+		_mostrar_aviso("Aperte agora o botão %s na Zero Delay..." % qual.to_upper(), COR_DESTAQUE), 22, COR_BOTAO, Vector2(190, 50)))
+	_atualizadores.append(func():
+		if _aprendendo != qual:
+			valor.text = "BOTÃO %d" % int(Maquina.valor("botoes/" + qual)))
 
 
-func _criar_label(texto: String) -> Label:
-	var lbl := Label.new()
-	lbl.text = texto
-	lbl.custom_minimum_size = Vector2(610, 54)
-	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	Leve.font_size(lbl, "font_size", 25)
-	Leve.color(lbl, "font_color", Color.WHITE)
-	Leve.color(lbl, "font_outline_color", Color.BLACK)
-	Leve.constant(lbl, "outline_size", 4)
-	return lbl
+func _rotulo(texto: String, tamanho: int, cor: Color) -> Label:
+	var r := Label.new()
+	r.text = texto
+	r.add_theme_font_size_override("font_size", tamanho)
+	r.add_theme_color_override("font_color", cor)
+	r.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return r
 
 
-func _criar_botao(texto: String, cor: Color) -> Button:
-	var btn := Button.new()
-	btn.text = texto
-	btn.focus_mode = Control.FOCUS_NONE
-	Leve.font_size(btn, "font_size", 28)
-	Leve.color(btn, "font_color", Color.WHITE)
-	Leve.color(btn, "font_hover_color", Color.WHITE)
-	Leve.color(btn, "font_pressed_color", Color.WHITE)
-	Leve.color(btn, "font_outline_color", Color.BLACK)
-	Leve.constant(btn, "outline_size", 5)
-
-	var normal := StyleBoxFlat.new()
-	normal.bg_color = cor
-	normal.border_color = Color.WHITE
-	normal.border_width_left = 2
-	normal.border_width_top = 2
-	normal.border_width_right = 2
-	normal.border_width_bottom = 2
-	normal.corner_radius_top_left = 22
-	normal.corner_radius_top_right = 22
-	normal.corner_radius_bottom_left = 22
-	normal.corner_radius_bottom_right = 22
-
-	var hover := normal.duplicate() as StyleBoxFlat
-	hover.bg_color = Color(1.0, 0.02, 0.02, 1.0)
-	hover.border_color = Color.WHITE
-
-	Leve.stylebox(btn, "normal", normal)
-	Leve.stylebox(btn, "hover", hover)
-	Leve.stylebox(btn, "pressed", hover)
-
-	return btn
+func _botao(texto: String, acao: Callable, tamanho: int = 24, cor: Color = COR_BOTAO, minimo: Vector2 = Vector2.ZERO) -> Button:
+	var b := Button.new()
+	b.text = texto
+	b.focus_mode = Control.FOCUS_ALL
+	b.custom_minimum_size = minimo
+	# A arma pode mandar o gatilho como clique direito.
+	b.button_mask = MOUSE_BUTTON_MASK_LEFT | MOUSE_BUTTON_MASK_RIGHT
+	b.add_theme_font_size_override("font_size", tamanho)
+	b.add_theme_color_override("font_color", COR_TEXTO)
+	b.add_theme_color_override("font_hover_color", Color.WHITE)
+	b.add_theme_color_override("font_pressed_color", Color.WHITE)
+	b.add_theme_color_override("font_hover_pressed_color", Color.WHITE)
+	b.add_theme_color_override("font_focus_color", Color.WHITE)
+	b.add_theme_stylebox_override("normal", _estilo(cor))
+	b.add_theme_stylebox_override("hover", _estilo(cor.lightened(0.18), Color(1, 1, 1, 0.5)))
+	b.add_theme_stylebox_override("pressed", _estilo(COR_DESTAQUE if cor == COR_BOTAO else cor.lightened(0.25)))
+	b.add_theme_stylebox_override("hover_pressed", _estilo(COR_DESTAQUE.lightened(0.12), Color(1, 1, 1, 0.5)))
+	b.add_theme_stylebox_override("focus", _estilo(Color(0, 0, 0, 0), Color(1, 1, 1, 0.85)))
+	b.pressed.connect(func():
+		_piscar(b)
+		acao.call())
+	_botoes.append(b)
+	return b
 
 
-func _criar_toast() -> void:
-	toast_label = Label.new()
-	toast_label.visible = false
-	toast_label.modulate.a = 0.0
-	toast_label.text = ""
-	toast_label.position = Vector2(190, 930)
-	toast_label.size = Vector2(600, 60)
-	toast_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	toast_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	Leve.font_size(toast_label, "font_size", 26)
-	Leve.color(toast_label, "font_color", Color.WHITE)
-	Leve.color(toast_label, "font_outline_color", Color.BLACK)
-	Leve.constant(toast_label, "outline_size", 5)
-
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.0, 0.42, 0.16, 0.94)
-	style.border_color = Color(0.55, 1.0, 0.68, 1.0)
-	style.border_width_left = 2
-	style.border_width_top = 2
-	style.border_width_right = 2
-	style.border_width_bottom = 2
-	style.corner_radius_top_left = 22
-	style.corner_radius_top_right = 22
-	style.corner_radius_bottom_left = 22
-	style.corner_radius_bottom_right = 22
-	Leve.stylebox(toast_label, "normal", style)
-
-	root_panel.add_child(toast_label)
+func _estilo(cor: Color, borda: Color = Color(0, 0, 0, 0)) -> StyleBoxFlat:
+	var e := StyleBoxFlat.new()
+	e.bg_color = cor
+	e.set_corner_radius_all(12)
+	e.content_margin_left = 14
+	e.content_margin_right = 14
+	e.content_margin_top = 6
+	e.content_margin_bottom = 6
+	if borda.a > 0.0:
+		e.set_border_width_all(3)
+		e.border_color = borda
+	return e
 
 
-func _mostrar_toast(texto: String) -> void:
-	if toast_label == null:
+func _piscar(b: Button) -> void:
+	b.pivot_offset = b.size * 0.5
+	b.scale = Vector2(0.92, 0.92)
+	var tw := create_tween()
+	tw.tween_property(b, "scale", Vector2.ONE, 0.18).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+
+
+# ================================================================ estado
+func _atualizar_tudo() -> void:
+	for f in _atualizadores:
+		f.call()
+	_rotulo_contadores.text = "FICHAS %04d   ·   PARTIDAS %04d" % [int(Maquina.valor("maquina/total_fichas")), int(Maquina.valor("maquina/total_partidas"))]
+
+
+func _mostrar_aviso(texto: String, cor: Color) -> void:
+	_aviso.text = texto
+	_aviso.add_theme_color_override("font_color", cor)
+
+
+## Ações perigosas pedem um segundo tiro em até 3 s.
+func _com_confirmacao(nome: String, acao: Callable) -> void:
+	var agora := Time.get_ticks_msec()
+	if _confirmar.get(nome, 0) > agora:
+		_confirmar.erase(nome)
+		acao.call()
 		return
-
-	if toast_tween != null:
-		toast_tween.kill()
-
-	toast_label.text = texto
-	toast_label.visible = true
-	toast_label.modulate.a = 0.0
-	toast_label.scale = Vector2(0.94, 0.94)
-
-	toast_tween = create_tween()
-	toast_tween.tween_property(toast_label, "modulate:a", 1.0, 0.18)
-	toast_tween.parallel().tween_property(toast_label, "scale", Vector2.ONE, 0.18)
-	toast_tween.tween_interval(1.55)
-	toast_tween.tween_property(toast_label, "modulate:a", 0.0, 0.22)
-	toast_tween.tween_callback(func():
-		if toast_label != null:
-			toast_label.visible = false
-	)
+	_confirmar[nome] = agora + 3000
+	_mostrar_aviso("Atire de novo para confirmar", COR_DESTAQUE)
 
 
-func _restaurar_padrao() -> void:
-	tempo_partida = PADRAO_TEMPO_PARTIDA
-	tempo_modal_final = PADRAO_TEMPO_MODAL_FINAL
-	tempo_ranking_nome = PADRAO_TEMPO_RANKING_NOME
-	tempo_intro_main = PADRAO_TEMPO_INTRO_MAIN
-	tempo_teaser = PADRAO_TEMPO_TEASER
-	volume_musica = PADRAO_VOLUME_MUSICA
-	volume_fx = PADRAO_VOLUME_FX
-	demo_ativa = PADRAO_DEMO_ATIVA
-	ranking_ativo = PADRAO_RANKING_ATIVO
-	dificuldade_padrao = PADRAO_DIFICULDADE
-	idioma = PADRAO_IDIOMA
-
-	if campo_tempo_partida != null:
-		campo_tempo_partida.value = tempo_partida
-	if campo_tempo_modal_final != null:
-		campo_tempo_modal_final.value = tempo_modal_final
-	if campo_tempo_ranking_nome != null:
-		campo_tempo_ranking_nome.value = tempo_ranking_nome
-	if campo_tempo_intro_main != null:
-		campo_tempo_intro_main.value = tempo_intro_main
-	if campo_tempo_teaser != null:
-		campo_tempo_teaser.value = tempo_teaser
-	if campo_volume_musica != null:
-		campo_volume_musica.value = volume_musica
-	if campo_volume_fx != null:
-		campo_volume_fx.value = volume_fx
-	if campo_demo_ativa != null:
-		campo_demo_ativa.button_pressed = demo_ativa
-	if campo_ranking_ativo != null:
-		campo_ranking_ativo.button_pressed = ranking_ativo
-	if campo_dificuldade != null:
-		campo_dificuldade.select(0)
-	if campo_idioma != null:
-		campo_idioma.select(0)
-
-	_salvar_config()
-	_mostrar_toast("VALORES PADRÕES RESTAURADOS!")
+func _salvar_e_sair() -> void:
+	if _saindo:
+		return
+	_saindo = true
+	Maquina.salvar()
+	Maquina.aplicar()
+	_mostrar_aviso("Configurações salvas!", COR_OK)
+	TransicaoGlobal.trocar_cena(cena_voltar if ResourceLoader.exists(cena_voltar) else CENA_SAIDA)
 
 
-func _atualizar_status() -> void:
-	if status_label != null:
-		status_label.text = "CONFIGURAÇÕES SALVAS EM: " + CONFIG_PATH
+func _sair_sem_salvar() -> void:
+	if _saindo:
+		return
+	_saindo = true
+	Maquina.cfg = ConfigFile.new()
+	Maquina.cfg.load(Maquina.CONFIG)
+	Maquina.aplicar()
+	TransicaoGlobal.trocar_cena(cena_voltar if ResourceLoader.exists(cena_voltar) else CENA_SAIDA)
 
 
-func _voltar_main() -> void:
-	_salvar_config()
+static func _db_para_pct(db: float) -> int:
+	if db <= -60.0:
+		return 0
+	return clampi(int(round(db_to_linear(db) * 10.0)) * 10, 0, 100)
 
-	if cena_voltar != "" and ResourceLoader.exists(cena_voltar):
-		get_tree().change_scene_to_file(cena_voltar)
-	else:
-		get_tree().change_scene_to_file("res://scenes/main.tscn")
+
+static func _pct_para_db(p: int) -> float:
+	if p <= 0:
+		return -80.0
+	return linear_to_db(float(p) / 100.0)
+
+
+# ================================================================ entrada
+func _input(event: InputEvent) -> void:
+	# Aprendendo um botão: o próximo botão do controle vira o START/SELECT.
+	if _aprendendo != "":
+		if event is InputEventJoypadButton and (event as InputEventJoypadButton).pressed:
+			var idx := (event as InputEventJoypadButton).button_index
+			Maquina.definir("botoes/" + _aprendendo, idx)
+			Maquina.aplicar()
+			_mostrar_aviso("Botão %s = BOTÃO %d  (salve para valer sempre)" % [_aprendendo.to_upper(), idx], COR_OK)
+			_aprendendo = ""
+			_atualizar_tudo()
+			get_viewport().set_input_as_handled()
+			return
+		if event is InputEventKey and (event as InputEventKey).pressed and (event as InputEventKey).keycode == KEY_ESCAPE:
+			_aprendendo = ""
+			_mostrar_aviso("", COR_APAGADO)
+			_atualizar_tudo()
+			get_viewport().set_input_as_handled()
+			return
+
+	if event is InputEventKey:
+		var k := event as InputEventKey
+		if k.pressed and not k.echo and (k.keycode == KEY_F10 or k.keycode == KEY_ESCAPE):
+			_salvar_e_sair()
+			get_viewport().set_input_as_handled()
+			return
+
+	# Gatilho da arma pelo controle (input_shot): aperta o botão sob a mira.
+	if InputMap.has_action("input_shot") and event.is_action_pressed("input_shot"):
+		var p := Tela.mouse()
+		for b in _botoes:
+			if b.is_visible_in_tree() and b.get_global_rect().has_point(p):
+				b.pressed.emit()
+				break
+		get_viewport().set_input_as_handled()
+
+
+func _process(delta: float) -> void:
+	if _aprendendo != "":
+		_aprender_t -= delta
+		var r: Label = _rotulos_botao.get(_aprendendo)
+		if r != null:
+			r.text = "APERTE..." if fmod(_aprender_t, 0.8) > 0.4 else ""
+		if _aprender_t <= 0.0:
+			_aprendendo = ""
+			_mostrar_aviso("Nenhum botão apertado", COR_APAGADO)
+			_atualizar_tudo()
+	_mira.queue_redraw()
+
+
+func _desenhar_mira() -> void:
+	Pincel.mira(_mira, Tela.mouse(), 18.0, 8.0, COR_DESTAQUE, Color(1, 1, 1, 0.85))

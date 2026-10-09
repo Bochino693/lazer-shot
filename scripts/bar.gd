@@ -4,7 +4,7 @@ var erros_seguidos: int = 0
 
 var chat_rodape_panel: Panel = null
 
-const FONTE_ORBITRON: String = "res://fonts/Orbitron-Bold.ttf"
+const FONTE_TEXTO: String = "res://fonts/Exo2-Bold.ttf"
 const FONTE_LUCKIEST: String = "res://fonts/LuckiestGuy-Regular.ttf"
 
 const COR_NEON_BAR: Color = Color(0.20, 1.0, 0.32, 1.0)
@@ -24,6 +24,8 @@ var ranking_input_delay: float = 0.18
 var ranking_backspace_trava: float = 0.0
 
 const RankingManagerScript := preload("res://scripts/RankingManager.gd")
+const Estilhacos := preload("res://scripts/estilhacos.gd")
+const Pincel := preload("res://scripts/pincel.gd")
 var ranking_manager := RankingManagerScript.new()
 
 var ranking_nome_layer: CanvasLayer = null
@@ -355,6 +357,8 @@ var garrafas_pos_base: Vector2 = Vector2.ZERO
 func _ready() -> void:
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 	randomize()
+	# Efeitos do _draw usam o Pincel (textura com mipmaps).
+	texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 
 	_aplicar_sensibilidade_global()
 	_criar_camadas_estaticas()
@@ -409,6 +413,7 @@ func _ready() -> void:
 	_configurar_intro_comeco()
 	_ajustar_fundo_full()
 	_criar_mascara_topo()
+	_criar_luz_do_sol()
 
 	if fundo != null:
 		fundo_pos_base = fundo.position
@@ -517,7 +522,7 @@ func _sair_demo_para_main() -> void:
 
 	demo_ativo = false
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
-	get_tree().change_scene_to_file(cena_main_menu)
+	TransicaoGlobal.trocar_cena(cena_main_menu)
 
 
 func _obter_vida_individual_por_pontos(pontos: int) -> float:
@@ -873,7 +878,7 @@ func _processar_tiro_global(pos_global: Vector2) -> void:
 	var garrafa_acertada: Area2D = _detectar_garrafa_no_ponto(pos_global)
 
 	if garrafa_acertada != null:
-		_processar_acerto_alvo(garrafa_acertada)
+		_processar_acerto_alvo(garrafa_acertada, pos_global)
 		queue_redraw()
 		return
 
@@ -893,7 +898,7 @@ func _processar_tiro_global(pos_global: Vector2) -> void:
 
 
 
-func _processar_acerto_alvo(alvo: Area2D) -> void:
+func _processar_acerto_alvo(alvo: Area2D, pos_tiro: Vector2 = Vector2.INF) -> void:
 	if alvo == null or not is_instance_valid(alvo):
 		return
 	if alvo.get("ja_acertado") == true:
@@ -913,13 +918,10 @@ func _processar_acerto_alvo(alvo: Area2D) -> void:
 	var id_slot: String = _texto(alvo.get_meta("slot_id", ""), "")
 	_liberar_slot_por_id(id_slot)
 
-	var anim: AnimatedSprite2D = _obter_anim_garrafa(alvo)
-	if anim != null:
-		anim.scale = Vector2.ONE
-		if anim.sprite_frames != null and anim.sprite_frames.has_animation("hit"):
-			anim.play("hit")
-
-	_animar_alvo_sentindo_tiro(alvo)
+	# A garrafa vira cacos da própria imagem, rachando a partir do tiro.
+	if pos_tiro == Vector2.INF:
+		pos_tiro = pos_global
+	_estourar_garrafa(alvo, pos_tiro, _obter_cor_liquido_por_alvo(tipo_alvo, pontos))
 
 	if tipo_alvo == "garrafa_falsa":
 		erros_seguidos += 1
@@ -930,12 +932,7 @@ func _processar_acerto_alvo(alvo: Area2D) -> void:
 		_resetar_combo()
 
 		_tocar_som_erro()
-		_registrar_fx_vidro_colorido(
-			pos_global,
-			_obter_cor_vidro_por_pontos(0),
-			_obter_cor_liquido_por_alvo("garrafa_falsa", 0)
-		)
-		_registrar_fx_impacto(pos_global)
+		_registrar_fx_impacto(pos_tiro)
 		_set_status_erro("GARRAFA IMPOSTORA  -%d" % perda_impostora)
 		_marcar_hud_sujo()
 
@@ -952,12 +949,7 @@ func _processar_acerto_alvo(alvo: Area2D) -> void:
 
 	_registrar_combo_acerto()
 	_tocar_vidro_apos_tiro()
-	_registrar_fx_vidro_colorido(
-		pos_global,
-		_obter_cor_vidro_por_pontos(pontos),
-		_obter_cor_liquido_por_alvo(tipo_alvo, pontos)
-	)
-	_registrar_fx_impacto(pos_global)
+	_registrar_fx_impacto(pos_tiro)
 
 	_set_status_neutro("%s  +%d" % [_obter_nome_garrafa_por_pontos(pontos), pontos])
 	_marcar_hud_sujo()
@@ -981,6 +973,25 @@ func _obter_nome_garrafa_por_pontos(pontos: int) -> String:
 			return "GIN"
 		_:
 			return "GARRAFA"
+
+
+func _estourar_garrafa(alvo: Area2D, pos_tiro: Vector2, cor_liquido: Color) -> void:
+	var anim: AnimatedSprite2D = _obter_anim_garrafa(alvo)
+	if anim == null or anim.sprite_frames == null:
+		return
+	var nome: StringName = anim.animation
+	if not anim.sprite_frames.has_animation(nome):
+		nome = &"idle"
+	if not anim.sprite_frames.has_animation(nome) or anim.sprite_frames.get_frame_count(nome) <= 0:
+		return
+	var quadro: Texture2D = anim.sprite_frames.get_frame_texture(nome, clampi(anim.frame, 0, anim.sprite_frames.get_frame_count(nome) - 1))
+	var imagem: Image = null
+	if quadro is AtlasTexture and (quadro as AtlasTexture).atlas != null:
+		imagem = _imagem_em_cache((quadro as AtlasTexture).atlas)
+	elif quadro != null:
+		imagem = _imagem_em_cache(quadro)
+	Estilhacos.quebrar(self, anim, quadro, imagem, pos_tiro, cor_liquido)
+	anim.visible = false
 
 
 func _animar_alvo_sentindo_tiro(alvo: Area2D) -> void:
@@ -1941,6 +1952,15 @@ func _call_tocar_vidro_apos_tiro_async() -> void:
 func _tocar_vidro_apos_tiro_async() -> void:
 	await get_tree().create_timer(0.07).timeout
 	_tocar_som_acerto()
+
+
+func _criar_luz_do_sol() -> void:
+	if fundo == null or fundo.get_node_or_null("Sol") != null:
+		return
+	var sol := Node2D.new()
+	sol.name = "Sol"
+	sol.set_script(load("res://scripts/bar_sol.gd"))
+	fundo.add_child(sol)
 
 
 func _criar_fundo_preenchimento() -> void:
@@ -3015,6 +3035,7 @@ func _criar_camadas_estaticas() -> void:
 
 	_camada_marcas = Node2D.new()
 	_camada_marcas.name = "CamadaMarcasTiro"
+	_camada_marcas.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	_camada_marcas.show_behind_parent = true
 	add_child(_camada_marcas)
 	_camada_marcas.draw.connect(_desenhar_marcas_erro)
@@ -3335,7 +3356,7 @@ func _confirmar_nome_ranking(usar_anonimo: bool = false) -> void:
 		fim_countdown_label.text = "VOLTANDO AO MENU EM %02d" % int(ceil(tempo_fim_menu))
 
 	if fim_insert_coin_label != null:
-		fim_insert_coin_label.text = "APERTE START PARA JOGAR NOVAMENTE"
+		fim_insert_coin_label.text = Maquina.texto_jogar_novamente()
 
 	_posicionar_modal_final()
 	_animar_texto_record_salvo_temporario(nome_final)
@@ -3440,47 +3461,15 @@ func _ajustar_modal_nome_ranking() -> void:
 
 
 func _desenhar_marcas_erro() -> void:
+	# Furo de bala na madeira: uma forma pronta do Pincel por marca (antes
+	# eram 8 desenhos por furo, e ficam até 80 furos na tela).
 	for marca in marcas_erro:
 		var pos: Vector2 = Vector2(marca.get("pos", Vector2.ZERO))
-		var raio: float = float(marca.get("raio", 8.0))
-		var anel: float = float(marca.get("anel", 14.0))
 		var poeira: float = float(marca.get("poeira", 20.0))
 		var dx: float = float(marca.get("desvio_x", 0.0))
 		var dy: float = float(marca.get("desvio_y", 0.0))
-
-		var centro := pos + Vector2(dx, dy)
-
-		_camada_marcas.draw_circle(centro, poeira, Color(0.08, 0.04, 0.02, 0.10))
-		_camada_marcas.draw_circle(centro, anel, Color(0.14, 0.08, 0.04, 0.18))
-		_camada_marcas.draw_circle(centro, raio + 2.2, Color(0.34, 0.18, 0.07, 0.30))
-		_camada_marcas.draw_circle(centro, raio + 0.8, Color(0.22, 0.11, 0.05, 0.46))
-		_camada_marcas.draw_circle(centro, raio * 0.72, Color(0.025, 0.020, 0.018, 0.96))
-
-		_camada_marcas.draw_line(
-			centro + Vector2(-raio * 0.9, -1.0),
-			centro + Vector2(raio * 0.7, 0.5),
-			Color(0.45, 0.27, 0.12, 0.20),
-			1.2,
-			true
-		)
-		_camada_marcas.draw_line(
-			centro + Vector2(-1.0, -raio * 0.8),
-			centro + Vector2(1.0, raio * 0.7),
-			Color(0.40, 0.24, 0.10, 0.14),
-			1.0,
-			true
-		)
-
-		_camada_marcas.draw_arc(
-			centro + Vector2(0.5, 0.8),
-			raio * 0.92,
-			0.15,
-			PI + 0.55,
-			18,
-			Color(0.0, 0.0, 0.0, 0.22),
-			1.2,
-			true
-		)
+		var giro: float = (dx * 1.7 + dy * 2.3) * PI
+		Pincel.forma(_camada_marcas, Pincel.FURO, pos + Vector2(dx, dy), poeira, Color.WHITE, giro)
 
 
 func _desenhar_fx_madeira() -> void:
@@ -3498,9 +3487,8 @@ func _desenhar_fx_madeira() -> void:
 		if dir.length() < 0.01:
 			dir = Vector2.RIGHT
 
-		var fim: Vector2 = pos - dir * tam
-		draw_line(pos, fim, Color(0.74, 0.46, 0.18, 0.90 * alpha), 2.0, true)
-		draw_circle(pos, 1.2 + (1.0 - t) * 1.2, Color(0.95, 0.74, 0.34, 0.65 * alpha))
+		# Farpa de madeira voando
+		Pincel.lasca(self, pos - dir * tam * 0.5, Vector2(tam * 0.55, 1.4 + (1.0 - t) * 0.8), dir.angle(), Color(0.74, 0.46, 0.18, 0.90 * alpha))
 
 
 func _desenhar_fx_vidro() -> void:
@@ -3515,46 +3503,16 @@ func _desenhar_fx_vidro() -> void:
 		var t: float = clamp(idade / vida, 0.0, 1.0)
 		var alpha: float = 1.0 - t
 
-		var pts: PackedVector2Array = PackedVector2Array([
-			Vector2(-tam.x, -tam.y * 0.28).rotated(rot) + pos,
-			Vector2(-tam.x * 0.24, -tam.y).rotated(rot) + pos,
-			Vector2(tam.x * 0.82, -tam.y * 0.12).rotated(rot) + pos,
-			Vector2(tam.x * 0.28, tam.y).rotated(rot) + pos,
-			Vector2(-tam.x * 0.86, tam.y * 0.44).rotated(rot) + pos
-		])
-
 		var cor_base: Color = Color(0.90, 1.0, 0.95, 1.0)
 		if typeof(fx.get("cor", null)) == TYPE_COLOR:
 			cor_base = fx.get("cor")
 
-		var cor_fill: Color
-		var cor_linha: Color
-		
 		if tipo == "gota":
-			var r: float = max(tam.x, tam.y)
-			draw_circle(pos, r + 2.0, Color(cor_base.r, cor_base.g, cor_base.b, 0.16 * alpha))
-			draw_circle(pos, r, Color(cor_base.r, cor_base.g, cor_base.b, 0.72 * alpha))
-			draw_circle(pos + Vector2(-r * 0.25, -r * 0.25), max(1.0, r * 0.28), Color(1.0, 1.0, 1.0, 0.42 * alpha))
+			Pincel.circulo(self, pos, max(tam.x, tam.y), Color(cor_base.r, cor_base.g, cor_base.b, 0.72 * alpha))
 			continue
 
-		if tipo == "pequeno":
-			cor_fill = Color(cor_base.r, cor_base.g, cor_base.b, 0.30 * alpha)
-			cor_linha = Color(1.0, 1.0, 1.0, 0.72 * alpha)
-		else:
-			cor_fill = Color(cor_base.r, cor_base.g, cor_base.b, 0.42 * alpha)
-			cor_linha = Color(
-				min(cor_base.r + 0.18, 1.0),
-				min(cor_base.g + 0.18, 1.0),
-				min(cor_base.b + 0.18, 1.0),
-				0.96 * alpha
-			)
-
-		draw_colored_polygon(pts, cor_fill)
-		draw_polyline(pts, cor_linha, 1.8, true)
-
-		if tipo == "grande":
-			draw_line(pts[0], pts[2], Color(1.0, 1.0, 1.0, 0.22 * alpha), 1.0, true)
-
+		var a: float = 0.55 if tipo == "pequeno" else 0.75
+		Pincel.lasca(self, pos, tam, rot, Color(cor_base.r, cor_base.g, cor_base.b, a * alpha))
 
 
 func _registrar_fx_impacto(pos: Vector2) -> void:
@@ -3594,9 +3552,9 @@ func _desenhar_fx_impacto() -> void:
 		var raio_1: float = lerp(raio_base, raio_base + 10.0, t)
 		var raio_2: float = lerp(raio_base * 0.45, raio_base + 4.0, t)
 
-		draw_circle(pos, raio_2, Color(1.0, 0.82, 0.45, 0.05 * alpha))
-		draw_arc(pos, raio_1, 0.0, TAU, 24, Color(0.30, 0.18, 0.08, 0.16 * alpha), 1.4, true)
-
+		# clarão do tiro + onda
+		Pincel.brilho(self, pos, raio_2 * 2.2, Color(1.0, 0.86, 0.55, 0.55 * alpha))
+		Pincel.anel(self, pos, raio_1, 1.4, Color(0.30, 0.18, 0.08, 0.16 * alpha))
 
 
 func _disparar_tremor(forca: float = 10.0, duracao: float = 0.18) -> void:
@@ -3674,7 +3632,7 @@ func _encerrar_jogo() -> void:
 		if entrou_ranking:
 			fim_insert_coin_label.text = "ATIRE NAS LETRAS PARA SALVAR O RECORDE"
 		else:
-			fim_insert_coin_label.text = "APERTE START PARA JOGAR NOVAMENTE"
+			fim_insert_coin_label.text = Maquina.texto_jogar_novamente()
 
 	if fim_countdown_label != null:
 		if entrou_ranking:
@@ -3838,6 +3796,9 @@ func _posicionar_modal_final() -> void:
 
 
 func _reiniciar_jogo() -> void:
+	# Modo crédito: só recomeça se houver crédito (desconta aqui).
+	if not Maquina.cobrar():
+		return
 	_parar_musica_fim()
 	_iniciar_musica_bar_em_loop()
 
@@ -3959,7 +3920,7 @@ func _retornar_para_menu() -> void:
 		return
 
 	Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
-	get_tree().change_scene_to_file(cena_main_menu)
+	TransicaoGlobal.trocar_cena(cena_main_menu)
 
 
 func _configurar_hud() -> void:
@@ -4391,6 +4352,7 @@ func _configurar_alvo_overlay() -> void:
 	alvo_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	alvo_overlay.z_index = 999
 	alvo_overlay.visible = not _modo_dificil_sem_mira()
+	alvo_overlay.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	alvo_layer.add_child(alvo_overlay)
 
 	alvo_overlay.draw.connect(_desenhar_alvo_overlay)
@@ -4426,14 +4388,15 @@ func _desenhar_alvo_overlay() -> void:
 	elif balas_no_cartucho <= alerta_baixa_municao_limite:
 		cor_ext = Color(1.0, 0.68, 0.18, 0.98)
 
-	alvo_overlay.draw_arc(alvo_pos, r1, 0.0, TAU, 36, cor_ext, 2.6, true)
-	alvo_overlay.draw_arc(alvo_pos, r2, 0.0, TAU, 28, cor_int, 1.2, true)
-	alvo_overlay.draw_circle(alvo_pos, 2.8, Color(1.0, 1.0, 1.0, 0.96))
+	var ov: CanvasItem = alvo_overlay
+	Pincel.anel(ov, alvo_pos, r1, 2.6, cor_ext)
+	Pincel.anel(ov, alvo_pos, r2, 1.2, cor_int)
+	Pincel.circulo(ov, alvo_pos, 2.8, Color(1.0, 1.0, 1.0, 0.96))
 
-	alvo_overlay.draw_line(alvo_pos + Vector2(-26, 0), alvo_pos + Vector2(-8, 0), cor_linha, 2.0, true)
-	alvo_overlay.draw_line(alvo_pos + Vector2(8, 0), alvo_pos + Vector2(26, 0), cor_linha, 2.0, true)
-	alvo_overlay.draw_line(alvo_pos + Vector2(0, -26), alvo_pos + Vector2(0, -8), cor_linha, 2.0, true)
-	alvo_overlay.draw_line(alvo_pos + Vector2(0, 8), alvo_pos + Vector2(0, 26), cor_linha, 2.0, true)
+	Pincel.linha(ov, alvo_pos + Vector2(-26, 0), alvo_pos + Vector2(-8, 0), cor_linha, 2.0)
+	Pincel.linha(ov, alvo_pos + Vector2(8, 0), alvo_pos + Vector2(26, 0), cor_linha, 2.0)
+	Pincel.linha(ov, alvo_pos + Vector2(0, -26), alvo_pos + Vector2(0, -8), cor_linha, 2.0)
+	Pincel.linha(ov, alvo_pos + Vector2(0, 8), alvo_pos + Vector2(0, 26), cor_linha, 2.0)
 
 	if recarregando:
 		var progresso: float = 1.0 - clamp(reload_tempo_restante / max(tempo_recarga_seg, 0.001), 0.0, 1.0)
@@ -4442,51 +4405,13 @@ func _desenhar_alvo_overlay() -> void:
 		var mira_reload_raio: float = 34.0
 		var mira_reload_espessura: float = 5.0
 
-		alvo_overlay.draw_arc(
-			alvo_pos,
-			mira_reload_raio,
-			0.0,
-			TAU,
-			64,
-			Color(0.10, 0.20, 0.28, 0.42),
-			mira_reload_espessura,
-			true
-		)
-
-		alvo_overlay.draw_arc(
-			alvo_pos,
-			mira_reload_raio,
-			inicio_ang,
-			fim_ang,
-			64,
-			Color(0.30, 0.94, 1.0, 1.0),
-			mira_reload_espessura,
-			true
-		)
-
-		alvo_overlay.draw_arc(
-			alvo_pos,
-			mira_reload_raio + 7.0,
-			inicio_ang,
-			fim_ang,
-			64,
-			Color(0.82, 0.98, 1.0, 0.55),
-			2.0,
-			true
-		)
+		Pincel.anel(ov, alvo_pos, mira_reload_raio, mira_reload_espessura, Color(0.10, 0.20, 0.28, 0.42))
+		Pincel.arco(ov, alvo_pos, mira_reload_raio, inicio_ang, fim_ang, Color(0.30, 0.94, 1.0, 1.0), mira_reload_espessura)
+		Pincel.arco(ov, alvo_pos, mira_reload_raio + 7.0, inicio_ang, fim_ang, Color(0.82, 0.98, 1.0, 0.55), 2.0)
 
 	elif balas_no_cartucho <= 0:
 		var pulso_alerta: float = 0.35 + (sin(aviso_recarga_t * 16.0) * 0.5 + 0.5) * 0.35
-		alvo_overlay.draw_arc(
-			alvo_pos,
-			32.0,
-			0.0,
-			TAU,
-			44,
-			Color(1.0, 0.15, 0.14, pulso_alerta),
-			4.0,
-			true
-		)
+		Pincel.anel(ov, alvo_pos, 32.0, 4.0, Color(1.0, 0.15, 0.14, pulso_alerta))
 
 
 
@@ -5893,8 +5818,8 @@ func _carregar_config_admin_jogo() -> void:
 
 
 func _carregar_fontes_ui() -> void:
-	if ResourceLoader.exists(FONTE_ORBITRON):
-		fonte_orbitron = load(FONTE_ORBITRON) as FontFile
+	if ResourceLoader.exists(FONTE_TEXTO):
+		fonte_orbitron = load(FONTE_TEXTO) as FontFile
 
 	if ResourceLoader.exists(FONTE_LUCKIEST):
 		fonte_luckiest = load(FONTE_LUCKIEST) as FontFile

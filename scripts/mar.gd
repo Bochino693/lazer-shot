@@ -1,5 +1,6 @@
 extends Node2D
 
+const Pincel := preload("res://scripts/pincel.gd")
 const RankingManagerScript := preload("res://scripts/RankingManager.gd")
 var ranking_manager := RankingManagerScript.new()
 
@@ -57,7 +58,7 @@ var info_inicio_image: TextureRect = null
 var info_inicio_label: Label = null
 
 
-const FONTE_ORBITRON: String = "res://fonts/Orbitron-Bold.ttf"
+const FONTE_TEXTO: String = "res://fonts/Exo2-Bold.ttf"
 const FONTE_LUCKIEST: String = "res://fonts/LuckiestGuy-Regular.ttf"
 
 const COR_NEON_MAR: Color = Color(0.18, 0.88, 1.0, 1.0)
@@ -1813,7 +1814,7 @@ func _voltar_para_main_menu() -> void:
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 
 	if cena_main_menu_path != "" and ResourceLoader.exists(cena_main_menu_path):
-		get_tree().change_scene_to_file(cena_main_menu_path)
+		TransicaoGlobal.trocar_cena(cena_main_menu_path)
 	else:
 		push_warning("Cena de menu principal não encontrada: " + cena_main_menu_path)
 
@@ -2576,8 +2577,8 @@ func _desenhar_marcas_agua_back() -> void:
 		var r1: float = lerp(16.0, 48.0, t)
 		var r2: float = lerp(8.0, 24.0, t)
 
-		fx_back_overlay.draw_arc(pos, r1, 0.0, TAU, 28, Color(0.74, 0.94, 1.0, 0.20 * fade), 1.8, true)
-		fx_back_overlay.draw_arc(pos, r2, 0.0, TAU, 20, Color(0.88, 0.98, 1.0, 0.12 * fade), 1.2, true)
+		Pincel.anel(fx_back_overlay, pos, r1, 1.8, Color(0.74, 0.94, 1.0, 0.20 * fade))
+		Pincel.anel(fx_back_overlay, pos, r2, 1.2, Color(0.88, 0.98, 1.0, 0.12 * fade))
 
 
 func _desenhar_fx_estilhacos_front() -> void:
@@ -2595,18 +2596,8 @@ func _desenhar_fx_estilhacos_front() -> void:
 		var t: float = clamp(idade / vida, 0.0, 1.0)
 		cor.a = 1.0 - t
 
-		var pts := PackedVector2Array()
-		var local_rect := PackedVector2Array([
-			Vector2(-tam.x * 0.7, -tam.y * 0.7),
-			Vector2(tam.x * 0.7, -tam.y * 0.4),
-			Vector2(tam.x * 0.4, tam.y * 0.7),
-			Vector2(-tam.x * 0.5, tam.y * 0.4),
-		])
+		Pincel.lasca(fx_front_overlay, pos, tam * 0.6, deg_to_rad(rot_deg), cor)
 
-		for p in local_rect:
-			pts.append(pos + p.rotated(deg_to_rad(rot_deg)))
-
-		fx_front_overlay.draw_colored_polygon(pts, cor)
 
 func _desenhar_fx_moedas_front() -> void:
 	if fx_front_overlay == null:
@@ -2622,13 +2613,10 @@ func _desenhar_fx_moedas_front() -> void:
 		var t: float = clamp(idade / vida, 0.0, 1.0)
 		var fade: float = 1.0 - t
 
-		var cor_moeda := Color(1.0, 0.82, 0.18, 0.95 * fade)
-		var cor_borda := Color(0.78, 0.52, 0.08, 0.96 * fade)
+		# Moeda girando no ar: achata na largura conforme vira.
+		var giro: float = absf(cos(deg_to_rad(rot) * 1.7))
+		Pincel.forma(fx_front_overlay, Pincel.MOEDA, pos, raio, Color(1, 1, 1, 0.96 * fade), 0.0, Vector2(maxf(0.18, giro), 1.0))
 
-		fx_front_overlay.draw_set_transform(pos, deg_to_rad(rot), Vector2.ONE)
-		fx_front_overlay.draw_circle(Vector2.ZERO, raio, cor_moeda)
-		fx_front_overlay.draw_arc(Vector2.ZERO, raio, 0.0, TAU, 20, cor_borda, max(1.4, raio * 0.16), true)
-		fx_front_overlay.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 func _desenhar_fx_explosao_bomba_front() -> void:
 	if fx_front_overlay == null:
@@ -2646,21 +2634,12 @@ func _desenhar_fx_explosao_bomba_front() -> void:
 		cor.a *= (1.0 - t)
 
 		if cor.r > 0.7:
-			var largura: float = max(raio * 0.40, 2.0)
-			var pts := PackedVector2Array([
-				Vector2(-largura, -raio),
-				Vector2(largura, -raio * 0.30),
-				Vector2(largura * 0.65, raio),
-				Vector2(-largura * 0.65, raio * 0.45)
-			])
-
-			var out := PackedVector2Array()
-			for p in pts:
-				out.append(pos + p.rotated(deg_to_rad(rot_deg)))
-
-			fx_front_overlay.draw_colored_polygon(out, cor)
+			# fagulha quente
+			Pincel.lasca(fx_front_overlay, pos, Vector2(max(raio * 0.40, 2.0), raio), deg_to_rad(rot_deg), cor)
 		else:
-			fx_front_overlay.draw_circle(pos, raio, cor)
+			# fumaça escura que cresce
+			Pincel.forma(fx_front_overlay, Pincel.FUMACA, pos, raio * (1.0 + t * 0.6), cor, deg_to_rad(rot_deg))
+
 
 func _desenhar_fx_agua_back() -> void:
 	if fx_back_overlay == null:
@@ -2676,13 +2655,8 @@ func _desenhar_fx_agua_back() -> void:
 		var fade: float = 1.0 - t
 		var raio: float = tam * (1.0 + t * 0.18)
 
-		var cor_miolo := Color(0.72, 0.92, 1.0, 0.05 * fade)
-		var cor_borda := Color(0.82, 0.96, 1.0, 0.48 * fade)
-
-		fx_back_overlay.draw_circle(pos, raio, cor_miolo)
-		fx_back_overlay.draw_arc(pos, raio, 0.0, TAU, 24, cor_borda, max(1.2, raio * 0.12), true)
-
-
+		# Bolha com borda e reflexo (uma forma só da textura do Pincel).
+		Pincel.forma(fx_back_overlay, Pincel.BOLHA, pos, raio, Color(0.82, 0.96, 1.0, 0.75 * fade))
 
 
 func _criar_modal_fim() -> void:
@@ -2810,7 +2784,7 @@ func _criar_modal_fim() -> void:
 	_fonte_titulo(fim_countdown_label, 25, Color(0.30, 0.94, 1.0, 1.0))
 	fim_panel.add_child(fim_countdown_label)
 
-	fim_hint = _criar_label("APERTE START PARA JOGAR NOVAMENTE", 26, Color(1.0, 0.90, 0.28, 1.0), 6)
+	fim_hint = _criar_label(Maquina.texto_jogar_novamente(), 26, Color(1.0, 0.90, 0.28, 1.0), 6)
 	_fonte_titulo(fim_hint, 26, Color(1.0, 0.90, 0.28, 1.0))
 	fim_panel.add_child(fim_hint)
 
@@ -2839,6 +2813,7 @@ func _criar_mira_overlay() -> void:
 	alvo_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
 	alvo_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	alvo_overlay.visible = not _modo_dificil_sem_mira()
+	alvo_overlay.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	alvo_layer.add_child(alvo_overlay)
 
 	if not alvo_overlay.draw.is_connected(_on_alvo_overlay_draw):
@@ -2892,72 +2867,35 @@ func _desenhar_mira() -> void:
 	elif balas_no_cartucho <= alerta_baixa_municao_limite:
 		cor_ext = Color(1.0, 0.68, 0.18, 0.98 * alpha_mira)
 
-	alvo_overlay.draw_arc(alvo_pos, r1, 0.0, TAU, 36, cor_ext, 2.6, true)
-	alvo_overlay.draw_arc(alvo_pos, r2, 0.0, TAU, 28, cor_int, 1.2, true)
-	alvo_overlay.draw_circle(alvo_pos, 2.8, Color(1.0, 1.0, 1.0, 0.96 * alpha_mira))
+	var ov: CanvasItem = alvo_overlay
+	Pincel.anel(ov, alvo_pos, r1, 2.6, cor_ext)
+	Pincel.anel(ov, alvo_pos, r2, 1.2, cor_int)
+	Pincel.circulo(ov, alvo_pos, 2.8, Color(1.0, 1.0, 1.0, 0.96 * alpha_mira))
 
-	alvo_overlay.draw_line(alvo_pos + Vector2(-26, 0), alvo_pos + Vector2(-8, 0), cor_linha, 2.0, true)
-	alvo_overlay.draw_line(alvo_pos + Vector2(8, 0), alvo_pos + Vector2(26, 0), cor_linha, 2.0, true)
-	alvo_overlay.draw_line(alvo_pos + Vector2(0, -26), alvo_pos + Vector2(0, -8), cor_linha, 2.0, true)
-	alvo_overlay.draw_line(alvo_pos + Vector2(0, 8), alvo_pos + Vector2(0, 26), cor_linha, 2.0, true)
+	Pincel.linha(ov, alvo_pos + Vector2(-26, 0), alvo_pos + Vector2(-8, 0), cor_linha, 2.0)
+	Pincel.linha(ov, alvo_pos + Vector2(8, 0), alvo_pos + Vector2(26, 0), cor_linha, 2.0)
+	Pincel.linha(ov, alvo_pos + Vector2(0, -26), alvo_pos + Vector2(0, -8), cor_linha, 2.0)
+	Pincel.linha(ov, alvo_pos + Vector2(0, 8), alvo_pos + Vector2(0, 26), cor_linha, 2.0)
 
 	if recarregando:
 		var progresso: float = 1.0 - clamp(reload_tempo_restante / max(tempo_recarga_seg, 0.001), 0.0, 1.0)
 		var inicio_ang: float = -PI * 0.5
 		var fim_ang: float = inicio_ang + (TAU * progresso)
 
-		alvo_overlay.draw_arc(
-			alvo_pos,
-			mira_reload_raio,
-			0.0,
-			TAU,
-			56,
-			Color(0.10, 0.20, 0.28, 0.42),
-			mira_reload_espessura,
-			true
-		)
-
-		alvo_overlay.draw_arc(
-			alvo_pos,
-			mira_reload_raio,
-			inicio_ang,
-			fim_ang,
-			56,
-			Color(0.30, 0.94, 1.0, 1.0),
-			mira_reload_espessura,
-			true
-		)
-
-		alvo_overlay.draw_arc(
-			alvo_pos,
-			mira_reload_raio + 7.0,
-			inicio_ang,
-			fim_ang,
-			56,
-			Color(0.82, 0.98, 1.0, 0.55),
-			2.0,
-			true
-		)
+		Pincel.anel(ov, alvo_pos, mira_reload_raio, mira_reload_espessura, Color(0.10, 0.20, 0.28, 0.42))
+		Pincel.arco(ov, alvo_pos, mira_reload_raio, inicio_ang, fim_ang, Color(0.30, 0.94, 1.0, 1.0), mira_reload_espessura)
+		Pincel.arco(ov, alvo_pos, mira_reload_raio + 7.0, inicio_ang, fim_ang, Color(0.82, 0.98, 1.0, 0.55), 2.0)
 
 	elif balas_no_cartucho <= 0:
 		var pulso_alerta: float = 0.35 + (sin(aviso_sem_municao_t * 16.0) * 0.5 + 0.5) * 0.35
-		alvo_overlay.draw_arc(
-			alvo_pos,
-			mira_reload_raio - 2.0,
-			0.0,
-			TAU,
-			44,
-			Color(1.0, 0.15, 0.14, pulso_alerta),
-			4.0,
-			true
-		)
+		Pincel.anel(ov, alvo_pos, mira_reload_raio - 2.0, 4.0, Color(1.0, 0.15, 0.14, pulso_alerta))
 
 	if dano_nevoa_ativo:
 		var ghost_alpha: float = 0.22 * max(float(dano_overlay.color.a), float(dano_vinheta_overlay.color.a))
 		var ghost_color := Color(1.0, 0.72, 0.72, ghost_alpha)
 
-		alvo_overlay.draw_arc(alvo_pos + ghost_offset, r1 + 1.2, 0.0, TAU, 32, ghost_color, 2.0, true)
-		alvo_overlay.draw_arc(alvo_pos - ghost_offset * 0.7, r2 + 0.8, 0.0, TAU, 24, ghost_color, 1.0, true)
+		Pincel.anel(ov, alvo_pos + ghost_offset, r1 + 1.2, 2.0, ghost_color)
+		Pincel.anel(ov, alvo_pos - ghost_offset * 0.7, r2 + 0.8, 1.0, ghost_color)
 
 
 
@@ -3545,7 +3483,7 @@ func _confirmar_nome_ranking(usar_anonimo: bool = false) -> void:
 		]
 
 	if fim_hint != null:
-		fim_hint.text = "APERTE START PARA JOGAR NOVAMENTE"
+		fim_hint.text = Maquina.texto_jogar_novamente()
 
 	_iniciar_timer_retorno_fim()
 	_atualizar_texto_countdown_fim()
@@ -3683,6 +3621,15 @@ func _ajustar_background_fullscreen() -> void:
 	background.scale = Vector2.ONE * escala
 	background.z_index = -100
 
+	# Cachoeiras escorrendo e baleias nadando (origem no canto da textura).
+	var vida := background.get_node_or_null("Vida") as Node2D
+	if vida == null:
+		vida = Node2D.new()
+		vida.name = "Vida"
+		vida.set_script(load("res://scripts/mar_vida.gd"))
+		background.add_child(vida)
+	vida.position = -tex_size * 0.5
+
 
 
 func _encerrar_partida() -> void:
@@ -3733,7 +3680,7 @@ func _encerrar_partida() -> void:
 		if entrou_ranking:
 			fim_hint.text = "ATIRE NAS LETRAS PARA SALVAR O RECORDE"
 		else:
-			fim_hint.text = "APERTE START PARA JOGAR NOVAMENTE"
+			fim_hint.text = Maquina.texto_jogar_novamente()
 
 	if fim_countdown_label != null:
 		if entrou_ranking:
@@ -4089,6 +4036,9 @@ func _posicionar_modal_final_mar() -> void:
 
 
 func _reiniciar_partida() -> void:
+	# Modo crédito: só recomeça se houver crédito (desconta aqui).
+	if not Maquina.cobrar():
+		return
 	_aplicar_config_admin_na_cena()
 	_parar_musica_fim()
 	_iniciar_musica_pirate_em_loop()
@@ -5772,6 +5722,7 @@ func _criar_fx_overlay() -> void:
 	fx_back_overlay.name = "FXBackOverlay"
 	fx_back_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
 	fx_back_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	fx_back_overlay.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	fx_back_layer.add_child(fx_back_overlay)
 
 	if not fx_back_overlay.draw.is_connected(_on_fx_back_overlay_draw):
@@ -5786,6 +5737,7 @@ func _criar_fx_overlay() -> void:
 	fx_front_overlay.name = "FXFrontOverlay"
 	fx_front_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
 	fx_front_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	fx_front_overlay.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	fx_front_layer.add_child(fx_front_overlay)
 
 	if not fx_front_overlay.draw.is_connected(_on_fx_front_overlay_draw):
@@ -6163,8 +6115,8 @@ func _aplicar_config_admin_na_cena() -> void:
 
 
 func _carregar_fontes_ui() -> void:
-	if ResourceLoader.exists(FONTE_ORBITRON):
-		fonte_orbitron = load(FONTE_ORBITRON) as FontFile
+	if ResourceLoader.exists(FONTE_TEXTO):
+		fonte_orbitron = load(FONTE_TEXTO) as FontFile
 
 	if ResourceLoader.exists(FONTE_LUCKIEST):
 		fonte_luckiest = load(FONTE_LUCKIEST) as FontFile
