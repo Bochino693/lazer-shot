@@ -33,10 +33,9 @@ func _ready() -> void:
 	add_child(canvas)
 
 	sprite = Sprite2D.new()
+	# opcional: cada tela desenha a própria mira (Pincel.mira)
 	if ResourceLoader.exists(TEXTURA_MIRA):
 		sprite.texture = load(TEXTURA_MIRA)
-	else:
-		push_warning("MiraGlobal: textura não encontrada em " + TEXTURA_MIRA)
 	sprite.scale = Vector2(escala_atual, escala_atual)
 	sprite.z_index = 1000
 	sprite.visible = false

@@ -17,7 +17,7 @@ const PONTOS_POEIRA := [Vector2(400, 590), Vector2(656, 1139), Vector2(703, 1164
 
 # Contorno da parte acesa de bar_raios_sol.png (pixels da textura 256x384),
 # com folga de 3 px: nenhum pixel aceso fica de fora.
-const CONTORNO_FEIXE := PackedVector2Array([Vector2(18.3, 30.6), Vector2(31.6, 17.4), Vector2(79.5, 18.0), Vector2(84.6, 28.0), Vector2(135.9, 140.3), Vector2(230.5, 364.6), Vector2(234.5, 384.0), Vector2(163.8, 384.0), Vector2(21.0, 58.8), Vector2(18.1, 49.7)])
+const CONTORNO_FEIXE := [Vector2(18.3, 30.6), Vector2(31.6, 17.4), Vector2(79.5, 18.0), Vector2(84.6, 28.0), Vector2(135.9, 140.3), Vector2(230.5, 364.6), Vector2(234.5, 384.0), Vector2(163.8, 384.0), Vector2(21.0, 58.8), Vector2(18.1, 49.7)]
 
 
 func _ready() -> void:
@@ -36,10 +36,10 @@ func _ready() -> void:
 		feixe.name = "Feixe"
 		feixe.texture = textura
 		var pontos := PackedVector2Array()
-		for q in CONTORNO_FEIXE:
+		for q: Vector2 in CONTORNO_FEIXE:
 			pontos.append((q - tam_feixe * 0.5) * escala)
 		feixe.polygon = pontos
-		feixe.uv = CONTORNO_FEIXE
+		feixe.uv = PackedVector2Array(CONTORNO_FEIXE)
 		var mat := ShaderMaterial.new()
 		mat.shader = load(SHADER_FEIXE)
 		feixe.material = mat

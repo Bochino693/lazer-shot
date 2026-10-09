@@ -59,14 +59,24 @@ As sombras suaves dos painéis neon foram mantidas: fazem parte do visual.
 
 ## Botões e arma
 
-A arma continua como mouse (os botões esquerdo e direito atiram; o do meio e
-os laterais recarregam) e a Zero Delay/joystick usa `input_start`,
-`input_shot`, `input_recharge` e agora `input_select`.
+A arma funciona como mouse: o **gatilho** atira. Dos 4 botões dela, só os
+**dois do lado direito** são usados:
 
-**START e SELECT se configuram na própria máquina:** abra a configuração e use
-**APRENDER** ao lado de "Botão START" / "Botão SELECT", depois aperte o botão
-na Zero Delay. Fica gravado (não precisa gerar outro APK). Padrões: START =
-botão 0, SELECT = botão 4.
+| Botão (lado direito) | Função | Padrão |
+| --- | --- | --- |
+| Perto do **bico** | **START** | nenhum: aprenda na configuração |
+| Perto do **gatilho** | **RECARGA** | clique direito, meio, laterais e o VOLTAR do Android |
+
+O botão perto do gatilho manda o **VOLTAR do Android**, que antes **fechava o
+jogo**. Agora o VOLTAR nunca fecha o jogo: vira recarga (ou START, se ele
+for o START aprendido).
+
+**Para gravar os botões da arma:** abra a configuração, atire em **APRENDER**
+ao lado de "START na arma" (ou "RECARGA na arma") e aperte o botão na arma.
+O mesmo botão não pode ser START e RECARGA. A Zero Delay/joystick continua com
+`input_start`, `input_shot`, `input_recharge` e `input_select`; o START e o
+SELECT dela também se aprendem ali. Fica gravado (não precisa gerar outro
+APK). Padrões da Zero Delay: START = botão 0, SELECT = botão 4.
 
 ## Modo de jogo: LIVRE ou CRÉDITO
 
@@ -97,7 +107,8 @@ nos botões (também funciona com mouse, ou setas + START).
 | Tempo da abertura / Tempo do vídeo | ciclo da tela inicial |
 | Vídeos de demonstração / Ranking na abertura | liga e desliga cada parte do ciclo |
 | Música / Efeitos | volumes (agora valem no jogo inteiro) |
-| Botão START / Botão SELECT | APRENDER o botão da Zero Delay |
+| START na arma / RECARGA na arma | APRENDER os botões do lado direito da arma |
+| START / SELECT na Zero Delay | APRENDER o botão da Zero Delay |
 
 **SALVAR E SAIR** grava; **SAIR SEM SALVAR** descarta; **PADRÃO** (dois tiros)
 volta aos valores de fábrica sem apagar créditos e contadores. Tudo fica em
@@ -137,6 +148,44 @@ Testado quadro a quadro: nenhum quadro cinza ou branco.
 
 **Letras:** fonte Exo 2 (licença OFL, em `fonts/`) no lugar da Orbitron e como
 fonte padrão do jogo; a LuckiestGuy continua nos títulos.
+
+## Rodada 3: rápido, jogável e sem telas estranhas
+
+**Ritmo de quadros:** na TV Box só o vsync manda (60 Hz da TV). O limitador do
+motor também em 60 brigava com ele e de tempos em tempos perdia um quadro (a
+"travadinha" constante).
+
+**Carregamento vivo:** a cena e os arquivos que ela lê ao abrir
+(`scripts/precarga.gd`, gerado por `tools/gerar_precarga.py`) carregam em
+threads. Ao entrar numa fase aparece um cartão com a capa, o nome, uma dica e a
+barra de progresso real, que termina em **PRONTO**. O quadro preso ao abrir a
+fase caiu pela metade (bar 362 → 164 ms no PC de teste). Se um script passar a
+carregar arquivos novos, rode `python3 tools/gerar_precarga.py` de novo.
+
+**Egito (Deserto Sagrado):**
+- os dois vídeos de fundo (esticados e decodificados na CPU o tempo todo)
+  viraram imagens fixas em alta, enquadradas sem esticar; um shader anima só os
+  feixes, o cristal e o sol/lua. A troca sol/lua tem cruzamento suave. A marca
+  d'água da versão noite saiu;
+- ritmo: 5 alvos no começo (no máximo 9 com o nível), um novo a cada ~0,85 s,
+  120-185 px/s, 3,6-4,6 s na tela e troca de brasão rara e perceptível; as
+  batidas nas bordas não aceleram mais os alvos.
+
+**Mira 30% maior em todas as telas** (`Pincel.ESCALA_MIRA = 1.3`).
+
+**Menu de cenários:** escolha automática em 10 s, roleta que gira em volta dos
+cards e freia (~1-1,4 s), dificuldade em 8 s; sem escolha, vale a dificuldade
+padrão da configuração.
+
+**Imagem:**
+- as prévias (arena, bar, deserto, mar) foram refeitas dos originais sem as
+  marcas BANDICAM/clideo;
+- o vídeo de fundo 2:3 do menu, da abertura e do ranking não estica mais na tela
+  9:16: aparece inteiro e as faixas prolongam as bordas do próprio vídeo.
+
+**Menos pintura por quadro:** flash e dano do Mar só são desenhados enquanto
+aparecem; o fundo preto repetido do menu saiu; o feixe de sol do bar pinta só
+a faixa acesa (28% da tela em vez de 100%).
 
 ## Para testar no PC como se fosse a TV Box
 

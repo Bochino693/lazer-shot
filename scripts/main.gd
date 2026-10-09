@@ -314,8 +314,7 @@ func _configurar_audio() -> void:
 			audio_player.autoplay = false
 			audio_player.bus = "Master"
 			audio_player.volume_db = VOLUME_MUSICA_DB
-		else:
-			push_warning("Música não encontrada em: " + CAMINHO_MUSICA)
+		# sem song.ogg a abertura fica só com o áudio da intro (é o normal)
 
 
 func _iniciar_com_confirmacao() -> void:
