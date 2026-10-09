@@ -49,9 +49,12 @@ func _forcar_120_fps() -> void:
 	# TV Box (Android): a TV é de 60 Hz e o Android sempre sincroniza com ela;
 	# pedir 120 só gastaria processador e bateria de CPU sem quadro a mais.
 	if OS.get_name() == "Android":
-		Engine.max_fps = 60
+		# Só o vsync manda no ritmo (60 Hz, ou 50 Hz em saída PAL). Com o
+		# limitador do motor também em 60, os dois brigam e de tempos em
+		# tempos um quadro perde a vez: era a "travadinha" constante.
+		Engine.max_fps = 0
 		DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_ENABLED)
-		print("MiraGlobal: TV Box -> 60 FPS com vsync")
+		print("MiraGlobal: TV Box -> vsync (sem limitador)")
 		return
 
 	# Max FPS: teto interno do motor -- vale pro jogo inteiro, todas as cenas,

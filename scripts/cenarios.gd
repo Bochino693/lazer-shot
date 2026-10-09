@@ -1687,7 +1687,7 @@ var tempo_trava_input_menu: float = 0.0
 
 
 func _evento_tiro_menu(me: InputEventMouseButton) -> bool:
-	return me.button_index == BOTAO_GATILHO_1 or me.button_index == BOTAO_GATILHO_2
+	return Maquina.e_tiro_arma(me)
 
 
 func _input(event: InputEvent) -> void:

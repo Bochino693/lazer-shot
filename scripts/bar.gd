@@ -5726,8 +5726,9 @@ func _debug_botao_arma(me: InputEventMouseButton) -> void:
 
 
 func _evento_tiro_arma(me: InputEventMouseButton) -> bool:
-	# Igual Arena → botão esquerdo atira
-	return me.button_index == MOUSE_BUTTON_LEFT
+	# Gatilho = clique esquerdo (Maquina cuida dos botões aprendidos da arma).
+	return Maquina.e_tiro_arma(me)
+
 
 func _evento_action_arma(event: InputEvent, action_name: String) -> bool:
 	if event == null:
@@ -5793,9 +5794,8 @@ func _executar_recarga_arma() -> void:
 
 
 func _evento_recarga_arma(me: InputEventMouseButton) -> bool:
-	# Igual Arena → botão direito recarrega
-	# Scroll não faz nada
-	return me.button_index == MOUSE_BUTTON_RIGHT
+	# Recarga = botão aprendido na configuração (padrão: direito/meio/laterais).
+	return Maquina.e_recarga_arma(me)
 
 
 func _carregar_config_admin_jogo() -> void:

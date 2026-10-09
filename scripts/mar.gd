@@ -5938,13 +5938,13 @@ func _pos_arma() -> Vector2:
 
 
 func _evento_tiro_arma(me: InputEventMouseButton) -> bool:
-	# Botão esquerdo = tiro
-	return me.button_index == MOUSE_BUTTON_LEFT
+	# Gatilho = clique esquerdo (Maquina cuida dos botões aprendidos da arma).
+	return Maquina.e_tiro_arma(me)
 
 
 func _evento_recarga_arma(me: InputEventMouseButton) -> bool:
-	# Botão direito = recarga
-	return me.button_index == MOUSE_BUTTON_RIGHT
+	# Recarga = botão aprendido na configuração (padrão: direito/meio/laterais).
+	return Maquina.e_recarga_arma(me)
 
 
 func _debug_botao_arma(me: InputEventMouseButton) -> void:
