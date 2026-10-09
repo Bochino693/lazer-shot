@@ -24,6 +24,7 @@ var ranking_input_delay: float = 0.18
 var ranking_backspace_trava: float = 0.0
 
 const RankingManagerScript := preload("res://scripts/RankingManager.gd")
+const Estilhacos := preload("res://scripts/estilhacos.gd")
 var ranking_manager := RankingManagerScript.new()
 
 var ranking_nome_layer: CanvasLayer = null
@@ -409,6 +410,7 @@ func _ready() -> void:
 	_configurar_intro_comeco()
 	_ajustar_fundo_full()
 	_criar_mascara_topo()
+	_criar_luz_do_sol()
 
 	if fundo != null:
 		fundo_pos_base = fundo.position
@@ -873,7 +875,7 @@ func _processar_tiro_global(pos_global: Vector2) -> void:
 	var garrafa_acertada: Area2D = _detectar_garrafa_no_ponto(pos_global)
 
 	if garrafa_acertada != null:
-		_processar_acerto_alvo(garrafa_acertada)
+		_processar_acerto_alvo(garrafa_acertada, pos_global)
 		queue_redraw()
 		return
 
@@ -893,7 +895,7 @@ func _processar_tiro_global(pos_global: Vector2) -> void:
 
 
 
-func _processar_acerto_alvo(alvo: Area2D) -> void:
+func _processar_acerto_alvo(alvo: Area2D, pos_tiro: Vector2 = Vector2.INF) -> void:
 	if alvo == null or not is_instance_valid(alvo):
 		return
 	if alvo.get("ja_acertado") == true:
@@ -913,13 +915,10 @@ func _processar_acerto_alvo(alvo: Area2D) -> void:
 	var id_slot: String = _texto(alvo.get_meta("slot_id", ""), "")
 	_liberar_slot_por_id(id_slot)
 
-	var anim: AnimatedSprite2D = _obter_anim_garrafa(alvo)
-	if anim != null:
-		anim.scale = Vector2.ONE
-		if anim.sprite_frames != null and anim.sprite_frames.has_animation("hit"):
-			anim.play("hit")
-
-	_animar_alvo_sentindo_tiro(alvo)
+	# A garrafa vira cacos da própria imagem, rachando a partir do tiro.
+	if pos_tiro == Vector2.INF:
+		pos_tiro = pos_global
+	_estourar_garrafa(alvo, pos_tiro, _obter_cor_liquido_por_alvo(tipo_alvo, pontos))
 
 	if tipo_alvo == "garrafa_falsa":
 		erros_seguidos += 1
@@ -930,12 +929,7 @@ func _processar_acerto_alvo(alvo: Area2D) -> void:
 		_resetar_combo()
 
 		_tocar_som_erro()
-		_registrar_fx_vidro_colorido(
-			pos_global,
-			_obter_cor_vidro_por_pontos(0),
-			_obter_cor_liquido_por_alvo("garrafa_falsa", 0)
-		)
-		_registrar_fx_impacto(pos_global)
+		_registrar_fx_impacto(pos_tiro)
 		_set_status_erro("GARRAFA IMPOSTORA  -%d" % perda_impostora)
 		_marcar_hud_sujo()
 
@@ -952,12 +946,7 @@ func _processar_acerto_alvo(alvo: Area2D) -> void:
 
 	_registrar_combo_acerto()
 	_tocar_vidro_apos_tiro()
-	_registrar_fx_vidro_colorido(
-		pos_global,
-		_obter_cor_vidro_por_pontos(pontos),
-		_obter_cor_liquido_por_alvo(tipo_alvo, pontos)
-	)
-	_registrar_fx_impacto(pos_global)
+	_registrar_fx_impacto(pos_tiro)
 
 	_set_status_neutro("%s  +%d" % [_obter_nome_garrafa_por_pontos(pontos), pontos])
 	_marcar_hud_sujo()
@@ -981,6 +970,25 @@ func _obter_nome_garrafa_por_pontos(pontos: int) -> String:
 			return "GIN"
 		_:
 			return "GARRAFA"
+
+
+func _estourar_garrafa(alvo: Area2D, pos_tiro: Vector2, cor_liquido: Color) -> void:
+	var anim: AnimatedSprite2D = _obter_anim_garrafa(alvo)
+	if anim == null or anim.sprite_frames == null:
+		return
+	var nome: StringName = anim.animation
+	if not anim.sprite_frames.has_animation(nome):
+		nome = &"idle"
+	if not anim.sprite_frames.has_animation(nome) or anim.sprite_frames.get_frame_count(nome) <= 0:
+		return
+	var quadro: Texture2D = anim.sprite_frames.get_frame_texture(nome, clampi(anim.frame, 0, anim.sprite_frames.get_frame_count(nome) - 1))
+	var imagem: Image = null
+	if quadro is AtlasTexture and (quadro as AtlasTexture).atlas != null:
+		imagem = _imagem_em_cache((quadro as AtlasTexture).atlas)
+	elif quadro != null:
+		imagem = _imagem_em_cache(quadro)
+	Estilhacos.quebrar(self, anim, quadro, imagem, pos_tiro, cor_liquido)
+	anim.visible = false
 
 
 func _animar_alvo_sentindo_tiro(alvo: Area2D) -> void:
@@ -1941,6 +1949,15 @@ func _call_tocar_vidro_apos_tiro_async() -> void:
 func _tocar_vidro_apos_tiro_async() -> void:
 	await get_tree().create_timer(0.07).timeout
 	_tocar_som_acerto()
+
+
+func _criar_luz_do_sol() -> void:
+	if fundo == null or fundo.get_node_or_null("Sol") != null:
+		return
+	var sol := Node2D.new()
+	sol.name = "Sol"
+	sol.set_script(load("res://scripts/bar_sol.gd"))
+	fundo.add_child(sol)
 
 
 func _criar_fundo_preenchimento() -> void:
