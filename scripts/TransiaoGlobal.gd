@@ -131,6 +131,15 @@ func trocar_cena(caminho: String, tempo_saida: float = TEMPO_SAIDA, tempo_entrad
 		tw_out.tween_property(fade, "color:a", 1.0, tempo_saida * (1.0 - fade.color.a))
 		await tw_out.finished
 
+	# Tela preta: a tela que sai para de processar e de desenhar (animações,
+	# vídeo, efeitos), deixando o processador para as threads que carregam a
+	# próxima. Ela some da memória quando a nova monta.
+	var velha := get_tree().current_scene
+	if velha != null:
+		velha.process_mode = Node.PROCESS_MODE_DISABLED
+		if velha is CanvasItem:
+			(velha as CanvasItem).visible = false
+
 	var fase: Dictionary = FASES.get(caminho, {})
 	var com_cartao := not fase.is_empty()
 	if com_cartao:
@@ -163,6 +172,11 @@ func trocar_cena(caminho: String, tempo_saida: float = TEMPO_SAIDA, tempo_entrad
 
 	if cena == null or get_tree().change_scene_to_packed(cena) != OK:
 		push_error("Não foi possível abrir a cena: " + caminho)
+		# fica na tela de antes, que volta a rodar
+		if is_instance_valid(velha):
+			velha.process_mode = Node.PROCESS_MODE_INHERIT
+			if velha is CanvasItem:
+				(velha as CanvasItem).visible = true
 	else:
 		# A cena nova monta e desenha os primeiros quadros escondida.
 		for i in range(QUADROS_ESCONDIDOS):

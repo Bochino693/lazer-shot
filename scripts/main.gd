@@ -19,15 +19,16 @@ const TEASERS: Array[String] = [
 
 @onready var parallax_bg: ParallaxBackground = $ParallaxBackground
 
+const MP4_INTRO: String = "res://background_video/back_init.mp4"
+const OGV_INTRO: String = "res://background_video/back_init.ogv"
+
 var video_layer: CanvasLayer = null
-# Fundo da abertura: imagem viva na placa de vídeo (antes era o vídeo
-# back_init, decodificado pelo processador a cada quadro).
+# Quadro parado do vídeo inicial (aparece na hora, sem tela preta) e, por
+# cima, o vídeo tocado pelo decodificador de hardware da TV Box.
 var fundo_vivo: FundoVivo = null
-# A prévia da vez já fica aberta e parada desde o início (tela escura da
-# transição): na hora dela entra por cima do fundo sem tranco. É o único
-# vídeo da abertura e só roda enquanto aparece.
-var video_teaser: VideoStreamPlayer = null
-var teaser_preparado: String = ""
+var video_intro: VideoNativo = null
+# Prévia do modo demonstração (também pelo hardware); entra por cima.
+var video_teaser: VideoNativo = null
 @onready var meio_sprite: Sprite2D = $ParallaxBackground/MeioLayer/Sprite2D
 @onready var frente_sprite: Sprite2D = $ParallaxBackground/FrenteLayer/Sprite2D
 
@@ -59,7 +60,6 @@ var rodada_mostrar_ranking: bool = false
 var teasers_disponiveis: Array[String] = []
 var teaser_atual: String = ""
 
-var glitch_rects: Array[ColorRect] = []
 
 
 func _ready() -> void:
@@ -81,12 +81,10 @@ func _ready() -> void:
 	teasers_disponiveis = TEASERS.duplicate()
 	teasers_disponiveis.shuffle()
 	rodada_mostrar_ranking = false
-	_preparar_teaser()
 
-	# O efeito de abertura só começa com a tela pronta: depois da transição
-	# (ou do boot) e com os quadros já estáveis. Os primeiros quadros de uma
-	# tela nova são os mais pesados (shaders, texturas, 1º quadro do vídeo);
-	# o efeito rodando ali era o "tranco" da abertura. Até lá fica no preto.
+	# A abertura entra com a tela pronta: depois da transição (ou do boot),
+	# com o vídeo já rodando (no máximo 1,2 s de espera) e os quadros
+	# estáveis. Os primeiros quadros de uma tela nova são os mais pesados.
 	await _esperar_tela_estavel()
 	_tocar_intro()
 
@@ -96,15 +94,19 @@ func _esperar_tela_estavel() -> void:
 	await arvore.process_frame
 	while TransicaoGlobal.em_transicao:
 		await arvore.process_frame
-	# 4 quadros seguidos dentro do ritmo (ou no máximo 0,8 s esperando)
+	# vídeo no primeiro quadro e 3 quadros seguidos dentro do ritmo (ou no
+	# máximo 1,2 s esperando)
 	var bons := 0
 	var inicio := Time.get_ticks_msec()
 	var antes := Time.get_ticks_usec()
-	while bons < 4 and Time.get_ticks_msec() - inicio < 800:
+	while Time.get_ticks_msec() - inicio < 1200:
 		await arvore.process_frame
 		var agora := Time.get_ticks_usec()
 		bons = bons + 1 if (agora - antes) < 26000 else 0
 		antes = agora
+		var video_ok := video_intro == null or video_intro.esta_mostrando() or video_intro.modo == ""
+		if bons >= 3 and video_ok:
+			break
 
 
 func _process(_delta: float) -> void:
@@ -119,7 +121,6 @@ func _mostrar_tela_inicial() -> void:
 	pressione.scale = Vector2.ONE
 
 	_iniciar_pisca_pressione()
-	_iniciar_fx_loop()
 	_iniciar_timer_intro()
 
 
@@ -179,16 +180,11 @@ func _configurar_fundos() -> void:
 	_garantir_video_intro()
 	_ajustar_video_intro(tela)
 
-	_ajustar_sprite_para_tela_sem_corte(meio_sprite, tela)
-	_ajustar_sprite_para_tela_sem_corte(frente_sprite, tela)
-
+	# camadas antigas da cena (sem imagem): nada a desenhar
 	if meio_sprite != null:
-		meio_sprite.visible = true
-		meio_sprite.modulate = Color(1, 1, 1, 0.10)
-
+		meio_sprite.visible = false
 	if frente_sprite != null:
-		frente_sprite.visible = true
-		frente_sprite.modulate = Color(1, 1, 1, 0.06)
+		frente_sprite.visible = false
 
 
 func _garantir_video_intro() -> void:
@@ -211,31 +207,26 @@ func _garantir_video_intro() -> void:
 		video_layer.add_child(fundo_vivo)
 		fundo_vivo.mostrar("init")
 
-
-func _preparar_teaser() -> void:
-	if video_layer == null:
-		return
-	teaser_preparado = _pegar_teaser_sem_repetir()
-	if not ResourceLoader.exists(teaser_preparado):
-		teaser_preparado = ""
-		return
-	if video_teaser == null:
-		video_teaser = VideoStreamPlayer.new()
-		video_teaser.name = "VideoTeaserPlayer"
-		video_teaser.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		video_teaser.loop = true
-		video_layer.add_child(video_teaser)
-	video_teaser.visible = false
-	video_teaser.modulate.a = 0.0
-	video_teaser.stream = load(teaser_preparado)
-	Leve.cobrir_video(video_teaser, get_viewport_rect().size)
+	if video_intro == null:
+		video_intro = VideoNativo.new(MP4_INTRO, OGV_INTRO, Vector2(720, 1088), true, 0.0)
+		video_layer.add_child(video_intro)
+		# com o vídeo na tela, o quadro parado de baixo deixa de ser desenhado
+		video_intro.comecou.connect(func() -> void:
+			get_tree().create_timer(0.5).timeout.connect(func() -> void:
+				if fundo_vivo != null and video_intro != null and video_intro.esta_mostrando():
+					fundo_vivo.visible = false
+			)
+		)
+		video_intro.tocar()
 
 
-func _ajustar_video_intro(tela: Vector2) -> void:
-	if video_teaser != null:
-		Leve.cobrir_video(video_teaser, tela)
+func _ajustar_video_intro(_tela: Vector2) -> void:
 	if fundo_vivo != null:
 		fundo_vivo.ajustar()
+	if video_intro != null:
+		video_intro.ajustar()
+	if video_teaser != null:
+		video_teaser.ajustar()
 
 
 func _carregar_textura_no_sprite(sprite: Sprite2D, caminho: String) -> void:
@@ -304,8 +295,8 @@ func _configurar_canvas() -> void:
 	flash_intro.offset_top = 0.0
 	flash_intro.offset_right = 0.0
 	flash_intro.offset_bottom = 0.0
-	# A abertura nasce do preto (a transição chega no preto); os riscos do
-	# glitch passam por cima e o vídeo aparece. Sem tela branca chapada.
+	# A abertura nasce do preto (a transição chega no preto) e o preto abre
+	# devagar sobre o vídeo. Sem tela branca chapada.
 	flash_intro.color = Color(0, 0, 0, 1)
 	flash_intro.modulate = Color(1, 1, 1, 1)
 
@@ -407,81 +398,31 @@ func _tocar_intro() -> void:
 		audio_intro_player.volume_db = VOLUME_INTRO_DB
 		audio_intro_player.play()
 
-	await _efeito_glitch_entrada()
+	# Entrada limpa: o preto abre devagar sobre o vídeo e a chamada surge.
+	flash_intro.visible = true
+	flash_intro.color = Color.BLACK
+	flash_intro.modulate.a = 1.0
+	pressione.modulate.a = 0.0
+	pressione.scale = Vector2(0.94, 0.94)
 
 	var tween: Tween = create_tween()
-
-	tween.tween_property(flash_intro, "modulate:a", 0.0, 0.18) \
-		.set_trans(Tween.TRANS_EXPO).set_ease(Tween.EASE_OUT)
-
-	tween.tween_interval(0.18)
-
-	tween.parallel().tween_property(pressione, "modulate:a", 1.0, 0.40) \
-		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-	tween.parallel().tween_property(pressione, "scale", Vector2.ONE, 0.40) \
-		.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	tween.tween_property(flash_intro, "modulate:a", 0.0, 0.6) \
+		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	tween.parallel().tween_property(pressione, "modulate:a", 1.0, 0.45) \
+		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT).set_delay(0.3)
+	tween.parallel().tween_property(pressione, "scale", Vector2.ONE, 0.45) \
+		.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT).set_delay(0.3)
 
 	await tween.finished
 
 	flash_intro.visible = false
 	_iniciar_pisca_pressione()
-	_iniciar_fx_loop()
 	_iniciar_timer_intro()
-
 
 
 # ─────────────────────────────────────────────
 #  EFEITO GLITCH DE ENTRADA
 # ─────────────────────────────────────────────
-func _efeito_glitch_entrada() -> void:
-	var canvas_layer: CanvasLayer = $CanvasLayer
-	var tela: Vector2 = get_viewport_rect().size
-	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
-	rng.randomize()
-
-	var cores_glitch: Array[Color] = [
-		Color(1, 0, 0.2, 0.85),
-		Color(0, 1, 0.8, 0.75),
-		Color(0.2, 0.4, 1, 0.80),
-		Color(1, 1, 0, 0.70),
-		Color(1, 1, 1, 0.60),
-	]
-
-	for i in range(16):
-		var rect: ColorRect = ColorRect.new()
-		var altura: float = rng.randf_range(3.0, 26.0)
-		var y_pos: float = rng.randf_range(0.0, tela.y - altura)
-
-		rect.size = Vector2(tela.x + rng.randf_range(-40.0, 40.0), altura)
-		rect.position = Vector2(rng.randf_range(-20.0, 0.0), y_pos)
-		rect.color = cores_glitch[rng.randi() % cores_glitch.size()]
-		rect.modulate.a = rng.randf_range(0.5, 1.0)
-
-		canvas_layer.add_child(rect)
-		glitch_rects.append(rect)
-
-	var tween_g: Tween = create_tween()
-	tween_g.set_parallel(true)
-
-	for rect in glitch_rects:
-		var delay: float = rng.randf_range(0.0, 0.28)
-		var duracao: float = rng.randf_range(0.08, 0.26)
-
-		tween_g.tween_property(rect, "modulate:a", 0.0, duracao) \
-			.set_delay(delay).set_trans(Tween.TRANS_EXPO).set_ease(Tween.EASE_IN)
-
-		tween_g.tween_property(rect, "position:x", rect.position.x + rng.randf_range(-70.0, 70.0), duracao) \
-			.set_delay(delay).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-
-	await tween_g.finished
-
-	for rect in glitch_rects:
-		if is_instance_valid(rect):
-			rect.queue_free()
-	glitch_rects.clear()
-
-
-
 # ─────────────────────────────────────────────
 #  LOOPS IDLE
 # ─────────────────────────────────────────────
@@ -530,7 +471,7 @@ func _pegar_teaser_sem_repetir() -> String:
 
 
 func _tocar_teaser_atrativo() -> void:
-	var caminho: String = teaser_preparado if teaser_preparado != "" else _pegar_teaser_sem_repetir()
+	var caminho: String = _pegar_teaser_sem_repetir()
 
 	if not ResourceLoader.exists(caminho):
 		push_warning("Teaser não encontrado: " + caminho)
@@ -549,21 +490,21 @@ func _tocar_teaser_atrativo() -> void:
 	pressione.scale = Vector2.ONE
 	_iniciar_pisca_pressione()
 
-	if video_teaser != null:
-		if caminho != teaser_preparado:
-			video_teaser.stream = load(caminho)
-			Leve.cobrir_video(video_teaser, get_viewport_rect().size)
-		# a prévia (já aberta) surge por cima do fundo vivo, que então
-		# deixa de ser desenhado
-		video_teaser.visible = true
-		video_teaser.modulate.a = 0.0
-		video_teaser.play()
-		var tw := create_tween()
-		tw.tween_property(video_teaser, "modulate:a", 1.0, 0.45).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-		tw.tween_callback(func() -> void:
-			if fundo_vivo != null:
-				fundo_vivo.visible = false
+	# A prévia entra por cima do vídeo inicial, que então para (um vídeo por
+	# vez no decodificador).
+	if video_teaser == null and video_layer != null:
+		var volume: float = clampf(db_to_linear(float(Maquina.valor("audio/volume_musica"))), 0.0, 1.0)
+		video_teaser = VideoNativo.new(caminho.get_basename() + ".mp4", caminho, Vector2(576, 1024), true, volume)
+		video_layer.add_child(video_teaser)
+		video_teaser.comecou.connect(func() -> void:
+			get_tree().create_timer(0.4).timeout.connect(func() -> void:
+				if video_intro != null:
+					video_intro.parar()
+				if fundo_vivo != null:
+					fundo_vivo.visible = false
+			)
 		)
+		video_teaser.tocar()
 
 	_rodar_teaser_e_ir_ranking()
 
@@ -598,29 +539,6 @@ func _ir_para_ranking_atrativo() -> void:
 
 	_ocultar_ponteiro_mouse()
 	_trocar_cena_com_saida(cena_ranking)
-
-
-
-func _iniciar_fx_loop() -> void:
-	if tween_fx != null:
-		tween_fx.kill()
-
-	tween_fx = create_tween()
-	tween_fx.set_loops()
-	tween_fx.tween_callback(func():
-		if meio_sprite != null:
-			meio_sprite.modulate.a = 0.14
-		if frente_sprite != null:
-			frente_sprite.modulate.a = 0.08
-	)
-	tween_fx.tween_interval(0.70)
-	tween_fx.tween_callback(func():
-		if meio_sprite != null:
-			meio_sprite.modulate.a = 0.10
-		if frente_sprite != null:
-			frente_sprite.modulate.a = 0.06
-	)
-	tween_fx.tween_interval(0.90)
 
 
 
@@ -706,7 +624,6 @@ func _restaurar_main_apos_erro() -> void:
 		audio_intro_player.play()
 
 	_iniciar_pisca_pressione()
-	_iniciar_fx_loop()
 
 
 # ─────────────────────────────────────────────
@@ -744,8 +661,10 @@ func _exit_tree() -> void:
 		tween_audio_intro.kill()
 	if tween_audio_bg != null:
 		tween_audio_bg.kill()
-	if video_teaser != null and video_teaser.is_playing():
-		video_teaser.stop()
+	if video_teaser != null:
+		video_teaser.parar()
+	if video_intro != null:
+		video_intro.parar()
 
 	if audio_intro_player != null and audio_intro_player.playing:
 		audio_intro_player.stop()

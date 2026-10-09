@@ -2,47 +2,51 @@ extends Node
 
 ## Ritmo de quadros e A MIRA DO JOGO INTEIRO.
 ##
-## A arma funciona como mouse. Antes cada tela tinha a sua mira: umas somavam
-## o movimento com o ponteiro capturado, outras liam o cursor do sistema com o
-## ponteiro oculto, e cada troca de tela recentralizava a mira e ligava e
-## desligava a captura do ponteiro no Android (saltos e perda de movimento).
+## A arma é um mouse com giroscópio. Há UMA mira, aqui, e cada tela lê
+## `MiraGlobal.pos` e desenha/acerta exatamente ali.
 ##
-## Agora há UMA mira, aqui:
-## - o ponteiro fica sempre capturado (nenhuma tela troca o modo);
-## - cada movimento da arma (já corrigido para a tela em pé pelo Tela.gd) soma
-##   na posição, com a sensibilidade da configuração;
-## - um filtro leve tira o tremor da mão com a arma parada e segue sem atraso
-##   quando ela se move rápido (filtro "One Euro");
-## - a posição continua a mesma entre as telas.
-## Cada tela lê `MiraGlobal.pos` e desenha/acerta exatamente ali.
+## Como a mira anda:
+## - Ponteiro CAPTURADO (o normal): o Android manda só o deslocamento da
+##   arma; ele soma na mira (com a sensibilidade do botão MIRA do menu), sem
+##   filtro nenhum, como um mouse.
+## - Ponteiro NÃO capturado: o Android só captura o ponteiro com a janela em
+##   foco, e o Godot pede uma vez só (se o pedido chega cedo, ou se o foco sai
+##   e volta, a captura some e ele nunca pede de novo). Sem captura, o cursor
+##   do sistema bate na borda da tela deitada e somar deslocamentos deixava
+##   pedaços da tela sem alcance ("pontos cegos"). Então, sem captura, a mira
+##   vai para onde o ponteiro real está (cobre a tela inteira), e a captura é
+##   pedida de novo a cada segundo e sempre que o app volta ao foco.
+## O cursor do sistema fica invisível em qualquer modo (a tela desenha a mira).
 
 ## No PC o jogo vai a 120 quadros; na TV Box só o vsync manda (ver abaixo).
 const FPS_ALVO: int = 120
 
 const META_SENS_MOUSE := "sensibilidade_mouse"
+const INTERVALO_RECAPTURA := 1.0
 
-# Filtro anti-tremor (One Euro): corte mínimo (Hz) com a arma parada e quanto
-# o corte sobe com a velocidade (px/s). Parado: suaviza; rápido: segue junto.
-const FILTRO_CORTE_MIN := 5.0
-const FILTRO_BETA := 0.012
-const FILTRO_CORTE_VELOCIDADE := 1.5
-
-## Posição da mira (filtrada), em coordenadas da tela do jogo (em pé).
+## Posição da mira, em coordenadas da tela do jogo (em pé).
 var pos := Vector2.ZERO
-## Posição sem filtro (soma direta dos movimentos).
+## Mesmo que `pos` (mantido para as telas que já liam este nome).
 var bruta := Vector2.ZERO
+## Android: o ponteiro está realmente capturado agora?
+var capturada := true
 
 var _iniciada := false
-var _vel := Vector2.ZERO
 var _sens := 1.0
+var _android := false
+var _eventos := 0
+var _ultimo_ponteiro := Vector2(INF, INF)
+var _recapturar_em := 0.0
 
 
 func _ready() -> void:
 	_forcar_120_fps()
+	_android = OS.get_name() == "Android"
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	process_priority = -100   # atualiza antes das telas lerem
 	# Depois do Tela.gd (autoload anterior), que corrige o giro do evento.
 	get_tree().root.window_input.connect(_ao_evento)
+	_cursor_invisivel()
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 
 
@@ -71,6 +75,13 @@ func _forcar_120_fps() -> void:
 	print("MiraGlobal: FPS alvo definido para ", FPS_ALVO, " | vsync mode = adaptive")
 
 
+## Seta do sistema transparente: refazer a captura não pisca cursor na tela.
+func _cursor_invisivel() -> void:
+	var img := Image.create(2, 2, false, Image.FORMAT_RGBA8)
+	img.fill(Color(0, 0, 0, 0))
+	Input.set_custom_mouse_cursor(ImageTexture.create_from_image(img))
+
+
 func _tela() -> Vector2:
 	return get_tree().root.get_visible_rect().size
 
@@ -82,47 +93,76 @@ func _garantir_inicio() -> void:
 	if tela.x <= 0.0:
 		return
 	_iniciada = true
-	bruta = tela * 0.5
-	pos = bruta
+	pos = tela * 0.5
+	bruta = pos
 
 
 func _ao_evento(ev: InputEvent) -> void:
 	if not (ev is InputEventMouseMotion):
 		return
 	_garantir_inicio()
+	_eventos += 1
+	# soma o deslocamento já (a mira responde no mesmo quadro do movimento)
 	var tela := _tela()
-	bruta += (ev as InputEventMouseMotion).relative * _sens
-	bruta = Vector2(clampf(bruta.x, 0.0, tela.x), clampf(bruta.y, 0.0, tela.y))
+	pos += (ev as InputEventMouseMotion).relative * _sens
+	pos = Vector2(clampf(pos.x, 0.0, tela.x), clampf(pos.y, 0.0, tela.y))
+	bruta = pos
 
 
 func _process(delta: float) -> void:
 	_garantir_inicio()
-	if Input.get_mouse_mode() != Input.MOUSE_MODE_CAPTURED:
-		Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 	_sens = clampf(float(get_tree().get_meta(META_SENS_MOUSE, 1.0)), 0.2, 3.0)
 
+	if _android:
+		_conferir_captura(delta)
+
 	var tela := _tela()
-	bruta = Vector2(clampf(bruta.x, 0.0, tela.x), clampf(bruta.y, 0.0, tela.y))
-
-	var te := maxf(delta, 0.001)
-	_vel = _vel.lerp((bruta - pos) / te, _alfa(FILTRO_CORTE_VELOCIDADE, te))
-	var corte := FILTRO_CORTE_MIN + FILTRO_BETA * _vel.length()
-	pos = pos.lerp(bruta, _alfa(corte, te))
-	if pos.distance_squared_to(bruta) < 0.01:
-		pos = bruta
+	pos = Vector2(clampf(pos.x, 0.0, tela.x), clampf(pos.y, 0.0, tela.y))
+	bruta = pos
+	_eventos = 0
 
 
-static func _alfa(corte_hz: float, te: float) -> float:
-	var tau := 1.0 / (TAU * corte_hz)
-	return 1.0 / (1.0 + tau / te)
+## Capturado, o Android entrega o ponteiro parado e só o deslocamento; se a
+## posição do ponteiro anda junto com os movimentos, a captura caiu.
+func _conferir_captura(delta: float) -> void:
+	var ponteiro: Vector2 = Tela.mouse()
+	var andou := _ultimo_ponteiro.x != INF and ponteiro.distance_squared_to(_ultimo_ponteiro) > 0.25
+	_ultimo_ponteiro = ponteiro
+	if _eventos > 0:
+		capturada = not andou
+	if not capturada:
+		# sem captura: a mira é o ponteiro real (alcança a tela inteira)
+		if andou:
+			pos = ponteiro
+		_recapturar_em -= delta
+		if _recapturar_em <= 0.0:
+			_recapturar_em = INTERVALO_RECAPTURA
+			_recapturar()
+
+
+## Força o Godot a pedir a captura de novo (ele só pede quando o modo muda).
+func _recapturar() -> void:
+	Input.set_mouse_mode(Input.MOUSE_MODE_HIDDEN)
+	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_APPLICATION_FOCUS_IN or what == NOTIFICATION_WM_WINDOW_FOCUS_IN:
+		# ao voltar o foco o Android já soltou a captura: pede de novo
+		_recapturar_em = 0.0
+		if _android:
+			_recapturar.call_deferred()
+
+
+func _exit_tree() -> void:
+	Input.set_custom_mouse_cursor(null)
 
 
 ## Leva a mira para um ponto (ex.: centro ao começar algo novo).
 func levar_para(p: Vector2) -> void:
 	_garantir_inicio()
-	bruta = p
 	pos = p
-	_vel = Vector2.ZERO
+	bruta = p
 
 
 func centralizar() -> void:

@@ -49,6 +49,7 @@ const LISTA := {
 		"res://sprites/cene_bar.png",
 		"res://sprites/cene_arena.png",
 		"res://fonts/Exo2-Bold.ttf",
+		"res://background_video/back_init.ogv",
 		"res://sprites/fundo_init.png",
 		"res://sprites/fundo_init_mascara.png",
 		"res://sprites/deserto_sol.png",
@@ -81,6 +82,7 @@ const LISTA := {
 		"res://background_video/teaser_bar.ogv",
 		"res://background_video/teaser_mar.ogv",
 		"res://background_video/teaser_desert.ogv",
+		"res://background_video/back_init.ogv",
 		"res://songs/audio_intro.mp3",
 		"res://songs/init.wav",
 		"res://sprites/fundo_init.png",
@@ -103,6 +105,7 @@ const LISTA := {
 	],
 	"res://scenes/ranking.tscn": [
 		"res://songs/ranking-song.mp3",
+		"res://background_video/back_init.ogv",
 		"res://sprites/fundo_init.png",
 		"res://sprites/fundo_init_mascara.png",
 	],

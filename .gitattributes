@@ -5,6 +5,9 @@
 # Branch TV Box: os vídeos .ogv (reduzidos, ~34 MB no total) ficam no git
 # normal, sem Git LFS, para a pasta baixada já vir completa.
 *.ogv binary
+# Os .mp4 (vídeos tocados pelo hardware da TV Box, ~32 MB) também no git
+# normal, sem Git LFS.
+*.mp4 -filter binary
 # Arquivos do Windows (geram o APK no PC).
 *.bat text eol=crlf
 *.ps1 text eol=crlf
