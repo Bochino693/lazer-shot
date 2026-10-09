@@ -116,8 +116,17 @@ var estrelas_2: HBoxContainer = null
 var estrelas_3: HBoxContainer = null
 var estrelas_4: HBoxContainer = null
 
-var background_secundario: VideoStreamPlayer = null
-var usando_background_a: bool = true
+# Fundo do menu: um player por vídeo (fundo + 4 prévias), abertos no _ready
+# (tela ainda escura). Só o vídeo que está na tela decodifica; o que
+# sai congela no último quadro enquanto o novo surge por cima. Nenhuma troca
+# recarrega arquivo nem reinicia vídeo, e o hover precisa parar no card um
+# instante antes de trocar (passar a mira por cima não dispara nada).
+var _videos: Dictionary = {}            # caminho -> VideoStreamPlayer
+var _video_atual: String = ""
+var _video_desejado: String = ""
+var _video_espera: float = 0.0
+var _video_atraso: float = 0.22
+var _video_tw: Tween = null
 
 var ranking_hover_ativo: bool = false
 var sens_hover_ativo: bool = false
@@ -151,10 +160,6 @@ var estilo_botao_sens_normal: StyleBoxFlat = null
 var estilo_botao_sens_hover: StyleBoxFlat = null
 
 
-var background_atual_caminho: String = ""
-var background_troca_id: int = 0
-var background_tween: Tween = null
-@export var delay_troca_background_hover: float = 0.18
 
 
 
@@ -167,9 +172,9 @@ func _ready() -> void:
 
 	_aplicar_sensibilidade_menu()
 
-	var centro := get_viewport_rect().size * 0.5
-	alvo_pos = centro
-	ultimo_mouse_pos = centro
+	# a mira é a mesma do jogo inteiro (continua onde estava)
+	alvo_pos = MiraGlobal.pos
+	ultimo_mouse_pos = alvo_pos
 	mouse_delta_acumulado = Vector2.ZERO
 
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -222,9 +227,6 @@ func _preparar_abertura_suave() -> void:
 
 	if background != null:
 		background.modulate.a = 0.0
-
-	if background_secundario != null:
-		background_secundario.modulate.a = 0.0
 
 	if contador_panel != null:
 		contador_panel.modulate.a = 0.0
@@ -394,28 +396,9 @@ func _exit_tree() -> void:
 
 
 func _process(delta: float) -> void:
-	if modal_sens_ativo:
-		if Input.get_mouse_mode() != Input.MOUSE_MODE_HIDDEN:
-			Input.set_mouse_mode(Input.MOUSE_MODE_HIDDEN)
-			# Ao entrar no modal, teleporta o cursor OS para onde a mira já está.
-			# Sem isso o cursor reaparece no último ponto do sistema e o hover
-			# dos botões fica deslocado em relação à mira desenhada.
-			Tela.warp_mouse(alvo_pos)
-	else:
-		if Input.get_mouse_mode() != Input.MOUSE_MODE_CAPTURED:
-			Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
- 
 	tempo_trava_input_menu = max(0.0, tempo_trava_input_menu - delta)
+	_orquestrar_videos(delta)
 	_atualizar_mira_menu(delta)
- 
-	# Com cursor em HIDDEN, sobrescreve alvo_pos com a posição real do mouse.
-	# _atualizar_mira_menu usa deltas acumulados (modo capturado), então
-	# precisamos corrigir aqui para manter mira e hover perfeitamente alinhados.
-	if modal_sens_ativo:
-		var tela := get_viewport_rect().size
-		alvo_pos = Tela.mouse()
-		alvo_pos.x = clampf(alvo_pos.x, 0.0, tela.x)
-		alvo_pos.y = clampf(alvo_pos.y, 0.0, tela.y)
  
 	alvo_anim_t += delta
  
@@ -481,68 +464,9 @@ func _atualizar_hover_modal_dificuldade() -> void:
 			modal_botao_dificil.modulate = Color.WHITE
 
 
-func _atualizar_mira_menu(delta: float) -> void:
-	var tela := get_viewport_rect().size
-
-	# ==========================
-	# MOUSE COM DPI
-	# ==========================
-	if mouse_delta_acumulado.length_squared() > 0.0:
-
-		alvo_pos += (
-			mouse_delta_acumulado
-			* sensibilidade_mouse
-		)
-
-		mouse_delta_acumulado = Vector2.ZERO
-
-	# ==========================
-	# XBOX
-	# ==========================
-	if usar_controle_xbox \
-	and Input.get_connected_joypads().size() > 0:
-
-		var eixo_x := Input.get_joy_axis(
-			0,
-			JOY_AXIS_LEFT_X
-		)
-
-		var eixo_y := Input.get_joy_axis(
-			0,
-			JOY_AXIS_LEFT_Y
-		)
-
-		if abs(eixo_x) < deadzone_xbox:
-			eixo_x = 0.0
-
-		if abs(eixo_y) < deadzone_xbox:
-			eixo_y = 0.0
-
-		alvo_pos.x += (
-			eixo_x
-			* velocidade_mira_xbox
-			* delta
-		)
-
-		alvo_pos.y += (
-			eixo_y
-			* velocidade_mira_xbox
-			* delta
-		)
-
-	# LIMITES DA TELA
-	alvo_pos.x = clampf(
-		alvo_pos.x,
-		0.0,
-		tela.x
-	)
-
-	alvo_pos.y = clampf(
-		alvo_pos.y,
-		0.0,
-		tela.y
-	)
-
+func _atualizar_mira_menu(_delta: float) -> void:
+	# mira única do jogo (MiraGlobal): ponteiro sempre capturado, sem saltos
+	alvo_pos = MiraGlobal.pos
 
 
 func _atualizar_hover_botoes() -> void:
@@ -798,17 +722,6 @@ func _configurar_background() -> void:
 	if background == null:
 		return
 
-	if background_secundario == null:
-		background_secundario = VideoStreamPlayer.new()
-		background_secundario.name = "Background2"
-		background_secundario.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		background_secundario.set_anchors_preset(Control.PRESET_FULL_RECT)
-		background_secundario.expand = true
-		background_secundario.loop = true
-		background_secundario.modulate.a = 0.0
-		add_child(background_secundario)
-		move_child(background_secundario, 1)
-
 	background.visible = true
 	background.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	background.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -825,9 +738,18 @@ func _configurar_background() -> void:
 	if ResourceLoader.exists(caminho_video_background):
 		background.stream = load(caminho_video_background)
 		background.play()
-		background_atual_caminho = caminho_video_background
+		_videos[caminho_video_background] = background
+		_video_atual = caminho_video_background
+		_video_desejado = caminho_video_background
 	else:
 		push_error("Vídeo de background não encontrado: " + caminho_video_background)
+
+	# Abrir um vídeo (ler o cabeçalho e preparar o decodificador) custa um
+	# tranco; aqui no _ready a tela ainda está escura (transição), então as
+	# prévias já ficam prontas e paradas, sem tranco depois.
+	for caminho in [CAMINHO_TEASER_DESERTO, CAMINHO_TEASER_MAR, CAMINHO_TEASER_BAR, CAMINHO_TEASER_ARENA]:
+		if ResourceLoader.exists(caminho):
+			_abrir_video(caminho)
 
 
 func _ajustar_background_fullscreen() -> void:
@@ -835,9 +757,8 @@ func _ajustar_background_fullscreen() -> void:
 		return
 	# cobre a tela sem esticar (o vídeo de fundo é 2:3, as prévias 9:16)
 	var tela := get_viewport_rect().size
-	Leve.cobrir_video(background, tela)
-	if background_secundario != null:
-		Leve.cobrir_video(background_secundario, tela)
+	for v: VideoStreamPlayer in _videos.values():
+		Leve.cobrir_video(v, tela)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -915,7 +836,7 @@ func _configurar_cards() -> void:
 func _atualizar_hover_cards_por_alvo() -> void:
 	if aleatorio_em_andamento or entrada_bloqueada or modal_ativo or modal_sens_ativo:
 		_resetar_hover_cards()
-		_solicitar_video_background(caminho_video_background, true)
+		_pedir_video(caminho_video_background, true)
 		return
 
 	var cards: Array[Panel] = [card_1, card_2, card_3, card_4]
@@ -937,7 +858,7 @@ func _atualizar_hover_cards_por_alvo() -> void:
 	if card_hover_atual != null:
 		_on_hover_cenario(null, card_hover_atual)
 	else:
-		_solicitar_video_background(caminho_video_background, true)
+		_pedir_video(caminho_video_background, false)
 
 
 func _resetar_hover_cards() -> void:
@@ -1545,7 +1466,7 @@ func _on_hover_cenario(_botao: TextureButton, card: Panel) -> void:
 		indice = 3
 		video_hover = CAMINHO_TEASER_ARENA
 
-	_solicitar_video_background(video_hover, false)
+	_pedir_video(video_hover, false)
 
 	_aplicar_estilo_card_por_indice(card, indice, true)
 
@@ -1577,63 +1498,78 @@ func _on_hover_cenario(_botao: TextureButton, card: Panel) -> void:
 
 
 
-func _solicitar_video_background(caminho: String, imediato: bool = false) -> void:
-	if caminho == "":
+## Pede um vídeo de fundo; a troca acontece em _orquestrar_videos.
+## imediato = sem esperar o hover parar (modal, roleta).
+func _pedir_video(caminho: String, imediato: bool = false) -> void:
+	if caminho == "" or not (caminho in _videos):
 		return
-
-	background_troca_id += 1
-	var id_local: int = background_troca_id
-
-	if not imediato:
-		await get_tree().create_timer(delay_troca_background_hover).timeout
-		if id_local != background_troca_id:
-			return
-
-	_trocar_video_background(caminho, id_local)
+	if caminho != _video_desejado:
+		_video_desejado = caminho
+		_video_espera = 0.0
+	if imediato:
+		_video_espera = maxf(_video_espera, _video_atraso)
 
 
-func _trocar_video_background(caminho: String, id_local: int = -1) -> void:
-	if caminho == "" or not ResourceLoader.exists(caminho):
-		push_warning("Vídeo não encontrado: " + caminho)
+func _orquestrar_videos(delta: float) -> void:
+	# troca quando o pedido ficou parado o bastante e não há troca no meio
+	if _video_desejado == _video_atual or not (_video_desejado in _videos):
+		_video_espera = 0.0
 		return
+	_video_espera += delta
+	if _video_espera >= _video_atraso and not _video_trocando():
+		_mostrar_video(_video_desejado)
 
-	if id_local != -1 and id_local != background_troca_id:
+
+func _video_trocando() -> bool:
+	return _video_tw != null and _video_tw.is_valid() and _video_tw.is_running()
+
+
+func _abrir_video(caminho: String) -> void:
+	if caminho in _videos:
 		return
+	var v := VideoStreamPlayer.new()
+	v.name = "Video_" + caminho.get_file().get_basename()
+	v.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	v.loop = true
+	v.visible = false
+	v.modulate.a = 0.0
+	v.stream = load(caminho)   # já está na memória (pré-carga da transição)
+	add_child(v)
+	move_child(v, background.get_index() + 1 if background != null else 0)
+	Leve.cobrir_video(v, get_viewport_rect().size)
+	_videos[caminho] = v
 
-	if background_atual_caminho == caminho:
-		return
 
-	var ativo: VideoStreamPlayer = background if usando_background_a else background_secundario
-	var inativo: VideoStreamPlayer = background_secundario if usando_background_a else background
+func _mostrar_video(caminho: String) -> void:
+	var novo: VideoStreamPlayer = _videos[caminho]
+	var velho: VideoStreamPlayer = _videos.get(_video_atual)
+	_video_atual = caminho
+	_video_espera = 0.0
 
-	if ativo != null and ativo.stream != null and ativo.stream.resource_path == caminho:
-		background_atual_caminho = caminho
-		return
+	# o que sai para de decodificar já (fica parado no último quadro)
+	if velho != null and velho != novo:
+		velho.paused = true
 
-	if background_tween != null and background_tween.is_valid():
-		background_tween.kill()
+	# o novo entra por cima dos outros vídeos, continuando de onde parou
+	var topo := novo.get_index()
+	for v: VideoStreamPlayer in _videos.values():
+		topo = maxi(topo, v.get_index())
+	move_child(novo, topo)
+	novo.visible = true
+	novo.modulate.a = 0.0
+	if novo.is_playing():
+		novo.paused = false
+	else:
+		novo.paused = false
+		novo.play()
 
-	inativo.stop()
-	inativo.stream = load(caminho)
-	inativo.modulate.a = 0.0
-	inativo.visible = true
-	inativo.play()
-
-	_ajustar_background_fullscreen()
-
-	background_tween = create_tween()
-	background_tween.set_parallel(true)
-	background_tween.tween_property(inativo, "modulate:a", 1.0, 0.35)
-	background_tween.tween_property(ativo, "modulate:a", 0.0, 0.35)
-
-	await background_tween.finished
-
-	if id_local != -1 and id_local != background_troca_id:
-		return
-
-	ativo.stop()
-	background_atual_caminho = caminho
-	usando_background_a = not usando_background_a
+	_video_tw = create_tween()
+	_video_tw.tween_property(novo, "modulate:a", 1.0, 0.30).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	_video_tw.tween_callback(func() -> void:
+		for v: VideoStreamPlayer in _videos.values():
+			if v != novo:
+				v.visible = false
+	)
 
 
 
@@ -1698,7 +1634,6 @@ func _input(event: InputEvent) -> void:
 	# =========================================================
 	if modal_sens_ativo:
 		if event is InputEventMouseMotion:
-			alvo_pos = event.position
 			return
 
 		# Agora a arma também funciona aqui usando input_shot.
@@ -1719,6 +1654,17 @@ func _input(event: InputEvent) -> void:
 				if r.has_point(alvo_pos):
 					_tocar_tiro()
 					_fechar_modal_sensibilidade()
+					return
+
+			# sliders: o tiro leva o valor até o ponto acertado
+			for sl: HSlider in [slider_mouse, slider_xbox]:
+				if sl != null and sl.is_visible_in_tree():
+					var rs := sl.get_global_rect().grow(18.0)
+					if rs.has_point(alvo_pos):
+						var f := clampf((alvo_pos.x - rs.position.x) / maxf(rs.size.x, 1.0), 0.0, 1.0)
+						sl.value = lerpf(sl.min_value, sl.max_value, f)
+						_tocar_tiro()
+						return
 
 			return
 
@@ -1937,7 +1883,6 @@ func _ir_para_cenario_4() -> void: _abrir_modal_dificuldade(CENA_CENARIO_4)
 
 func _ir_para_ranking() -> void:
 	get_tree().set_meta("ranking_origem", "cenarios")
-	Input.set_mouse_mode(Input.MOUSE_MODE_HIDDEN)
 	_abrir_cena_suave_com_tiro(CENA_RANKING)
 
 
@@ -2233,11 +2178,6 @@ func _abrir_modal_sensibilidade() -> void:
 
 	mouse_delta_acumulado = Vector2.ZERO
 
-	# mouse livre, mas ponteiro invisível
-	Input.set_mouse_mode(Input.MOUSE_MODE_HIDDEN)
-
-	Tela.warp_mouse(get_viewport_rect().size * 0.5)
-	alvo_pos = get_viewport_rect().size * 0.5
 
 	_criar_modal_sensibilidade()
 	_animar_entrada_modal_sensibilidade()
@@ -2557,13 +2497,6 @@ func _fechar_modal_sensibilidade() -> void:
 
 	mouse_delta_acumulado = Vector2.ZERO
 
-	# volta mira customizada
-	Input.set_mouse_mode(
-		Input.MOUSE_MODE_CAPTURED
-	)
-
-	var centro := get_viewport_rect().size * 0.5
-	alvo_pos = centro
 
 	if not modal_ativo \
 	and not aleatorio_em_andamento:

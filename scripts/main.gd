@@ -22,6 +22,10 @@ const TEASERS: Array[String] = [
 
 var video_layer: CanvasLayer = null
 var video_intro: VideoStreamPlayer = null
+# A prévia da vez já fica aberta e parada desde o início (tela escura da
+# transição): na hora dela entra por cima do vídeo inicial sem tranco.
+var video_teaser: VideoStreamPlayer = null
+var teaser_preparado: String = ""
 
 @export var video_intro_tamanho_base: Vector2 = Vector2(1920, 1080)
 @onready var meio_sprite: Sprite2D = $ParallaxBackground/MeioLayer/Sprite2D
@@ -77,6 +81,7 @@ func _ready() -> void:
 	teasers_disponiveis = TEASERS.duplicate()
 	teasers_disponiveis.shuffle()
 	rodada_mostrar_ranking = false
+	_preparar_teaser()
 
 	await get_tree().process_frame
 	_tocar_intro()
@@ -201,7 +206,28 @@ func _garantir_video_intro() -> void:
 		video_intro.play()
 
 
+func _preparar_teaser() -> void:
+	if video_layer == null:
+		return
+	teaser_preparado = _pegar_teaser_sem_repetir()
+	if not ResourceLoader.exists(teaser_preparado):
+		teaser_preparado = ""
+		return
+	if video_teaser == null:
+		video_teaser = VideoStreamPlayer.new()
+		video_teaser.name = "VideoTeaserPlayer"
+		video_teaser.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		video_teaser.loop = true
+		video_layer.add_child(video_teaser)
+	video_teaser.visible = false
+	video_teaser.modulate.a = 0.0
+	video_teaser.stream = load(teaser_preparado)
+	Leve.cobrir_video(video_teaser, get_viewport_rect().size)
+
+
 func _ajustar_video_intro(tela: Vector2) -> void:
+	if video_teaser != null:
+		Leve.cobrir_video(video_teaser, tela)
 	if video_intro == null:
 		return
 
@@ -502,7 +528,7 @@ func _pegar_teaser_sem_repetir() -> String:
 
 
 func _tocar_teaser_atrativo() -> void:
-	var caminho: String = _pegar_teaser_sem_repetir()
+	var caminho: String = teaser_preparado if teaser_preparado != "" else _pegar_teaser_sem_repetir()
 
 	if not ResourceLoader.exists(caminho):
 		push_warning("Teaser não encontrado: " + caminho)
@@ -521,7 +547,19 @@ func _tocar_teaser_atrativo() -> void:
 	pressione.scale = Vector2.ONE
 	_iniciar_pisca_pressione()
 
-	if video_intro != null:
+	if video_teaser != null and caminho == teaser_preparado:
+		# o vídeo inicial congela e a prévia (já aberta) surge por cima
+		video_teaser.visible = true
+		video_teaser.modulate.a = 0.0
+		video_teaser.play()
+		var tw := create_tween()
+		tw.tween_property(video_teaser, "modulate:a", 1.0, 0.45).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+		tw.tween_callback(func() -> void:
+			if video_intro != null:
+				video_intro.paused = true
+				video_intro.visible = false
+		)
+	elif video_intro != null:
 		video_intro.stop()
 		video_intro.stream = load(caminho)
 		_ajustar_video_intro(get_viewport_rect().size)
@@ -737,15 +775,12 @@ func _notification(what: int) -> void:
 #  MOUSE / MIRA
 # ─────────────────────────────────────────────
 func _ocultar_ponteiro_mouse() -> void:
-	# Chamada em todo quadro: só troca quando precisa (no Android cada troca
-	# passa pela ponte Java). Input e DisplayServer são o mesmo modo.
-	if Input.get_mouse_mode() != Input.MOUSE_MODE_HIDDEN:
-		Input.set_mouse_mode(Input.MOUSE_MODE_HIDDEN)
-
+	# O ponteiro fica sempre capturado e invisível (MiraGlobal): nada a fazer.
+	pass
 
 
 func _mostrar_ponteiro_mouse() -> void:
-	Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
+	pass
 
 
 func _ao_mudar_creditos(_creditos: int) -> void:

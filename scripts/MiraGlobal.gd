@@ -1,47 +1,49 @@
 extends Node
 
-const TEXTURA_MIRA: String = "res://sprites/mira.png"
-const ESCALA_PADRAO: float = 4.0
+## Ritmo de quadros e A MIRA DO JOGO INTEIRO.
+##
+## A arma funciona como mouse. Antes cada tela tinha a sua mira: umas somavam
+## o movimento com o ponteiro capturado, outras liam o cursor do sistema com o
+## ponteiro oculto, e cada troca de tela recentralizava a mira e ligava e
+## desligava a captura do ponteiro no Android (saltos e perda de movimento).
+##
+## Agora há UMA mira, aqui:
+## - o ponteiro fica sempre capturado (nenhuma tela troca o modo);
+## - cada movimento da arma (já corrigido para a tela em pé pelo Tela.gd) soma
+##   na posição, com a sensibilidade da configuração;
+## - um filtro leve tira o tremor da mão com a arma parada e segue sem atraso
+##   quando ela se move rápido (filtro "One Euro");
+## - a posição continua a mesma entre as telas.
+## Cada tela lê `MiraGlobal.pos` e desenha/acerta exatamente ali.
 
-## Trava o jogo em 120 FPS em qualquer tela/monitor, independente do que
-## estiver salvo em Project Settings -- garante isso via código assim que
-## o autoload inicializa, então nunca depende de configuração esquecida.
+## No PC o jogo vai a 120 quadros; na TV Box só o vsync manda (ver abaixo).
 const FPS_ALVO: int = 120
 
-const VELOCIDADE_XBOX_PADRAO: float = 4500.0
-const DEADZONE_XBOX_PADRAO: float = 0.18
+const META_SENS_MOUSE := "sensibilidade_mouse"
 
-const TEMPO_ACEL_MAX: float = 0.55
-const FATOR_ACEL_MAX: float = 1.85
+# Filtro anti-tremor (One Euro): corte mínimo (Hz) com a arma parada e quanto
+# o corte sobe com a velocidade (px/s). Parado: suaviza; rápido: segue junto.
+const FILTRO_CORTE_MIN := 5.0
+const FILTRO_BETA := 0.012
+const FILTRO_CORTE_VELOCIDADE := 1.5
 
-var canvas: CanvasLayer
-var sprite: Sprite2D
-var escala_atual: float = ESCALA_PADRAO
-var velocidade_xbox: float = VELOCIDADE_XBOX_PADRAO
-var deadzone_xbox: float = DEADZONE_XBOX_PADRAO
-var posicao: Vector2 = Vector2.ZERO
-var modo_xbox: bool = false
-var _tempo_stick_empurrado: float = 0.0
+## Posição da mira (filtrada), em coordenadas da tela do jogo (em pé).
+var pos := Vector2.ZERO
+## Posição sem filtro (soma direta dos movimentos).
+var bruta := Vector2.ZERO
+
+var _iniciada := false
+var _vel := Vector2.ZERO
+var _sens := 1.0
 
 
 func _ready() -> void:
 	_forcar_120_fps()
-
 	process_mode = Node.PROCESS_MODE_ALWAYS
-	canvas = CanvasLayer.new()
-	canvas.layer = 100
-	add_child(canvas)
-
-	sprite = Sprite2D.new()
-	# opcional: cada tela desenha a própria mira (Pincel.mira)
-	if ResourceLoader.exists(TEXTURA_MIRA):
-		sprite.texture = load(TEXTURA_MIRA)
-	sprite.scale = Vector2(escala_atual, escala_atual)
-	sprite.z_index = 1000
-	sprite.visible = false
-	canvas.add_child(sprite)
-
-	posicao = canvas.get_viewport().get_visible_rect().size * 0.5
+	process_priority = -100   # atualiza antes das telas lerem
+	# Depois do Tela.gd (autoload anterior), que corrige o giro do evento.
+	get_tree().root.window_input.connect(_ao_evento)
+	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 
 
 func _forcar_120_fps() -> void:
@@ -69,78 +71,59 @@ func _forcar_120_fps() -> void:
 	print("MiraGlobal: FPS alvo definido para ", FPS_ALVO, " | vsync mode = adaptive")
 
 
-func _process(delta: float) -> void:
-	if not sprite.visible:
+func _tela() -> Vector2:
+	return get_tree().root.get_visible_rect().size
+
+
+func _garantir_inicio() -> void:
+	if _iniciada:
 		return
-
-	var vp := canvas.get_viewport()
-	var tela: Vector2 = vp.get_visible_rect().size
-
-	var tem_xbox: bool = Input.get_connected_joypads().size() > 0
-	var stick_ativo: bool = false
-
-	if tem_xbox:
-		var ex: float = Input.get_joy_axis(0, JOY_AXIS_LEFT_X)
-		var ey: float = Input.get_joy_axis(0, JOY_AXIS_LEFT_Y)
-		if abs(ex) < deadzone_xbox: ex = 0.0
-		if abs(ey) < deadzone_xbox: ey = 0.0
-		var mov := Vector2(ex, ey)
-		var magnitude: float = clampf(mov.length(), 0.0, 1.0)
-
-		if magnitude > 0.0:
-			stick_ativo = true
-			_tempo_stick_empurrado = min(_tempo_stick_empurrado + delta, TEMPO_ACEL_MAX)
-			var acel: float = 1.0 + (_tempo_stick_empurrado / TEMPO_ACEL_MAX) * (FATOR_ACEL_MAX - 1.0)
-			var dir: Vector2 = mov.normalized()
-			posicao += dir * magnitude * velocidade_xbox * acel * delta
-		else:
-			_tempo_stick_empurrado = 0.0
-
-	if not stick_ativo:
-		if modo_xbox:
-			pass
-		else:
-			posicao = Tela.mouse()
-
-	posicao.x = clampf(posicao.x, 0.0, tela.x)
-	posicao.y = clampf(posicao.y, 0.0, tela.y)
-	sprite.position = posicao
+	var tela := _tela()
+	if tela.x <= 0.0:
+		return
+	_iniciada = true
+	bruta = tela * 0.5
+	pos = bruta
 
 
-func mostrar() -> void:
-	sprite.visible = true
-	Input.set_mouse_mode(Input.MOUSE_MODE_HIDDEN)
+func _ao_evento(ev: InputEvent) -> void:
+	if not (ev is InputEventMouseMotion):
+		return
+	_garantir_inicio()
+	var tela := _tela()
+	bruta += (ev as InputEventMouseMotion).relative * _sens
+	bruta = Vector2(clampf(bruta.x, 0.0, tela.x), clampf(bruta.y, 0.0, tela.y))
 
-func esconder() -> void:
-	sprite.visible = false
 
-func set_escala(novo: float) -> void:
-	escala_atual = novo
-	sprite.scale = Vector2(novo, novo)
-
-func set_velocidade_xbox(v: float) -> void:
-	velocidade_xbox = max(200.0, v)
-
-func set_deadzone(v: float) -> void:
-	deadzone_xbox = clampf(v, 0.05, 0.5)
-
-func set_modo_xbox(ativo: bool) -> void:
-	modo_xbox = ativo
-	if ativo:
+func _process(delta: float) -> void:
+	_garantir_inicio()
+	if Input.get_mouse_mode() != Input.MOUSE_MODE_CAPTURED:
 		Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
-	else:
-		Input.set_mouse_mode(Input.MOUSE_MODE_HIDDEN)
+	_sens = clampf(float(get_tree().get_meta(META_SENS_MOUSE, 1.0)), 0.2, 3.0)
 
-func get_posicao() -> Vector2:
-	return posicao
+	var tela := _tela()
+	bruta = Vector2(clampf(bruta.x, 0.0, tela.x), clampf(bruta.y, 0.0, tela.y))
 
-func set_posicao(pos: Vector2) -> void:
-	posicao = pos
+	var te := maxf(delta, 0.001)
+	_vel = _vel.lerp((bruta - pos) / te, _alfa(FILTRO_CORTE_VELOCIDADE, te))
+	var corte := FILTRO_CORTE_MIN + FILTRO_BETA * _vel.length()
+	pos = pos.lerp(bruta, _alfa(corte, te))
+	if pos.distance_squared_to(bruta) < 0.01:
+		pos = bruta
+
+
+static func _alfa(corte_hz: float, te: float) -> float:
+	var tau := 1.0 / (TAU * corte_hz)
+	return 1.0 / (1.0 + tau / te)
+
+
+## Leva a mira para um ponto (ex.: centro ao começar algo novo).
+func levar_para(p: Vector2) -> void:
+	_garantir_inicio()
+	bruta = p
+	pos = p
+	_vel = Vector2.ZERO
+
 
 func centralizar() -> void:
-	var tela: Vector2 = canvas.get_viewport().get_visible_rect().size
-	posicao = tela * 0.5
-
-func set_textura(caminho: String) -> void:
-	if ResourceLoader.exists(caminho):
-		sprite.texture = load(caminho)
+	levar_para(_tela() * 0.5)

@@ -44,7 +44,7 @@ const PADRAO := {
 	"botoes/start_arma": "",
 	"botoes/recarga_arma": "padrao",
 	"jogo/tempo_partida": 120,
-	"jogo/tempo_modal_final": 21,
+	"jogo/tempo_modal_final": 17,
 	"jogo/dificuldade_padrao": "facil",
 	"ranking/tempo_nome": 50,
 	"ranking/ranking_ativo": true,
@@ -77,12 +77,12 @@ var _bus_efeitos := -1
 const FONTE_PADRAO := "res://fonts/Exo2-Bold.ttf"
 
 
-## Símbolos e emojis usados nos textos (🏆 ⚙ ★ ▶ 🥇...) que a Exo 2 e a
-## LuckiestGuy não têm. A TV Box não tem fonte de emoji para o Godot usar,
+## Símbolos e emojis usados nos textos (🏆 ⚙ ★ ▶ 🥇...) que a Exo 2 não
+## tem. A TV Box não tem fonte de emoji para o Godot usar,
 ## então eles apareciam quebrados; estas fontes pequenas (recortes da Noto)
 ## entram como reserva das fontes do jogo.
 const FONTES_RESERVA := ["res://fonts/Simbolos.ttf", "res://fonts/SimbolosEmoji.ttf"]
-const FONTES_DO_JOGO := [FONTE_PADRAO, "res://fonts/Exo2-ExtraBold.ttf", "res://fonts/LuckiestGuy-Regular.ttf"]
+const FONTES_DO_JOGO := [FONTE_PADRAO, "res://fonts/Exo2-ExtraBold.ttf"]
 
 
 ## Fonte padrão de todos os textos + reservas de símbolos. É posta aqui, e
@@ -120,10 +120,22 @@ func _ready() -> void:
 	# VOLTAR do sistema e o Godot fechava o jogo. Agora ele recarrega.
 	get_tree().quit_on_go_back = false
 	cfg.load(CONFIG)
+	_migrar_config()
 	_criar_barramentos_de_audio()
 	_criar_rotulo()
 	aplicar()
 	get_tree().node_added.connect(_ao_entrar_no)
+
+
+## Ajustes de versões antigas do arquivo de configuração.
+func _migrar_config() -> void:
+	# A volta ao menu depois do resultado passou de 21 s para 17 s (padrão de
+	# todas as fases). Quem nunca mexeu nisso (21 = padrão antigo) vai para 17.
+	if int(cfg.get_value("sistema", "versao_config", 0)) < 2:
+		if cfg.has_section_key("jogo", "tempo_modal_final") and int(cfg.get_value("jogo", "tempo_modal_final")) == 21:
+			cfg.set_value("jogo", "tempo_modal_final", 17)
+		cfg.set_value("sistema", "versao_config", 2)
+		cfg.save(CONFIG)
 
 
 # ---------------------------------------------------------------- valores
@@ -139,6 +151,12 @@ func definir(chave: String, v: Variant) -> void:
 
 func salvar() -> void:
 	cfg.save(CONFIG)
+
+
+## Segundos para a tela de resultado voltar sozinha ao início (sem START).
+## Mesmo valor em todas as fases.
+func tempo_volta_menu() -> float:
+	return clampf(float(valor("jogo/tempo_modal_final")), 5.0, 120.0)
 
 
 func restaurar_padrao() -> void:
