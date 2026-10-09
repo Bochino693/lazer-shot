@@ -1,7 +1,7 @@
 [gd_scene format=3 uid="uid://cihrkc7w6peji"]
 
 [ext_resource type="Script" uid="uid://dqvnh3e2hk7bi" path="res://scripts/arena.gd" id="1_olpmc"]
-[ext_resource type="Texture2D" uid="uid://d0tosdxjaxjob" path="res://sprites/ARENA.png" id="2_xdvfk"]
+[ext_resource type="Texture2D" uid="uid://d0tosdxjaxjob" path="res://sprites/arena.png" id="2_xdvfk"]
 
 [node name="ArenaLazerShot" type="Node2D" unique_id=2120854784]
 script = ExtResource("1_olpmc")
