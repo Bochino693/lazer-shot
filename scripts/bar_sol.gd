@@ -15,6 +15,11 @@ const SHADER_FEIXE := "res://shaders/bar_sol.gdshader"
 const PONTOS_POEIRA := [Vector2(400, 590), Vector2(656, 1139), Vector2(703, 1164), Vector2(438, 748), Vector2(348, 309), Vector2(619, 955), Vector2(134, 198), Vector2(558, 936), Vector2(553, 951), Vector2(513, 1024), Vector2(468, 966), Vector2(340, 603), Vector2(191, 218), Vector2(377, 571), Vector2(438, 701), Vector2(397, 569), Vector2(595, 896), Vector2(352, 406), Vector2(597, 1059), Vector2(640, 1099), Vector2(616, 1177), Vector2(667, 1136), Vector2(350, 474), Vector2(217, 436), Vector2(290, 501), Vector2(467, 566), Vector2(417, 624), Vector2(514, 741), Vector2(650, 1067), Vector2(365, 423), Vector2(110, 138), Vector2(667, 1167), Vector2(367, 699), Vector2(492, 737), Vector2(439, 821), Vector2(460, 590), Vector2(287, 390), Vector2(315, 638), Vector2(248, 419), Vector2(553, 995), Vector2(415, 843), Vector2(396, 347), Vector2(294, 305), Vector2(423, 395), Vector2(610, 920), Vector2(298, 204), Vector2(424, 844), Vector2(264, 275), Vector2(229, 368), Vector2(592, 1009), Vector2(221, 145), Vector2(347, 511), Vector2(502, 947), Vector2(609, 1176), Vector2(597, 1036), Vector2(303, 252), Vector2(449, 936), Vector2(439, 740), Vector2(446, 787), Vector2(198, 363), Vector2(427, 591), Vector2(330, 614), Vector2(402, 675), Vector2(281, 271), Vector2(619, 917), Vector2(209, 286), Vector2(639, 960), Vector2(464, 628), Vector2(341, 636), Vector2(526, 802), Vector2(359, 734), Vector2(297, 295), Vector2(519, 618), Vector2(498, 813), Vector2(338, 472), Vector2(350, 623), Vector2(179, 341), Vector2(317, 126), Vector2(397, 438), Vector2(620, 976)]
 
 
+# Contorno da parte acesa de bar_raios_sol.png (pixels da textura 256x384),
+# com folga de 3 px: nenhum pixel aceso fica de fora.
+const CONTORNO_FEIXE := [Vector2(18.3, 30.6), Vector2(31.6, 17.4), Vector2(79.5, 18.0), Vector2(84.6, 28.0), Vector2(135.9, 140.3), Vector2(230.5, 364.6), Vector2(234.5, 384.0), Vector2(163.8, 384.0), Vector2(21.0, 58.8), Vector2(18.1, 49.7)]
+
+
 func _ready() -> void:
 	var fundo := get_parent() as Sprite2D
 	if fundo == null or fundo.texture == null:
@@ -22,12 +27,19 @@ func _ready() -> void:
 	var tam_fundo: Vector2 = fundo.texture.get_size()
 
 	if ResourceLoader.exists(TEXTURA_FEIXE) and ResourceLoader.exists(SHADER_FEIXE):
-		var feixe := Sprite2D.new()
+		# Só a faixa diagonal da luz é desenhada (polígono justo, ~28% da
+		# tela); o resto da textura é preto e somava nada a tela inteira.
+		var textura: Texture2D = load(TEXTURA_FEIXE)
+		var tam_feixe: Vector2 = textura.get_size()
+		var escala: Vector2 = tam_fundo / tam_feixe
+		var feixe := Polygon2D.new()
 		feixe.name = "Feixe"
-		feixe.texture = load(TEXTURA_FEIXE)
-		feixe.centered = true
-		var tam_feixe: Vector2 = feixe.texture.get_size()
-		feixe.scale = tam_fundo / tam_feixe
+		feixe.texture = textura
+		var pontos := PackedVector2Array()
+		for q: Vector2 in CONTORNO_FEIXE:
+			pontos.append((q - tam_feixe * 0.5) * escala)
+		feixe.polygon = pontos
+		feixe.uv = PackedVector2Array(CONTORNO_FEIXE)
 		var mat := ShaderMaterial.new()
 		mat.shader = load(SHADER_FEIXE)
 		feixe.material = mat

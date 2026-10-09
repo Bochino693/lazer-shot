@@ -12,8 +12,8 @@ const CAMINHO_THEME: String = "res://songs/theme.ogg"
 const CAMINHO_SOM_CHOICE: String = "res://songs/choice.mp3"
 const ACAO_TIRO_MENU: String = "input_shot"
 
-const TEMPO_AUTO_ALEATORIO: float = 15.0
-const TEMPO_ESCOLHA_DIFICULDADE: float = 20.0
+const TEMPO_AUTO_ALEATORIO: float = 10.0
+const TEMPO_ESCOLHA_DIFICULDADE: float = 8.0
 
 const CAMINHO_IMG_1: String = "res://sprites/cene_desert.png"
 const CAMINHO_IMG_2: String = "res://sprites/cene_mar.png"
@@ -444,7 +444,8 @@ func _process(delta: float) -> void:
 		_atualizar_modal_contador()
 		if modal_tempo_restante <= 0.0:
 			modal_ativo = false
-			get_tree().set_meta("modo_dificuldade", "facil")
+			# ninguém escolheu: vale a dificuldade padrão da configuração
+			get_tree().set_meta("modo_dificuldade", str(Maquina.valor("jogo/dificuldade_padrao")))
 			_fechar_modal_e_ir()
 
 
@@ -784,6 +785,9 @@ func _configurar_base_fundo() -> void:
 	fundo_preto.offset_right = 0.0
 	fundo_preto.offset_bottom = 0.0
 	fundo_preto.color = Color.BLACK
+	# A cor de limpeza da tela já é preta e o vídeo cobre tudo: desenhar
+	# este retângulo era uma camada de tela cheia a mais por quadro.
+	fundo_preto.visible = false
 
 	move_child(fundo_preto, 0)
 	if background != null:
@@ -829,15 +833,11 @@ func _configurar_background() -> void:
 func _ajustar_background_fullscreen() -> void:
 	if background == null:
 		return
-	background.set_anchors_preset(Control.PRESET_FULL_RECT)
-	background.offset_left = 0.0
-	background.offset_top = 0.0
-	background.offset_right = 0.0
-	background.offset_bottom = 0.0
-	background.position = Vector2.ZERO
-	background.size = get_viewport_rect().size
-	background.scale = Vector2.ONE
-	background.expand = true
+	# cobre a tela sem esticar (o vídeo de fundo é 2:3, as prévias 9:16)
+	var tela := get_viewport_rect().size
+	Leve.cobrir_video(background, tela)
+	if background_secundario != null:
+		Leve.cobrir_video(background_secundario, tela)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1417,6 +1417,7 @@ func _desenhar_alvo_overlay() -> void:
 	var cor_secundaria := Color(1.0, 1.0, 1.0, 0.94)
 	var cor_sombra := Color(0.0, 0.0, 0.0, 0.34)
 
+	Pincel.mira_inicio(alvo_overlay, alvo_pos)
 	Pincel.anel(alvo_overlay, alvo_pos + Vector2(1.2, 1.2), raio_base, 3.0, cor_sombra)
 	Pincel.anel(alvo_overlay, alvo_pos, raio_base, 2.5, cor_principal)
 	Pincel.anel(alvo_overlay, alvo_pos, raio_meio, 1.2, Color(1.0, 0.88, 0.82, 0.78))
@@ -1429,6 +1430,7 @@ func _desenhar_alvo_overlay() -> void:
 	Pincel.linha(alvo_overlay, alvo_pos + Vector2(espaco, 0.0), alvo_pos + Vector2(tamanho_linha + espaco, 0.0), cor_secundaria, 2.2)
 	Pincel.linha(alvo_overlay, alvo_pos + Vector2(0.0, -tamanho_linha - espaco), alvo_pos + Vector2(0.0, -espaco), cor_secundaria, 2.2)
 	Pincel.linha(alvo_overlay, alvo_pos + Vector2(0.0, espaco), alvo_pos + Vector2(0.0, tamanho_linha + espaco), cor_secundaria, 2.2)
+	Pincel.mira_fim(alvo_overlay)
 # ─────────────────────────────────────────────────────────────────────────────
 # FADE
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1687,7 +1689,7 @@ var tempo_trava_input_menu: float = 0.0
 
 
 func _evento_tiro_menu(me: InputEventMouseButton) -> bool:
-	return me.button_index == BOTAO_GATILHO_1 or me.button_index == BOTAO_GATILHO_2
+	return Maquina.e_tiro_arma(me)
 
 
 func _input(event: InputEvent) -> void:
@@ -1890,19 +1892,23 @@ func _modo_aleatorio_async() -> void:
 	var cards: Array[Panel] = [card_1, card_2, card_3, card_4]
 	var cenas: Array[String] = [CENA_CENARIO_1, CENA_CENARIO_2, CENA_CENARIO_3, CENA_CENARIO_4]
 	var indice_final: int = randi() % cards.size()
-	var indice_atual: int = randi() % cards.size()
-	var voltas: int = randi_range(14, 22)
+	# Roleta em volta da grade 2x2 (sentido horário), rápida no começo e
+	# freando até parar no sorteado: ~1,6 s no total.
+	var ordem: Array[int] = [0, 1, 3, 2]
+	var p0: int = randi() % ordem.size()
+	var resto: int = posmod(ordem.find(indice_final) - p0 + 1, ordem.size())
+	var passos: int = resto + ordem.size() * (3 if resto < 2 else 2)
 
-	for i in range(voltas):
-		indice_atual = randi() % cards.size()
+	for i in range(passos):
+		var card_atual: Panel = cards[ordem[(p0 + i) % ordem.size()]]
 		for c in cards:
-			Leve.stylebox(c, "panel", estilo_card_normal)
-			c.scale = Vector2.ONE
-		var card_atual: Panel = cards[indice_atual]
+			if c != card_atual:
+				Leve.stylebox(c, "panel", estilo_card_normal)
+				c.scale = Vector2.ONE
 		Leve.stylebox(card_atual, "panel", estilo_card_destaque)
 		card_atual.scale = Vector2(1.04, 1.04)
 		_tocar_choice()
-		var espera: float = 0.055 + float(i) * 0.012
+		var espera: float = 0.05 + float(i * i) * 0.0011
 		await get_tree().create_timer(espera).timeout
 
 	for c in cards:

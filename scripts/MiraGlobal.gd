@@ -33,10 +33,9 @@ func _ready() -> void:
 	add_child(canvas)
 
 	sprite = Sprite2D.new()
+	# opcional: cada tela desenha a própria mira (Pincel.mira)
 	if ResourceLoader.exists(TEXTURA_MIRA):
 		sprite.texture = load(TEXTURA_MIRA)
-	else:
-		push_warning("MiraGlobal: textura não encontrada em " + TEXTURA_MIRA)
 	sprite.scale = Vector2(escala_atual, escala_atual)
 	sprite.z_index = 1000
 	sprite.visible = false
@@ -49,9 +48,12 @@ func _forcar_120_fps() -> void:
 	# TV Box (Android): a TV é de 60 Hz e o Android sempre sincroniza com ela;
 	# pedir 120 só gastaria processador e bateria de CPU sem quadro a mais.
 	if OS.get_name() == "Android":
-		Engine.max_fps = 60
+		# Só o vsync manda no ritmo (60 Hz, ou 50 Hz em saída PAL). Com o
+		# limitador do motor também em 60, os dois brigam e de tempos em
+		# tempos um quadro perde a vez: era a "travadinha" constante.
+		Engine.max_fps = 0
 		DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_ENABLED)
-		print("MiraGlobal: TV Box -> 60 FPS com vsync")
+		print("MiraGlobal: TV Box -> vsync (sem limitador)")
 		return
 
 	# Max FPS: teto interno do motor -- vale pro jogo inteiro, todas as cenas,

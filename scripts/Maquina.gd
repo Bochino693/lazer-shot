@@ -38,6 +38,11 @@ const PADRAO := {
 	"maquina/total_partidas": 0,
 	"botoes/start": JOY_BUTTON_A,
 	"botoes/select": JOY_BUTTON_BACK,
+	# Botões da arma (lado direito): START perto do bico, RECARGA perto do
+	# gatilho. Descritor: "mouse:N", "tecla:N", "voltar" (VOLTAR do Android)
+	# ou "" (nenhum). Recarga "padrao" = clique direito/meio/laterais/voltar.
+	"botoes/start_arma": "",
+	"botoes/recarga_arma": "padrao",
 	"jogo/tempo_partida": 120,
 	"jogo/tempo_modal_final": 21,
 	"jogo/dificuldade_padrao": "facil",
@@ -72,17 +77,48 @@ var _bus_efeitos := -1
 const FONTE_PADRAO := "res://fonts/Exo2-Bold.ttf"
 
 
-func _init() -> void:
-	# Fonte padrão de todos os textos. É posta aqui, e não em
-	# gui/theme/custom_font do projeto, porque o Godot lê essa opção ANTES de
-	# importar os arquivos: numa pasta nova (geração do APK) dava "Error
-	# loading custom project font".
+## Símbolos e emojis usados nos textos (🏆 ⚙ ★ ▶ 🥇...) que a Exo 2 e a
+## LuckiestGuy não têm. A TV Box não tem fonte de emoji para o Godot usar,
+## então eles apareciam quebrados; estas fontes pequenas (recortes da Noto)
+## entram como reserva das fontes do jogo.
+const FONTES_RESERVA := ["res://fonts/Simbolos.ttf", "res://fonts/SimbolosEmoji.ttf"]
+const FONTES_DO_JOGO := [FONTE_PADRAO, "res://fonts/Exo2-ExtraBold.ttf", "res://fonts/LuckiestGuy-Regular.ttf"]
+
+
+## Fonte padrão de todos os textos + reservas de símbolos. É posta aqui, e
+## não em gui/theme/custom_font do projeto, porque o Godot lê essa opção ANTES
+## de importar os arquivos: numa pasta nova (geração do APK) dava "Error
+## loading custom project font". Precisa ser no _ready: no _init a fonte
+## ainda é recarregada depois e as reservas se perdiam.
+func _preparar_fontes() -> void:
+	var reservas: Array[Font] = []
+	for caminho in FONTES_RESERVA:
+		if ResourceLoader.exists(caminho):
+			reservas.append(load(caminho))
+	for caminho in FONTES_DO_JOGO:
+		if ResourceLoader.exists(caminho):
+			var f := load(caminho) as FontFile
+			if f != null:
+				f.fallbacks = reservas
+				# Sempre as nossas (igual no PC e na TV Box, que não tem
+				# fonte de emoji que o Godot consiga usar).
+				f.allow_system_fallback = false
+				_fontes_guardadas.append(f)
 	if ResourceLoader.exists(FONTE_PADRAO):
-		ThemeDB.get_default_theme().default_font = load(FONTE_PADRAO)
+		var padrao: Font = load(FONTE_PADRAO)
+		ThemeDB.get_default_theme().default_font = padrao
+		ThemeDB.fallback_font = padrao
+
+
+var _fontes_guardadas: Array[Font] = []
 
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	_preparar_fontes()
+	# O botão lateral da arma é o "voltar" do mouse; no Android isso vira o
+	# VOLTAR do sistema e o Godot fechava o jogo. Agora ele recarrega.
+	get_tree().quit_on_go_back = false
 	cfg.load(CONFIG)
 	_criar_barramentos_de_audio()
 	_criar_rotulo()
@@ -150,6 +186,8 @@ func aplicar() -> void:
 
 	_mapear_botao(ACAO_START, int(valor("botoes/start")))
 	_mapear_botao(ACAO_SELECT, int(valor("botoes/select")))
+	_mapear_arma(ACAO_START, str(valor("botoes/start_arma")))
+	_mapear_arma("input_recharge", str(valor("botoes/recarga_arma")))
 
 	if _bus_musica >= 0:
 		AudioServer.set_bus_volume_db(_bus_musica, float(valor("audio/volume_musica")))
@@ -173,6 +211,84 @@ func _mapear_botao(acao: String, botao: int) -> void:
 	novo.button_index = botao as JoyButton
 	novo.pressed = true
 	InputMap.action_add_event(acao, novo)
+
+
+# ---------------------------------------------------------------- arma
+## Põe o botão aprendido da arma (clique ou tecla) na ação, sem mexer nos
+## botões da Zero Delay. "voltar" e "padrao" são tratados à parte.
+func _mapear_arma(acao: String, descritor: String) -> void:
+	if not InputMap.has_action(acao):
+		InputMap.add_action(acao, 0.2)
+	for ev in InputMap.action_get_events(acao):
+		if (ev is InputEventMouseButton or ev is InputEventKey) and ev.has_meta("da_arma"):
+			InputMap.action_erase_event(acao, ev)
+	var novo := evento_do_descritor(descritor)
+	if novo != null:
+		novo.set_meta("da_arma", true)
+		InputMap.action_add_event(acao, novo)
+
+
+static func descrever(ev: InputEvent) -> String:
+	if ev is InputEventMouseButton:
+		return "mouse:%d" % (ev as InputEventMouseButton).button_index
+	if ev is InputEventKey:
+		var k := ev as InputEventKey
+		return "tecla:%d" % (k.physical_keycode if k.physical_keycode != KEY_NONE else k.keycode)
+	if ev is InputEventJoypadButton:
+		return "joy:%d" % (ev as InputEventJoypadButton).button_index
+	return ""
+
+
+static func evento_do_descritor(d: String) -> InputEvent:
+	if d.begins_with("mouse:"):
+		var m := InputEventMouseButton.new()
+		m.button_index = int(d.substr(6)) as MouseButton
+		m.pressed = true
+		return m
+	if d.begins_with("tecla:"):
+		var k := InputEventKey.new()
+		k.physical_keycode = int(d.substr(6)) as Key
+		k.pressed = true
+		return k
+	return null
+
+
+static func nome_do_descritor(d: String) -> String:
+	if d == "" :
+		return "NENHUM"
+	if d == "padrao":
+		return "PADRÃO"
+	if d == "voltar":
+		return "VOLTAR (ANDROID)"
+	if d.begins_with("mouse:"):
+		var n := int(d.substr(6))
+		var nomes := {1: "ESQUERDO", 2: "DIREITO", 3: "MEIO", 8: "LATERAL 1", 9: "LATERAL 2"}
+		return "MOUSE %s" % nomes.get(n, str(n))
+	if d.begins_with("tecla:"):
+		return "TECLA %s" % OS.get_keycode_string(int(d.substr(6))).to_upper()
+	if d.begins_with("joy:"):
+		return "BOTÃO %s" % d.substr(4)
+	return d.to_upper()
+
+
+## Clique da arma que atira (o gatilho é o clique esquerdo).
+func e_tiro_arma(me: InputEventMouseButton) -> bool:
+	if me.button_index != MOUSE_BUTTON_LEFT:
+		return false
+	var d := descrever(me)
+	return d != str(valor("botoes/start_arma")) and d != str(valor("botoes/recarga_arma"))
+
+
+## Clique da arma que recarrega: o aprendido, ou no padrão o direito, o do
+## meio e os laterais (menos o que estiver como START da arma).
+func e_recarga_arma(me: InputEventMouseButton) -> bool:
+	var d := descrever(me)
+	if d == str(valor("botoes/start_arma")):
+		return false
+	var r := str(valor("botoes/recarga_arma"))
+	if r == "padrao":
+		return me.button_index in [MOUSE_BUTTON_RIGHT, MOUSE_BUTTON_MIDDLE, MOUSE_BUTTON_XBUTTON1, MOUSE_BUTTON_XBUTTON2]
+	return d == r
 
 
 # ---------------------------------------------------------------- créditos
@@ -232,6 +348,36 @@ func _contar_partida() -> void:
 ## Junta várias gravações seguidas (fichas em sequência) numa só.
 func _salvar_logo() -> void:
 	_salvar_em = 0.6
+
+
+# ---------------------------------------------------------------- VOLTAR
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_GO_BACK_REQUEST:
+		_voltar_vira_recarga()
+
+
+var _ultimo_voltar := 0
+
+func _voltar_vira_recarga() -> void:
+	var agora := Time.get_ticks_msec()
+	if agora - _ultimo_voltar < 120:
+		return
+	_ultimo_voltar = agora
+	var acao := ""
+	if str(valor("botoes/start_arma")) == "voltar":
+		acao = ACAO_START
+	elif str(valor("botoes/recarga_arma")) in ["padrao", "voltar"]:
+		acao = "input_recharge"
+	if acao == "" or not InputMap.has_action(acao) or _na_configuracao():
+		return
+	var aperta := InputEventAction.new()
+	aperta.action = acao
+	aperta.pressed = true
+	Input.parse_input_event(aperta)
+	var solta := InputEventAction.new()
+	solta.action = acao
+	solta.pressed = false
+	Input.parse_input_event.call_deferred(solta)
 
 
 # ---------------------------------------------------------------- SELECT

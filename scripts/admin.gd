@@ -25,6 +25,8 @@ var _rotulo_contadores: Label
 var _aviso: Label
 var _mira: Control
 var _aprendendo := ""
+var _aprender_desde := 0
+var _ultimo_botao: Label
 var _aprender_t := 0.0
 var _rotulos_botao := {}
 var _confirmar := {}
@@ -62,7 +64,7 @@ func _criar_interface() -> void:
 	add_child(margem)
 
 	var coluna := VBoxContainer.new()
-	coluna.add_theme_constant_override("separation", 6)
+	coluna.add_theme_constant_override("separation", 4)
 	margem.add_child(coluna)
 
 	# Cabeçalho
@@ -72,7 +74,7 @@ func _criar_interface() -> void:
 	titulos.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	titulos.add_theme_constant_override("separation", 0)
 	topo.add_child(titulos)
-	var titulo := _rotulo("CONFIGURAÇÕES", 54, COR_TEXTO)
+	var titulo := _rotulo("CONFIGURAÇÕES", 48, COR_TEXTO)
 	if ResourceLoader.exists(FONTE_TITULO):
 		titulo.add_theme_font_override("font", load(FONTE_TITULO))
 	titulos.add_child(titulo)
@@ -119,9 +121,14 @@ func _criar_interface() -> void:
 	_volume(coluna, "Efeitos", "audio/volume_fx")
 
 	# CONTROLES
-	_secao(coluna, "CONTROLES (ZERO DELAY)")
-	_aprender(coluna, "Botão START", "começa a partida", "start")
-	_aprender(coluna, "Botão SELECT", "ficha / crédito", "select")
+	_secao(coluna, "BOTÕES")
+	_aprender(coluna, "START na arma", "botão do lado direito, perto do bico", "start_arma")
+	_aprender(coluna, "RECARGA na arma", "botão do lado direito, perto do gatilho", "recarga_arma")
+	_aprender(coluna, "START na Zero Delay", "", "start")
+	_aprender(coluna, "SELECT na Zero Delay", "ficha / crédito", "select")
+	_ultimo_botao = _rotulo("Último botão recebido: —", 18, COR_APAGADO)
+	_ultimo_botao.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	coluna.add_child(_ultimo_botao)
 
 	# Rodapé
 	var espaco := Control.new()
@@ -166,7 +173,7 @@ func _criar_interface() -> void:
 
 func _secao(pai: Control, texto: String) -> void:
 	var r := _rotulo(texto, 19, COR_DESTAQUE)
-	r.custom_minimum_size.y = 28
+	r.custom_minimum_size.y = 24
 	r.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
 	pai.add_child(r)
 
@@ -249,13 +256,18 @@ func _aprender(pai: Control, titulo: String, dica: String, qual: String) -> void
 	valor.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	linha.add_child(valor)
 	_rotulos_botao[qual] = valor
+	var da_arma := qual.ends_with("_arma")
 	linha.add_child(_botao("APRENDER", func():
 		_aprendendo = qual
 		_aprender_t = 8.0
-		_mostrar_aviso("Aperte agora o botão %s na Zero Delay..." % qual.to_upper(), COR_DESTAQUE), 22, COR_BOTAO, Vector2(190, 50)))
+		_aprender_desde = Time.get_ticks_msec()
+		_mostrar_aviso("Aperte agora o botão na %s..." % ("arma" if da_arma else "Zero Delay"), COR_DESTAQUE), 22, COR_BOTAO, Vector2(190, 50)))
 	_atualizadores.append(func():
 		if _aprendendo != qual:
-			valor.text = "BOTÃO %d" % int(Maquina.valor("botoes/" + qual)))
+			if da_arma:
+				valor.text = Maquina.nome_do_descritor(str(Maquina.valor("botoes/" + qual)))
+			else:
+				valor.text = "BOTÃO %d" % int(Maquina.valor("botoes/" + qual)))
 
 
 func _rotulo(texto: String, tamanho: int, cor: Color) -> Label:
@@ -369,9 +381,66 @@ static func _pct_para_db(p: int) -> float:
 
 
 # ================================================================ entrada
+func _notification(what: int) -> void:
+	# VOLTAR do Android (o botão da arma perto do gatilho costuma ser este).
+	if what == NOTIFICATION_WM_GO_BACK_REQUEST:
+		_mostrar_ultimo("VOLTAR (ANDROID)")
+		if _aprendendo.ends_with("_arma"):
+			_gravar_arma("voltar")
+
+
+func _mostrar_ultimo(nome: String) -> void:
+	if _ultimo_botao != null:
+		_ultimo_botao.text = "Último botão recebido: " + nome
+
+
+func _gravar_arma(descritor: String) -> void:
+	var qual := _aprendendo
+	var outro := "botoes/recarga_arma" if qual == "start_arma" else "botoes/start_arma"
+	# O mesmo botão não pode ser START e RECARGA.
+	if str(Maquina.valor(outro)) == descritor:
+		Maquina.definir(outro, "padrao" if outro == "botoes/recarga_arma" else "")
+	Maquina.definir("botoes/" + qual, descritor)
+	Maquina.aplicar()
+	_mostrar_aviso("%s = %s  (salve para valer sempre)" % ["START na arma" if qual == "start_arma" else "RECARGA na arma", Maquina.nome_do_descritor(descritor)], COR_OK)
+	_aprendendo = ""
+	_atualizar_tudo()
+
+
 func _input(event: InputEvent) -> void:
+	if event is InputEventMouseButton and (event as InputEventMouseButton).pressed:
+		_mostrar_ultimo(Maquina.nome_do_descritor(Maquina.descrever(event)))
+	elif event is InputEventKey and (event as InputEventKey).pressed and not (event as InputEventKey).echo:
+		_mostrar_ultimo(Maquina.nome_do_descritor(Maquina.descrever(event)))
+	elif event is InputEventJoypadButton and (event as InputEventJoypadButton).pressed:
+		_mostrar_ultimo("ZERO DELAY " + Maquina.nome_do_descritor(Maquina.descrever(event)))
+
+	# Aprendendo um botão da arma: clique (menos o gatilho) ou tecla.
+	if _aprendendo.ends_with("_arma"):
+		if Time.get_ticks_msec() - _aprender_desde < 350:
+			return
+		if event is InputEventMouseButton and (event as InputEventMouseButton).pressed:
+			var mb := event as InputEventMouseButton
+			if mb.button_index in [MOUSE_BUTTON_LEFT, MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN, MOUSE_BUTTON_WHEEL_LEFT, MOUSE_BUTTON_WHEEL_RIGHT]:
+				return
+			_gravar_arma(Maquina.descrever(mb))
+			get_viewport().set_input_as_handled()
+			return
+		if event is InputEventKey and (event as InputEventKey).pressed and not (event as InputEventKey).echo:
+			var kk := event as InputEventKey
+			if kk.keycode == KEY_ESCAPE:
+				_aprendendo = ""
+				_mostrar_aviso("", COR_APAGADO)
+				_atualizar_tudo()
+				get_viewport().set_input_as_handled()
+				return
+			if kk.keycode != KEY_F10:
+				_gravar_arma(Maquina.descrever(kk))
+				get_viewport().set_input_as_handled()
+				return
+
 	# Aprendendo um botão: o próximo botão do controle vira o START/SELECT.
-	if _aprendendo != "":
+	if _aprendendo != "" and not _aprendendo.ends_with("_arma"):
 		if event is InputEventJoypadButton and (event as InputEventJoypadButton).pressed:
 			var idx := (event as InputEventJoypadButton).button_index
 			Maquina.definir("botoes/" + _aprendendo, idx)

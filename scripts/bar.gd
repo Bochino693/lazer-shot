@@ -4389,6 +4389,7 @@ func _desenhar_alvo_overlay() -> void:
 		cor_ext = Color(1.0, 0.68, 0.18, 0.98)
 
 	var ov: CanvasItem = alvo_overlay
+	Pincel.mira_inicio(ov, alvo_pos)
 	Pincel.anel(ov, alvo_pos, r1, 2.6, cor_ext)
 	Pincel.anel(ov, alvo_pos, r2, 1.2, cor_int)
 	Pincel.circulo(ov, alvo_pos, 2.8, Color(1.0, 1.0, 1.0, 0.96))
@@ -4412,6 +4413,7 @@ func _desenhar_alvo_overlay() -> void:
 	elif balas_no_cartucho <= 0:
 		var pulso_alerta: float = 0.35 + (sin(aviso_recarga_t * 16.0) * 0.5 + 0.5) * 0.35
 		Pincel.anel(ov, alvo_pos, 32.0, 4.0, Color(1.0, 0.15, 0.14, pulso_alerta))
+	Pincel.mira_fim(ov)
 
 
 
@@ -5726,8 +5728,9 @@ func _debug_botao_arma(me: InputEventMouseButton) -> void:
 
 
 func _evento_tiro_arma(me: InputEventMouseButton) -> bool:
-	# Igual Arena → botão esquerdo atira
-	return me.button_index == MOUSE_BUTTON_LEFT
+	# Gatilho = clique esquerdo (Maquina cuida dos botões aprendidos da arma).
+	return Maquina.e_tiro_arma(me)
+
 
 func _evento_action_arma(event: InputEvent, action_name: String) -> bool:
 	if event == null:
@@ -5793,9 +5796,8 @@ func _executar_recarga_arma() -> void:
 
 
 func _evento_recarga_arma(me: InputEventMouseButton) -> bool:
-	# Igual Arena → botão direito recarrega
-	# Scroll não faz nada
-	return me.button_index == MOUSE_BUTTON_RIGHT
+	# Recarga = botão aprendido na configuração (padrão: direito/meio/laterais).
+	return Maquina.e_recarga_arma(me)
 
 
 func _carregar_config_admin_jogo() -> void:

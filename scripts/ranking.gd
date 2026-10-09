@@ -293,6 +293,8 @@ func _criar_fundo() -> void:
 
 	if ResourceLoader.exists(CAMINHO_VIDEO_INIT):
 		video_fundo.stream = load(CAMINHO_VIDEO_INIT)
+		# cobre a tela sem esticar (o vídeo é 2:3)
+		Leve.cobrir_video(video_fundo, get_viewport_rect().size, 2.0 / 3.0)
 
 		await get_tree().process_frame
 
@@ -638,6 +640,7 @@ func _desenhar_alvo_overlay() -> void:
 	var pulso := 1.0 + sin(alvo_anim_t * 6.0) * 0.08
 	var raio := 18.0 * pulso
 
+	Pincel.mira_inicio(alvo_overlay, alvo_pos)
 	Pincel.anel(alvo_overlay, alvo_pos, raio, 2.8, Color(1.0, 0.12, 0.08))
 	Pincel.anel(alvo_overlay, alvo_pos, raio * 0.52, 1.4, Color.WHITE)
 	Pincel.circulo(alvo_overlay, alvo_pos, 3.4 * pulso, Color(1.0, 0.12, 0.08))
@@ -648,6 +651,7 @@ func _desenhar_alvo_overlay() -> void:
 	Pincel.linha(alvo_overlay, alvo_pos + Vector2(e, 0), alvo_pos + Vector2(l + e, 0), Color.WHITE, 2.2)
 	Pincel.linha(alvo_overlay, alvo_pos + Vector2(0, -l - e), alvo_pos + Vector2(0, -e), Color.WHITE, 2.2)
 	Pincel.linha(alvo_overlay, alvo_pos + Vector2(0, e), alvo_pos + Vector2(0, l + e), Color.WHITE, 2.2)
+	Pincel.mira_fim(alvo_overlay)
 func _criar_linha_ranking(posicao: int, nome: String, cenario: String, modo: String, pontos: int, precisao: int) -> Panel:
 	var linha := Panel.new()
 

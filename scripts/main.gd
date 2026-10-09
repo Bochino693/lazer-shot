@@ -205,10 +205,8 @@ func _ajustar_video_intro(tela: Vector2) -> void:
 	if video_intro == null:
 		return
 
-	video_intro.position = Vector2.ZERO
-	video_intro.size = tela
-	video_intro.scale = Vector2.ONE
-	video_intro.expand = true
+	# cobre a tela sem esticar (o vídeo de fundo é 2:3, as prévias 9:16)
+	Leve.cobrir_video(video_intro, tela)
 	video_intro.visible = true
 
 
@@ -316,8 +314,7 @@ func _configurar_audio() -> void:
 			audio_player.autoplay = false
 			audio_player.bus = "Master"
 			audio_player.volume_db = VOLUME_MUSICA_DB
-		else:
-			push_warning("Música não encontrada em: " + CAMINHO_MUSICA)
+		# sem song.ogg a abertura fica só com o áudio da intro (é o normal)
 
 
 func _iniciar_com_confirmacao() -> void:
@@ -527,6 +524,7 @@ func _tocar_teaser_atrativo() -> void:
 	if video_intro != null:
 		video_intro.stop()
 		video_intro.stream = load(caminho)
+		_ajustar_video_intro(get_viewport_rect().size)
 		video_intro.play()
 
 	_rodar_teaser_e_ir_ranking()

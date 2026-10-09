@@ -551,6 +551,7 @@ func _aplicar_sensibilidade_global() -> void:
 func _process(delta: float) -> void:
 	tempo_trava_input_arma = max(0.0, tempo_trava_input_arma - delta)
 	_atualizar_combo_hits(delta)
+	_ocultar_overlays_apagados()
 
 	if ranking_nome_ativo:
 		ranking_nome_tempo = max(0.0, ranking_nome_tempo - delta)
@@ -1838,6 +1839,18 @@ func _iniciar_timer_retorno_fim() -> void:
 
 
 
+## Flash e dano cobrem a tela inteira: apagados (alfa 0) ainda custavam três
+## camadas de tela cheia por quadro na placa de vídeo. Os tweens mexem na
+## cor; aqui eles só aparecem enquanto têm alguma cor.
+func _ocultar_overlays_apagados() -> void:
+	for ov: ColorRect in [flash_overlay, dano_overlay, dano_vinheta_overlay]:
+		if ov == null:
+			continue
+		var ligado: bool = ov.color.a * ov.modulate.a > 0.002
+		if ov.visible != ligado:
+			ov.visible = ligado
+
+
 func _processar_timer_retorno_fim(delta: float) -> void:
 	if not encerrado:
 		return
@@ -2868,6 +2881,7 @@ func _desenhar_mira() -> void:
 		cor_ext = Color(1.0, 0.68, 0.18, 0.98 * alpha_mira)
 
 	var ov: CanvasItem = alvo_overlay
+	Pincel.mira_inicio(ov, alvo_pos)
 	Pincel.anel(ov, alvo_pos, r1, 2.6, cor_ext)
 	Pincel.anel(ov, alvo_pos, r2, 1.2, cor_int)
 	Pincel.circulo(ov, alvo_pos, 2.8, Color(1.0, 1.0, 1.0, 0.96 * alpha_mira))
@@ -2896,6 +2910,7 @@ func _desenhar_mira() -> void:
 
 		Pincel.anel(ov, alvo_pos + ghost_offset, r1 + 1.2, 2.0, ghost_color)
 		Pincel.anel(ov, alvo_pos - ghost_offset * 0.7, r2 + 0.8, 1.0, ghost_color)
+	Pincel.mira_fim(ov)
 
 
 
@@ -5938,13 +5953,13 @@ func _pos_arma() -> Vector2:
 
 
 func _evento_tiro_arma(me: InputEventMouseButton) -> bool:
-	# Botão esquerdo = tiro
-	return me.button_index == MOUSE_BUTTON_LEFT
+	# Gatilho = clique esquerdo (Maquina cuida dos botões aprendidos da arma).
+	return Maquina.e_tiro_arma(me)
 
 
 func _evento_recarga_arma(me: InputEventMouseButton) -> bool:
-	# Botão direito = recarga
-	return me.button_index == MOUSE_BUTTON_RIGHT
+	# Recarga = botão aprendido na configuração (padrão: direito/meio/laterais).
+	return Maquina.e_recarga_arma(me)
 
 
 func _debug_botao_arma(me: InputEventMouseButton) -> void:
