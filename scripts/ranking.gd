@@ -177,7 +177,9 @@ func _criar_insert_coin_atrativo() -> void:
 
 	if insert_coin_label == null:
 		insert_coin_label = Label.new()
-		insert_coin_label.text = "INSERT COIN"
+		insert_coin_label.text = Maquina.texto_chamada()
+		if not Maquina.creditos_mudaram.is_connected(_ao_mudar_creditos):
+			Maquina.creditos_mudaram.connect(_ao_mudar_creditos)
 		insert_coin_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		insert_coin_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		insert_coin_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -323,6 +325,10 @@ func _iniciar_jogo_pelo_insert_coin() -> void:
 		return
 
 	if transicionando_insert:
+		return
+
+	# Modo crédito: só entra no jogo se houver crédito (desconta aqui).
+	if not Maquina.cobrar():
 		return
 
 	if get_tree().has_meta("ranking_origem"):
@@ -1089,3 +1095,8 @@ func _iniciar_musica_ranking() -> void:
 func _reiniciar_musica_ranking() -> void:
 	if audio_ranking != null:
 		audio_ranking.play()
+
+
+func _ao_mudar_creditos(_creditos: int) -> void:
+	if insert_coin_label != null and is_instance_valid(insert_coin_label):
+		insert_coin_label.text = Maquina.texto_chamada()

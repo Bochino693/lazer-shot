@@ -49,7 +49,7 @@ var intervalo_spawn_continuo: float = 0.21
 
 const TeiaAlvo := preload("res://scripts/teia_alvo.gd")
 const Pincel := preload("res://scripts/pincel.gd")
-const FONTE_ORBITRON: String = "res://fonts/Orbitron-Bold.ttf"
+const FONTE_TEXTO: String = "res://fonts/Exo2-Bold.ttf"
 const FONTE_LUCKIEST: String = "res://fonts/LuckiestGuy-Regular.ttf"
 const ACAO_TIRO_ARMA: String = "input_shot"
 const ACAO_RECARGA_ARMA: String = "input_recharge"
@@ -1283,7 +1283,7 @@ func _configurar_modal_fim() -> void:
 	fim_root.add_child(fim_texto)
 
 	fim_footer = Label.new()
-	fim_footer.text = "INSERT COIN TO CONTINUE!"
+	fim_footer.text = Maquina.texto_jogar_novamente()
 	fim_footer.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	fim_footer.vertical_alignment   = VERTICAL_ALIGNMENT_CENTER
 	Leve.font_size(fim_footer, "font_size", 26)
@@ -1538,7 +1538,7 @@ func _confirmar_nome_ranking(usar_anonimo: bool = false) -> void:
 		]
 
 	if fim_footer != null:
-		fim_footer.text = "APERTE START PARA JOGAR NOVAMENTE"
+		fim_footer.text = Maquina.texto_jogar_novamente()
 
 
 func _ajustar_modal_nome_ranking() -> void:
@@ -3095,7 +3095,7 @@ func _encerrar_jogo() -> void:
 		if entrou_ranking:
 			fim_footer.text = "ATIRE NAS LETRAS PARA SALVAR O RECORDE"
 		else:
-			fim_footer.text = "APERTE START PARA JOGAR NOVAMENTE"
+			fim_footer.text = Maquina.texto_jogar_novamente()
 			
 	
 	_atualizar_estilo_modais_por_modo()   # ← adicionar aqui
@@ -3110,6 +3110,9 @@ func _encerrar_jogo() -> void:
 
 
 func _reiniciar_jogo() -> void:
+	# Modo crédito: só recomeça se houver crédito (desconta aqui).
+	if not Maquina.cobrar():
+		return
 
 	fim_ativo = false
 	jogo_ativo = true
@@ -3439,8 +3442,8 @@ func _carregar_config_admin_jogo() -> void:
 
 
 func _carregar_fontes_ui() -> void:
-	if ResourceLoader.exists(FONTE_ORBITRON):
-		fonte_orbitron = load(FONTE_ORBITRON) as FontFile
+	if ResourceLoader.exists(FONTE_TEXTO):
+		fonte_orbitron = load(FONTE_TEXTO) as FontFile
 
 	if ResourceLoader.exists(FONTE_LUCKIEST):
 		fonte_luckiest = load(FONTE_LUCKIEST) as FontFile

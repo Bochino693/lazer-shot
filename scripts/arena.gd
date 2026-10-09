@@ -768,6 +768,9 @@ func _input(event: InputEvent) -> void:
 
  
 func _reiniciar_partida_modal_final() -> void:
+	# Modo crédito: só recomeça se houver crédito (desconta aqui).
+	if not Maquina.cobrar():
+		return
 	_aplicar_config_admin_na_cena()
 	fim_ativo = false
 	fim_tempo_voltar = float(get_tree().get_meta("admin_tempo_modal_final", fim_tempo_voltar))
@@ -1614,7 +1617,7 @@ func _configurar_modal_fim() -> void:
 	fim_panel.add_child(fim_stats_label)
 
 	fim_footer = Label.new()
-	_estilizar_botao_modal_final(fim_footer, "APERTE START PARA JOGAR NOVAMENTE", true)
+	_estilizar_botao_modal_final(fim_footer, Maquina.texto_jogar_novamente(), true)
 	fim_panel.add_child(fim_footer)
 
 	fim_contagem_label = Label.new()
@@ -1752,7 +1755,7 @@ func _mostrar_modal_fim() -> void:
 		if entrou_ranking:
 			_estilizar_botao_modal_final(fim_footer, "PREPARE-SE PARA DIGITAR SEU NOME", true)
 		else:
-			_estilizar_botao_modal_final(fim_footer, "▶ APERTE START PARA JOGAR NOVAMENTE", true)
+			_estilizar_botao_modal_final(fim_footer, "▶ " + Maquina.texto_jogar_novamente(), true)
 
 	if fim_contagem_label != null:
 		if entrou_ranking:
@@ -3528,7 +3531,7 @@ func _confirmar_nome_ranking(usar_anonimo: bool = false) -> void:
 		Leve.font_size(fim_stats_label, "font_size", 38)
 
 	if fim_footer != null:
-		_estilizar_botao_modal_final(fim_footer, "APERTE START PARA JOGAR NOVAMENTE", false)
+		_estilizar_botao_modal_final(fim_footer, Maquina.texto_jogar_novamente(), false)
 
 	if fim_contagem_label != null:
 		fim_contagem_label.text = "VOLTANDO AO MENU EM %02d" % int(ceil(fim_tempo_voltar))

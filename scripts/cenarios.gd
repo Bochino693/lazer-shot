@@ -38,7 +38,7 @@ const META_SENS_XBOX: String = "sensibilidade_xbox"
 const META_SENS_MOUSE: String = "sensibilidade_mouse"
 
 
-const FONTE_GOOGLE: String = "res://fonts/Orbitron-Bold.ttf"
+const FONTE_GOOGLE: String = "res://fonts/Exo2-Bold.ttf"
 var fonte_google: FontFile = null
 
 @export_file("*.ogv") var caminho_video_background: String = "res://background_video/back_init.ogv"

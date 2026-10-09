@@ -111,7 +111,9 @@ func _unhandled_input(event: InputEvent) -> void:
 				return
 
 	if _evento_start(event):
-		_iniciar_com_confirmacao()
+		# Modo crédito: só começa se houver crédito (desconta aqui).
+		if Maquina.cobrar():
+			_iniciar_com_confirmacao()
 
 
 func _abrir_tela_admin() -> void:
@@ -255,7 +257,9 @@ func _configurar_canvas() -> void:
 	pressione.offset_bottom = -35.0
 	pressione.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	pressione.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	pressione.text = "INSERT COIN"
+	pressione.text = Maquina.texto_chamada()
+	if not Maquina.creditos_mudaram.is_connected(_ao_mudar_creditos):
+		Maquina.creditos_mudaram.connect(_ao_mudar_creditos)
 	pressione.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	Leve.font_size(pressione, "font_size", 34)
 	Leve.color(pressione, "font_color", Color(1, 1, 1, 1))
@@ -462,6 +466,11 @@ func _iniciar_timer_intro() -> void:
 	if transicionando:
 		return
 
+	# Configuração: vídeos de demonstração desligados pulam direto para o ranking.
+	if not bool(get_tree().get_meta("admin_demo_ativa", true)):
+		_ir_para_ranking_atrativo()
+		return
+
 	_tocar_teaser_atrativo()
 
 
@@ -535,6 +544,11 @@ func _rodar_teaser_e_ir_ranking() -> void:
 
 
 func _ir_para_ranking_atrativo() -> void:
+	# Configuração: ranking desligado na abertura recomeça a abertura.
+	if not bool(get_tree().get_meta("admin_ranking_ativo", true)):
+		_trocar_cena_com_saida(scene_file_path)
+		return
+
 	if cena_ranking == "":
 		_mostrar_tela_inicial()
 		return
@@ -734,3 +748,8 @@ func _ocultar_ponteiro_mouse() -> void:
 
 func _mostrar_ponteiro_mouse() -> void:
 	Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
+
+
+func _ao_mudar_creditos(_creditos: int) -> void:
+	if pressione != null and is_instance_valid(pressione):
+		pressione.text = Maquina.texto_chamada()

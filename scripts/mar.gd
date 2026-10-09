@@ -58,7 +58,7 @@ var info_inicio_image: TextureRect = null
 var info_inicio_label: Label = null
 
 
-const FONTE_ORBITRON: String = "res://fonts/Orbitron-Bold.ttf"
+const FONTE_TEXTO: String = "res://fonts/Exo2-Bold.ttf"
 const FONTE_LUCKIEST: String = "res://fonts/LuckiestGuy-Regular.ttf"
 
 const COR_NEON_MAR: Color = Color(0.18, 0.88, 1.0, 1.0)
@@ -2784,7 +2784,7 @@ func _criar_modal_fim() -> void:
 	_fonte_titulo(fim_countdown_label, 25, Color(0.30, 0.94, 1.0, 1.0))
 	fim_panel.add_child(fim_countdown_label)
 
-	fim_hint = _criar_label("APERTE START PARA JOGAR NOVAMENTE", 26, Color(1.0, 0.90, 0.28, 1.0), 6)
+	fim_hint = _criar_label(Maquina.texto_jogar_novamente(), 26, Color(1.0, 0.90, 0.28, 1.0), 6)
 	_fonte_titulo(fim_hint, 26, Color(1.0, 0.90, 0.28, 1.0))
 	fim_panel.add_child(fim_hint)
 
@@ -3483,7 +3483,7 @@ func _confirmar_nome_ranking(usar_anonimo: bool = false) -> void:
 		]
 
 	if fim_hint != null:
-		fim_hint.text = "APERTE START PARA JOGAR NOVAMENTE"
+		fim_hint.text = Maquina.texto_jogar_novamente()
 
 	_iniciar_timer_retorno_fim()
 	_atualizar_texto_countdown_fim()
@@ -3680,7 +3680,7 @@ func _encerrar_partida() -> void:
 		if entrou_ranking:
 			fim_hint.text = "ATIRE NAS LETRAS PARA SALVAR O RECORDE"
 		else:
-			fim_hint.text = "APERTE START PARA JOGAR NOVAMENTE"
+			fim_hint.text = Maquina.texto_jogar_novamente()
 
 	if fim_countdown_label != null:
 		if entrou_ranking:
@@ -4036,6 +4036,9 @@ func _posicionar_modal_final_mar() -> void:
 
 
 func _reiniciar_partida() -> void:
+	# Modo crédito: só recomeça se houver crédito (desconta aqui).
+	if not Maquina.cobrar():
+		return
 	_aplicar_config_admin_na_cena()
 	_parar_musica_fim()
 	_iniciar_musica_pirate_em_loop()
@@ -6112,8 +6115,8 @@ func _aplicar_config_admin_na_cena() -> void:
 
 
 func _carregar_fontes_ui() -> void:
-	if ResourceLoader.exists(FONTE_ORBITRON):
-		fonte_orbitron = load(FONTE_ORBITRON) as FontFile
+	if ResourceLoader.exists(FONTE_TEXTO):
+		fonte_orbitron = load(FONTE_TEXTO) as FontFile
 
 	if ResourceLoader.exists(FONTE_LUCKIEST):
 		fonte_luckiest = load(FONTE_LUCKIEST) as FontFile

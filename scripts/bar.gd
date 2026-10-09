@@ -4,7 +4,7 @@ var erros_seguidos: int = 0
 
 var chat_rodape_panel: Panel = null
 
-const FONTE_ORBITRON: String = "res://fonts/Orbitron-Bold.ttf"
+const FONTE_TEXTO: String = "res://fonts/Exo2-Bold.ttf"
 const FONTE_LUCKIEST: String = "res://fonts/LuckiestGuy-Regular.ttf"
 
 const COR_NEON_BAR: Color = Color(0.20, 1.0, 0.32, 1.0)
@@ -3356,7 +3356,7 @@ func _confirmar_nome_ranking(usar_anonimo: bool = false) -> void:
 		fim_countdown_label.text = "VOLTANDO AO MENU EM %02d" % int(ceil(tempo_fim_menu))
 
 	if fim_insert_coin_label != null:
-		fim_insert_coin_label.text = "APERTE START PARA JOGAR NOVAMENTE"
+		fim_insert_coin_label.text = Maquina.texto_jogar_novamente()
 
 	_posicionar_modal_final()
 	_animar_texto_record_salvo_temporario(nome_final)
@@ -3632,7 +3632,7 @@ func _encerrar_jogo() -> void:
 		if entrou_ranking:
 			fim_insert_coin_label.text = "ATIRE NAS LETRAS PARA SALVAR O RECORDE"
 		else:
-			fim_insert_coin_label.text = "APERTE START PARA JOGAR NOVAMENTE"
+			fim_insert_coin_label.text = Maquina.texto_jogar_novamente()
 
 	if fim_countdown_label != null:
 		if entrou_ranking:
@@ -3796,6 +3796,9 @@ func _posicionar_modal_final() -> void:
 
 
 func _reiniciar_jogo() -> void:
+	# Modo crédito: só recomeça se houver crédito (desconta aqui).
+	if not Maquina.cobrar():
+		return
 	_parar_musica_fim()
 	_iniciar_musica_bar_em_loop()
 
@@ -5815,8 +5818,8 @@ func _carregar_config_admin_jogo() -> void:
 
 
 func _carregar_fontes_ui() -> void:
-	if ResourceLoader.exists(FONTE_ORBITRON):
-		fonte_orbitron = load(FONTE_ORBITRON) as FontFile
+	if ResourceLoader.exists(FONTE_TEXTO):
+		fonte_orbitron = load(FONTE_TEXTO) as FontFile
 
 	if ResourceLoader.exists(FONTE_LUCKIEST):
 		fonte_luckiest = load(FONTE_LUCKIEST) as FontFile
