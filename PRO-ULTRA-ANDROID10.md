@@ -59,9 +59,84 @@ As sombras suaves dos painéis neon foram mantidas: fazem parte do visual.
 
 ## Botões e arma
 
-A entrada continua a mesma: `input_start`, `input_shot` e `input_recharge`
-(Zero Delay/joystick), e a arma como mouse (os botões esquerdo e direito
-atiram; o do meio e os laterais recarregam). Confira na máquina se os índices de botões da placa são os mesmos.
+A arma continua como mouse (os botões esquerdo e direito atiram; o do meio e
+os laterais recarregam) e a Zero Delay/joystick usa `input_start`,
+`input_shot`, `input_recharge` e agora `input_select`.
+
+**START e SELECT se configuram na própria máquina:** abra a configuração e use
+**APRENDER** ao lado de "Botão START" / "Botão SELECT", depois aperte o botão
+na Zero Delay. Fica gravado (não precisa gerar outro APK). Padrões: START =
+botão 0, SELECT = botão 4.
+
+## Modo de jogo: LIVRE ou CRÉDITO
+
+- **LIVRE (padrão):** o START começa a partida sem cobrar nada.
+- **CRÉDITO:** cada aperto do **SELECT da Zero Delay** (onde se liga o
+  moedeiro/noteiro) soma 1 crédito, com som de ficha. O START só começa (ou
+  "joga novamente") se houver créditos suficientes e desconta os créditos da
+  partida; sem crédito aparece **INSIRA CRÉDITO**. Os créditos ficam guardados
+  mesmo desligando a máquina.
+- A tela inicial mostra o selo **JOGO LIVRE** ou **CRÉDITOS 03**; nas outras
+  telas ele aparece por alguns segundos quando entra ficha.
+- Contadores de **fichas** e **partidas** na configuração (com zerar).
+
+## Configuração (F10 ou SELECT segurado 3 s)
+
+Abre com **F10** (teclado) ou **segurando o SELECT por 3 segundos** na tela
+inicial, no ranking ou na escolha de cenário. Feita para a arma: aponte e atire
+nos botões (também funciona com mouse, ou setas + START).
+
+| Item | O que faz |
+| --- | --- |
+| Modo de jogo | LIVRE / CRÉDITO |
+| Créditos por partida | quantos créditos cada partida custa (1 a 10) |
+| Créditos na máquina | ajusta ou zera os créditos atuais |
+| Tempo de partida | 0:30 a 10:00 |
+| Dificuldade | FÁCIL / DIFÍCIL (difícil = sem mira na tela) |
+| Tela de resultado / Nome no ranking | tempos dessas telas |
+| Tempo da abertura / Tempo do vídeo | ciclo da tela inicial |
+| Vídeos de demonstração / Ranking na abertura | liga e desliga cada parte do ciclo |
+| Música / Efeitos | volumes (agora valem no jogo inteiro) |
+| Botão START / Botão SELECT | APRENDER o botão da Zero Delay |
+
+**SALVAR E SAIR** grava; **SAIR SEM SALVAR** descarta; **PADRÃO** (dois tiros)
+volta aos valores de fábrica sem apagar créditos e contadores. Tudo fica em
+`user://config_admin.cfg` e é lido já no boot.
+
+## Rodada 2: liso na TV Box, transições e efeitos novos
+
+**Desenhos por quadro** (pior momento, com tiros; antes → agora):
+
+| Fase | Antes | Agora |
+| --- | ---: | ---: |
+| Mar | 1874 | 113 |
+| Bar | 603 | 123 |
+| Deserto | 394 | 82 |
+| Arena | 311 | 42 |
+
+O que pesava: cada círculo, arco, linha e polígono dos efeitos e das miras era
+um desenho separado na placa de vídeo (bolhas do mar, furos de bala, cacos,
+teias dos alvos do deserto com 18 linhas cada). Agora tudo sai de recortes de
+uma textura só (`sprites/pincel.png`, gerada por `tools/gerar_pincel.py`) e o
+Godot junta em lote (`scripts/pincel.gd`).
+
+**Sem tela cinza:** todas as trocas de tela passam pela `TransicaoGlobal`:
+escurece, carrega a próxima cena numa thread por trás do preto (anel girando se
+demorar), deixa a cena nova montar escondida e clareia. Fundo e boot pretos.
+Testado quadro a quadro: nenhum quadro cinza ou branco.
+
+**Mais vida:**
+- **Mar:** as duas baleias foram recortadas da foto do fundo e nadam na água
+  aberta (surgem da névoa, batem a cauda, sobem e descem e somem na distância);
+  as 8 cachoeiras escorrem (recortes do próprio fundo com shader).
+- **Bar:** a garrafa estoura em cacos da **própria imagem**, rachando a partir do
+  ponto do tiro; os cacos batem na prateleira, quicam e deitam, ou caem pela
+  beirada, brilham na luz e o líquido espirra na cor da bebida. Três estilos se
+  revezam (estouro, desaba, gargalo voando). Feixe de sol da janela com poeira
+  brilhando.
+
+**Letras:** fonte Exo 2 (licença OFL, em `fonts/`) no lugar da Orbitron e como
+fonte padrão do jogo; a LuckiestGuy continua nos títulos.
 
 ## Para testar no PC como se fosse a TV Box
 
