@@ -3683,6 +3683,15 @@ func _ajustar_background_fullscreen() -> void:
 	background.scale = Vector2.ONE * escala
 	background.z_index = -100
 
+	# Cachoeiras escorrendo e baleias nadando (origem no canto da textura).
+	var vida := background.get_node_or_null("Vida") as Node2D
+	if vida == null:
+		vida = Node2D.new()
+		vida.name = "Vida"
+		vida.set_script(load("res://scripts/mar_vida.gd"))
+		background.add_child(vida)
+	vida.position = -tex_size * 0.5
+
 
 
 func _encerrar_partida() -> void:
