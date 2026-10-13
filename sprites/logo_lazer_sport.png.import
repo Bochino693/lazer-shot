@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dv4grnc10fat1"
-path="res://.godot/imported/egito_disco_mascara_sol.png-230f68bbdfdf71ba9f25a9c938b507ca.ctex"
+uid="uid://dmka2uqb6b24q"
+path="res://.godot/imported/logo_lazer_sport.png-76f0499978cd0e8a06eb87946ebd3a15.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://sprites/egito_disco_mascara_sol.png"
-dest_files=["res://.godot/imported/egito_disco_mascara_sol.png-230f68bbdfdf71ba9f25a9c938b507ca.ctex"]
+source_file="res://sprites/logo_lazer_sport.png"
+dest_files=["res://.godot/imported/logo_lazer_sport.png-76f0499978cd0e8a06eb87946ebd3a15.ctex"]
 
 [params]
 

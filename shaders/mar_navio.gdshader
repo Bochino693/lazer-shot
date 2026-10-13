@@ -14,7 +14,7 @@ void vertex() {
 
 void fragment() {
 	float t = TIME;
-	vec2 uv = UV + agita * 0.0045 * vec2(sin(UV.y * 38.0 + t * 3.1), cos(UV.x * 31.0 + t * 2.6));
+	vec2 uv = UV + agita * 0.003 * vec2(sin(UV.y * 38.0 + t * 3.1), cos(UV.x * 31.0 + t * 2.6));
 	vec4 tex = texture(TEXTURE, uv);
 	vec2 p = UV * vec2(9.0, 12.0);
 	float c = sin(p.x + t * 1.3 + sin(p.y * 1.3 + t)) * sin(p.y * 1.1 - t * 1.1 + sin(p.x * 0.8));
