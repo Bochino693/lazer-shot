@@ -35,7 +35,7 @@ var fx_redraw_timer: float = 0.0
 @export var tiro_sem_tremida_no_erro: bool = true
 
 
-@export var caminho_background: String = "res://sprites/atlantis.png"
+@export var caminho_background: String = "res://sprites/atlantis_jogo.png"
 @export var tempo_partida: float = 120.0
 @export var som_aguaviva_hit_path: String = "res://songs/buble_hit.wav"
 @export var som_bomba_xploit_path: String = "res://songs/xploit.wav"
@@ -437,6 +437,9 @@ const META_SENS_MOUSE: String = "sensibilidade_mouse"
 @export var sensibilidade_mouse: float = 1.0
 var mouse_delta_acumulado: Vector2 = Vector2.ZERO
 
+const SEGUNDO_NAVIO := 9.0
+var _navio_caiu := false
+
 
 func _ready() -> void:
 	randomize()
@@ -627,6 +630,13 @@ func _process(delta: float) -> void:
 				_finalizar_recarga()
 
 		tempo_restante = max(0.0, tempo_restante - delta)
+
+		# o navio afunda aos 9 s de partida
+		if not _navio_caiu and tempo_partida - tempo_restante >= SEGUNDO_NAVIO:
+			_navio_caiu = true
+			var vida := _vida_fundo()
+			if vida != null:
+				vida.cair_navio()
 
 		if tempo_restante <= 0.0:
 			tempo_restante = 0.0
@@ -3222,8 +3232,28 @@ func _ajustar_background_fullscreen() -> void:
 		vida.name = "Vida"
 		vida.set_script(load("res://scripts/mar_vida.gd"))
 		background.add_child(vida)
+		vida.navio_pousou.connect(_ao_navio_pousar)
 	vida.position = -tex_size * 0.5
 
+
+
+func _vida_fundo() -> Node2D:
+	if background == null:
+		return null
+	return background.get_node_or_null("Vida") as Node2D
+
+
+## Tiro sem alvo numa pedra com escritas: ela lasca no ponto do tiro.
+func _acertar_pedra(pos_global: Vector2) -> bool:
+	var vida := _vida_fundo()
+	if vida == null:
+		return false
+	return vida.acertar_pedra(vida.to_local(pos_global))
+
+
+func _ao_navio_pousar() -> void:
+	_tremida_rapida(7.0, 6, 0.035)
+	_flash_tela(Color(0.55, 0.78, 1.0, 0.14))
 
 
 func _encerrar_partida() -> void:
@@ -4101,6 +4131,8 @@ func _processar_tiro_global(pos_global: Vector2, primeiro_tiro: bool = false) ->
 
 	if alvo_acertado != null:
 		_acertar_alvo(alvo_acertado, pos_global)
+	elif _acertar_pedra(pos_global):
+		_set_status("PEDRA!")
 	else:
 		_efeito_erro_aquatico(pos_global)
 

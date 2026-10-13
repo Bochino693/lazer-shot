@@ -367,6 +367,60 @@ arquivo às vezes falhavam e a tela caía no carregamento travado. Agora
 
 **Limpeza:** 12 funções que ninguém chamava saíram (abertura, menu, Egito).
 
+## Rodada 8: Egito recriado, Mar com navio, pedras e cardumes, Bar com líquido
+
+**Egito recriado em camadas (sem vídeo).** `scripts/deserto_vivo.gd` monta o
+fundo na placa de vídeo, e os vídeos `back_sun`/`back_moon` saíram do jogo:
+- **Sol com o Olho de Rá** (olho direito: olha para a direita, traço comprido
+  para a esquerda) e **lua com o Olho de Hórus** (olho esquerdo: olha para a
+  esquerda, traço para a direita). Os dois completos, no traçado do hieróglifo
+  D10 (U+13080): sobrancelha, pálpebras, pupila tocando as duas pálpebras,
+  rabo, lágrima e espiral. O olho antigo (incompleto) foi apagado da foto.
+- Sol e lua em 2x de resolução (nítidos até em 4K), com luz correndo pelo
+  olho, pupila que cintila, borda que respira com a música e um "pisco"
+  (clarão) de tempos em tempos e na troca sol/lua.
+- **Luz em volta se movendo:** raios do sol girando em dois leques, coroa e
+  chamas na borda; na lua, halo frio, anel girando e feixes de luar.
+- **Pontas de ouro nas 3 pirâmides:** ao sol, ouro quente com a face acesa
+  trocando conforme a luz anda e um reflexo que corre de uma para outra; ao
+  luar, o mesmo ouro frio e prateado.
+- **Diamante:** arco-íris correndo pelas arestas de dia, vermelho por dentro
+  de noite, faixa de luz subindo e facetas acendendo uma de cada vez; estrelas
+  de brilho piscando nas pontas do diamante, nas pirâmides e no disco.
+- De noite: estrelas piscando no céu e estrela cadente de vez em quando.
+- Câmera "respirando" (zoom lento) ancorada no alto: o sol nunca entra
+  embaixo do placar.
+- Artes geradas por `tools/gerar_egito.py` (a partir das fotos originais).
+
+**Mar.** Tudo em `scripts/mar_vida.gd`, artes e sons por `tools/gerar_mar.py`:
+- **Pedras com escritas:** as runas acendem com uma faixa de luz que desce do
+  topo à base (as já passadas ficam acesas um pouco). Tiro na pedra solta a
+  lasca do próprio lugar (recortada da foto) + lasquinhas, poeira e bolhas, e
+  deixa o buraco com rachaduras; runa quebrada apaga. Status "PEDRA!".
+- **Navio cai aos 9 s de partida:** o fundo da partida (`atlantis_jogo.png`)
+  não tem o navio; ele desce de cima balançando, azulado pela névoa, com a
+  água ondulando e a luz passando por ele, soltando bolhas; bate no fundo
+  levantando areia, farpas e bolhas, a tela treme e o cenário volta a ser
+  exatamente a foto. Sons próprios da descida e da batida.
+- **Cardumes:** os peixinhos parados da foto saíram; três cardumes nadam
+  juntos pela água (MultiMesh, o nado é todo no shader).
+- **Baleias cantam** ao aparecer na água (canto ao longe, a de trás mais
+  grave).
+- O menu continua com a foto original (`atlantis.png`).
+
+**Bar.** Garrafa quebrando (`scripts/estilhacos.gd`):
+- Mais cacos da própria garrafa (rachadura com mais raios e anéis).
+- Lasquinhas de vidro na cor da garrafa (verde, âmbar, transparente) que
+  cintilam girando, quicam e deitam na prateleira ou caem na de baixo.
+- O líquido faz poça na prateleira, escorre pela beirada e pinga na
+  prateleira de baixo (ou no chão), onde respinga e deixa mancha. Whisky e rum
+  em âmbar com reflexo; vodka e gin como madeira molhada com brilho.
+
+**Custo.** Rajada de 145 tiros (PC, sem limite de quadros): 95% dos quadros
+até 9,0 ms no Bar, 8,4 ms no Mar e 7,4 ms no Egito; nós da tela estáveis.
+No Egito as camadas cobrem só partes da tela (disco, raios, pontas, diamante)
+em vez de vídeo.
+
 ## Para testar no PC como se fosse a TV Box
 
 ```
