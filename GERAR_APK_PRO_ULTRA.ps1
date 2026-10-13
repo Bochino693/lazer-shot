@@ -25,7 +25,11 @@ function Puxar-Registro([string]$Adb) {
     & $Adb logcat -d -v time > $Arquivo
     & $Adb shell getprop ro.product.model >> $Arquivo
     & $Adb shell getprop ro.board.platform >> $Arquivo
-    Write-Host "Registro salvo em $Arquivo . Envie este arquivo." -ForegroundColor Green
+    # caixa-preta do jogo (o que ele fazia quando parou)
+    $Caixa = Join-Path $Saida "caixa_preta"
+    New-Item -ItemType Directory -Path $Caixa -Force | Out-Null
+    & $Adb pull /sdcard/Android/data/com.lazersport.lazershot/files/caixa_preta/. $Caixa
+    Write-Host "Registro salvo em $Arquivo e caixa-preta em $Caixa . Envie os dois." -ForegroundColor Green
 }
 
 if ($Registro) {

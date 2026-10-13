@@ -105,9 +105,16 @@ func marca(txt: String) -> void:
 		_caixa.marca(txt)
 
 
-## O jogo fechou cedo nesta versão: sem abertura e sem vídeos (caixa_preta.gd).
-func modo_seguro() -> bool:
-	return _caixa != null and _caixa.modo_seguro
+## Este trecho já derrubou o app nesta versão? (caixa_preta.gd)
+func contorna(trecho: String) -> bool:
+	return _caixa != null and _caixa.contorna(trecho)
+
+
+## Entrando num trecho que depende do aparelho ("abertura", "video") ou
+## saindo dele (""): se o app morrer dentro, só ele é contornado depois.
+func risco(trecho: String) -> void:
+	if _caixa != null:
+		_caixa.risco(trecho)
 
 
 ## Tamanho da tela do jogo (em pé), o mesmo que get_viewport_rect().size.

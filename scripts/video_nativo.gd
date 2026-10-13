@@ -72,11 +72,11 @@ func _ready() -> void:
 func tocar() -> void:
 	if modo != "":
 		return
-	if Tela.modo_seguro():
-		# o jogo fechou cedo da última vez: nesta sessão, nenhum vídeo (a tela
-		# fica com o fundo parado de baixo)
-		Tela.marca("vídeo desligado (modo de segurança): " + mp4.get_file())
-		falhou.emit.call_deferred()
+	if Tela.contorna("video"):
+		# o hardware de vídeo já derrubou o app nesta versão: o vídeo toca
+		# pelo player do Godot
+		Tela.marca("vídeo pelo player do Godot (contorno): " + ogv.get_file())
+		_iniciar_godot()
 		return
 	if _pode_nativo():
 		_iniciar_nativo()
@@ -140,6 +140,7 @@ func _iniciar_nativo() -> void:
 	modo = "nativo"
 	_espera = 0.0
 	Tela.marca("vídeo hardware: preparando " + mp4.get_file())
+	Tela.risco("video")
 	_ext = ExternalTexture.new()
 	_ext.size = tamanho
 	var id := _ext.get_external_texture_id()
@@ -253,6 +254,7 @@ func _process(delta: float) -> void:
 		_espera += delta
 		if _pronto and int(_st.getTimestamp()) != 0:
 			Tela.marca("vídeo hardware: tocando " + mp4.get_file())
+			Tela.risco("")
 			_mostrar(_rect)
 		elif _espera > ESPERA_MAX:
 			_falhar("nenhum quadro em %.0f s" % ESPERA_MAX)
@@ -268,6 +270,7 @@ func _excecao() -> bool:
 
 func _falhar(motivo: String) -> void:
 	Tela.marca("vídeo hardware falhou (%s): %s" % [mp4.get_file(), motivo])
+	Tela.risco("")
 	push_warning("VideoNativo: hardware indisponível (%s)" % motivo)
 	_soltar_nativo()
 	modo = ""

@@ -180,9 +180,25 @@ func trocar_cena(caminho: String, tempo_saida: float = TEMPO_SAIDA, tempo_entrad
 			if velha is CanvasItem:
 				(velha as CanvasItem).visible = true
 	else:
-		# A cena nova monta e desenha os primeiros quadros escondida.
-		for i in range(QUADROS_ESCONDIDOS):
+		# A cena nova monta e desenha os primeiros quadros escondida, parada,
+		# com o pré-aquecimento por baixo do preto (scripts/aquecedor.gd):
+		# shaders, imagens e letras que ela usa, inclusive o que ainda está
+		# escondido, ficam prontos na placa agora e não no meio do jogo.
+		# Ela só volta a andar depois que esses quadros (que podem demorar
+		# na primeira vez) passaram, para o relógio dela não dar um salto.
+		await get_tree().process_frame
+		var nova := get_tree().current_scene
+		var modo_antes := Node.PROCESS_MODE_INHERIT
+		if nova != null:
+			modo_antes = nova.process_mode
+			nova.process_mode = Node.PROCESS_MODE_DISABLED
+			Aquecedor.cena(nova, self)
+		for i in range(QUADROS_ESCONDIDOS + 2):
 			await get_tree().process_frame
+		if nova != null and is_instance_valid(nova):
+			nova.process_mode = modo_antes
+		await get_tree().process_frame
+		Tela.marca("tela pronta: " + caminho.get_file())
 		cena_trocada.emit(caminho)
 	_segurar.clear()
 

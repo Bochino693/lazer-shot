@@ -42,6 +42,20 @@ var _android := false
 var _ultima_janela := Vector2(INF, INF)
 var _recapturar_em := 0.0
 
+# RITMO (TV Box): uma tela que não segura 60 quadros por segundo alterna
+# quadros de 16 e de 33 ms, e isso aparece como tranco. Se em 2 s mais de um
+# quarto dos quadros passou de 20 ms, a tela fica em 30 por segundo cravados
+# (liso); a próxima tela volta a tentar 60.
+const RITMO_JANELA := 2.0
+const RITMO_LENTO_MS := 20.0
+const RITMO_FRACAO := 0.25
+var _ritmo_ativo := false
+var _ritmo_cena := 0
+var _ritmo_t := 0.0
+var _ritmo_quadros := 0
+var _ritmo_lentos := 0
+var _ritmo_ultimo := 0
+
 
 func _ready() -> void:
 	_forcar_120_fps()
@@ -57,12 +71,13 @@ func _ready() -> void:
 func _forcar_120_fps() -> void:
 	# TV Box (Android): a TV é de 60 Hz e o Android sempre sincroniza com ela;
 	# pedir 120 só gastaria processador e bateria de CPU sem quadro a mais.
-	if OS.get_name() == "Android":
+	if OS.get_name() == "Android" or OS.get_environment("LAZER_RITMO") == "1":
 		# Só o vsync manda no ritmo (60 Hz, ou 50 Hz em saída PAL). Com o
 		# limitador do motor também em 60, os dois brigam e de tempos em
 		# tempos um quadro perde a vez: era a "travadinha" constante.
 		Engine.max_fps = 0
 		DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_ENABLED)
+		_ritmo_ativo = true
 		print("MiraGlobal: TV Box -> vsync (sem limitador)")
 		return
 
@@ -77,6 +92,39 @@ func _forcar_120_fps() -> void:
 	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_ADAPTIVE)
 
 	print("MiraGlobal: FPS alvo definido para ", FPS_ALVO, " | vsync mode = adaptive")
+
+
+## Mede os quadros da tela atual e, se ela não segura 60, trava em 30.
+func _ritmo() -> void:
+	var agora := Time.get_ticks_usec()
+	var cena := get_tree().current_scene
+	var id := cena.get_instance_id() if cena != null else 0
+	if id != _ritmo_cena:
+		# tela nova: volta a tentar 60 e espera ela assentar antes de medir
+		_ritmo_cena = id
+		Engine.max_fps = 0
+		_ritmo_t = -1.5
+		_ritmo_quadros = 0
+		_ritmo_lentos = 0
+		_ritmo_ultimo = agora
+		return
+	var quadro := (agora - _ritmo_ultimo) / 1000.0
+	_ritmo_ultimo = agora
+	if Engine.max_fps == 30:
+		return
+	_ritmo_t += quadro / 1000.0
+	if _ritmo_t < 0.0 or TransicaoGlobal.em_transicao:
+		return
+	_ritmo_quadros += 1
+	if quadro > RITMO_LENTO_MS:
+		_ritmo_lentos += 1
+	if _ritmo_t >= RITMO_JANELA:
+		if _ritmo_quadros > 20 and float(_ritmo_lentos) / _ritmo_quadros > RITMO_FRACAO:
+			Engine.max_fps = 30
+			Tela.marca("ritmo: 30 quadros/s cravados em %s (%d de %d quadros passavam de %d ms)" % [cena.name, _ritmo_lentos, _ritmo_quadros, int(RITMO_LENTO_MS)])
+		_ritmo_t = 0.0
+		_ritmo_quadros = 0
+		_ritmo_lentos = 0
 
 
 ## Seta do sistema transparente: refazer a captura não pisca cursor na tela.
@@ -133,6 +181,8 @@ func _ao_evento(ev: InputEvent) -> void:
 
 func _process(delta: float) -> void:
 	_garantir_inicio()
+	if _ritmo_ativo:
+		_ritmo()
 	_sens = clampf(float(get_tree().get_meta(META_SENS_MOUSE, 1.0)), 0.2, 3.0)
 
 	if _android and not capturada:
