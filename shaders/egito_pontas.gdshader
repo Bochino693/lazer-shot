@@ -51,7 +51,8 @@ void fragment() {
 	if (toque.z >= 0.0 && toque.z < 0.7) {
 		float dd = length((UV - toque.xy) * vec2(1.0, 0.23));
 		float idade = toque.z;
-		float anel = exp(-pow((dd - idade * 0.22) / 0.012, 2.0)) * (1.0 - idade / 0.7);
+		float ka = (dd - idade * 0.22) / 0.012;   // x*x: pow() com base negativa é indefinido no GLSL ES (NaN na Mali)
+		float anel = exp(-ka * ka) * (1.0 - idade / 0.7);
 		float clarao = exp(-dd * dd * 2600.0) * max(0.0, 1.0 - idade * 3.0);
 		col += mix(vec3(1.0, 0.92, 0.62), vec3(0.85, 0.92, 1.0), noite) * (anel * 1.6 + clarao * 3.0) * (0.4 + det);
 	}

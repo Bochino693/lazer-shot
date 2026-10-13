@@ -25,6 +25,7 @@ extends Node
 ## Para testar no PC: variáveis de ambiente LAZER_GIRO e LAZER_MIRA_DIRETA.
 
 const BASE := Vector2(1024, 1536)
+const CaixaPreta := preload("res://scripts/caixa_preta.gd")
 
 var giro := 0
 var mira_direta := true
@@ -32,6 +33,12 @@ var mira_direta := true
 var _janela_px := Vector2.ZERO   # tamanho da janela (HDMI), em pixels
 var _conteudo := BASE            # a tela em pé que os scripts enxergam
 var _escala := 1.0               # pixels do HDMI por pixel do jogo
+var _caixa: CanvasLayer = null   # diagnóstico (scripts/caixa_preta.gd)
+
+
+func _init() -> void:
+	# a caixa-preta começa a gravar antes de qualquer cena
+	_caixa = CaixaPreta.new()
 
 
 func _ready() -> void:
@@ -40,6 +47,7 @@ func _ready() -> void:
 	mira_direta = _mira_configurada()
 	var janela := get_tree().root
 	_aplicar()
+	add_child(_caixa)   # depois do giro, para o relatório já sair em pé
 	janela.size_changed.connect(_aplicar)
 	janela.window_input.connect(_corrigir_evento)
 
@@ -89,6 +97,12 @@ func _aplicar() -> void:
 	else:
 		# jogo (x, y) -> HDMI (largura - y, x): topo do jogo na direita
 		janela.global_canvas_transform = Transform2D(Vector2(0, kx), Vector2(-ky, 0), Vector2(_conteudo.x, 0))
+
+
+## Uma linha na caixa-preta (diagnóstico da TV Box).
+func marca(txt: String) -> void:
+	if _caixa != null:
+		_caixa.marca(txt)
 
 
 ## Tamanho da tela do jogo (em pé), o mesmo que get_viewport_rect().size.

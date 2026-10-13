@@ -25,6 +25,37 @@ A janela fica aberta e o histórico completo vai para
   com `GERAR_APK_PRO_ULTRA.bat -MiraGirada`. Os dois podem ir juntos:
   `GERAR_APK_PRO_ULTRA.bat -Giro -1 -MiraGirada`.
 
+### Se o jogo não abrir ou fechar sozinho na TV Box (caixa-preta)
+
+O jogo grava o que estava fazendo (`scripts/caixa_preta.gd`): aparelho, placa
+de vídeo, memória, cada troca de tela, cada erro e um pulso a cada 30 s. Cada
+linha vai para a memória da TV Box na hora, então sobra mesmo se o app fechar
+de repente.
+
+1. Instale o APK novo e abra o jogo. Se ele fechar ou travar, abra de novo.
+2. Na abertura seguinte aparece a tela **DIAGNÓSTICO: O JOGO PAROU AQUI DA
+   ÚLTIMA VEZ**. Fotografe a tela inteira e mande. START ou um tiro fecha;
+   ela fecha sozinha em 60 s.
+3. Se parou nos primeiros segundos, a abertura só começa depois de fechar o
+   relatório (assim dá tempo de fotografar).
+
+Ela só aparece quando a sessão anterior parou cedo (menos de 3 min), no meio
+de uma troca de tela ou logo depois de um erro. Desligar a máquina depois de
+jogar não faz o relatório aparecer.
+
+Se nem o relatório aparecer, puxe o registro do Android pelo adb (TV Box com
+a depuração ligada, no cabo ou na rede com `adb connect IP-DA-TVBOX`):
+
+```
+GERAR_APK_PRO_ULTRA.bat -Registro
+```
+
+Ele abre o jogo, espera 40 s e salva `build/android/LOGCAT-TVBOX.txt`. Com
+`-Instalar`, o mesmo acontece logo depois de instalar o APK novo.
+
+A versão do APK aparece em Configurações > Apps da TV Box (1.11.1, código 12)
+e na primeira linha do relatório.
+
 ## Tela em pé na TV Box
 
 O HDMI da TV Box sai deitado e o monitor da máquina está em pé. O jogo gira a
@@ -647,6 +678,18 @@ Tudo em WAV sem compressão, tocado pelo `Maquina.efeito`.
 quadro): Arena 41 ms, Egito 60 ms, Mar 58 ms, Bar 54 ms. É o mesmo nível da
 Rodada 10, e os nós da tela ficam estáveis. Trajetória e efeitos do fundo
 são desenhos do Pincel (uma textura) e só redesenham enquanto há algo no ar.
+
+### Rodada 11b: caixa-preta para a TV Box
+
+- **Caixa-preta** (`scripts/caixa_preta.gd`, criada pela `Tela` antes de
+  qualquer cena): veja "Se o jogo não abrir ou fechar sozinho na TV Box" no
+  começo deste arquivo. A transição marca cada troca de tela
+  (`Tela.marca("...")`).
+- `GERAR_APK_PRO_ULTRA.bat -Registro` puxa o logcat da TV Box pelo adb.
+- Shaders do Egito: `pow(x, 2.0)` com `x` negativo virou `x * x`. O GLSL ES
+  não define `pow` de base negativa, e nas GPUs Mali isso dá pontos pretos ou
+  piscando nos anéis de luz.
+- APK versão 1.11.1 (código 12), para conferir na TV Box qual está instalada.
 
 ## Para testar no PC como se fosse a TV Box
 

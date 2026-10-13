@@ -4,11 +4,38 @@ param(
     # A mira anda de lado quando a arma sobe? Gere de novo com -MiraGirada.
     [switch]$MiraGirada,
     # Instala na Pro Ultra 4K pelo adb depois de gerar (TV Box ligada no adb)
-    [switch]$Instalar
+    [switch]$Instalar,
+    # So puxa o registro do Android (logcat) da TV Box pelo adb, sem gerar APK:
+    # abre o jogo, espera 40 s e salva em build\android\LOGCAT-TVBOX.txt
+    [switch]$Registro
 )
 $ErrorActionPreference = "Stop"
 $Projeto = $PSScriptRoot
 $Saida = Join-Path $Projeto "build\android"
+
+# Registro do Android: o que a TV Box diz quando o jogo abre (ou fecha).
+function Puxar-Registro([string]$Adb) {
+    $Arquivo = Join-Path $Saida "LOGCAT-TVBOX.txt"
+    New-Item -ItemType Directory -Path $Saida -Force | Out-Null
+    & $Adb logcat -c
+    & $Adb shell am force-stop com.lazersport.lazershot
+    & $Adb shell monkey -p com.lazersport.lazershot -c android.intent.category.LAUNCHER 1
+    Write-Host "Jogo aberto na TV Box. Aguardando 40 s..."
+    Start-Sleep -Seconds 40
+    & $Adb logcat -d -v time > $Arquivo
+    & $Adb shell getprop ro.product.model >> $Arquivo
+    & $Adb shell getprop ro.board.platform >> $Arquivo
+    Write-Host "Registro salvo em $Arquivo . Envie este arquivo." -ForegroundColor Green
+}
+
+if ($Registro) {
+    $SdkR = if ($env:ANDROID_HOME) { $env:ANDROID_HOME } elseif ($env:ANDROID_SDK_ROOT) { $env:ANDROID_SDK_ROOT } elseif (Test-Path "C:\AndroidSdk") { "C:\AndroidSdk" } else { Join-Path $env:LOCALAPPDATA "Android\Sdk" }
+    $AdbR = Join-Path $SdkR "platform-tools\adb.exe"
+    if (-not (Test-Path $AdbR)) { throw "adb nao encontrado em $AdbR." }
+    if (-not ((& $AdbR devices) -match "\tdevice$")) { throw "Nenhuma TV Box no adb. Ligue a depuracao (ADB) na TV Box e conecte: adb connect IP-DA-TVBOX" }
+    Puxar-Registro $AdbR
+    exit 0
+}
 $PastaApk = Join-Path $Projeto "APK-Pronto"
 $Apk = Join-Path $PastaApk "LazerShot-Pro-Ultra-Android10.apk"
 # O Godot exporta aqui (junto com o .idsig da assinatura v4 e outros
@@ -217,5 +244,5 @@ Write-Host "Instale este APK na Pro Ultra 4K. O jogo gira internamente; mantenha
 if ($Instalar) {
     $Adb = Join-Path $Sdk "platform-tools\adb.exe"
     & $Adb install -r $Apk
-    & $Adb shell monkey -p com.lazersport.lazershot -c android.intent.category.LAUNCHER 1
+    Puxar-Registro $Adb
 }
