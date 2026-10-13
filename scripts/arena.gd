@@ -56,13 +56,13 @@ var ranking_ja_salvo: bool = false
 @export var textura_fundo: Texture2D
  
 @export_file("*.mp3;*.wav;*.ogg") var caminho_musica_arena: String  = "res://songs/arena_song.mp3"
-@export_file("*.mp3;*.wav;*.ogg") var caminho_som_tiro: String      = "res://songs/plasma-hit.mp3"
-@export_file("*.mp3;*.wav;*.ogg") var caminho_som_recarga: String   = "res://songs/lazer-charge.mp3"
-@export_file("*.mp3;*.wav;*.ogg") var caminho_som_sem_bala: String  = "res://songs/bullet_no.mp3"
-@export_file("*.mp3;*.wav;*.ogg") var caminho_som_alvo_cash: String = "res://songs/alvo_crash.mp3"
-@export_file("*.mp3;*.wav;*.ogg") var caminho_som_hit_lamp: String = "res://songs/hit-lamp.mp3" 
-@export_file("*.mp3;*.wav;*.ogg") var caminho_som_bip: String = "res://songs/bip.mp3"
-@export_file("*.mp3;*.wav;*.ogg") var caminho_som_bip_error: String = "res://songs/bip-error.mp3"
+@export_file("*.mp3;*.wav;*.ogg") var caminho_som_tiro: String      = "res://songs/plasma-hit.wav"
+@export_file("*.mp3;*.wav;*.ogg") var caminho_som_recarga: String   = "res://songs/lazer-charge.wav"
+@export_file("*.mp3;*.wav;*.ogg") var caminho_som_sem_bala: String  = "res://songs/bullet_no.wav"
+@export_file("*.mp3;*.wav;*.ogg") var caminho_som_alvo_cash: String = "res://songs/alvo_crash.wav"
+@export_file("*.mp3;*.wav;*.ogg") var caminho_som_hit_lamp: String = "res://songs/hit-lamp.wav" 
+@export_file("*.mp3;*.wav;*.ogg") var caminho_som_bip: String = "res://songs/bip.wav"
+@export_file("*.mp3;*.wav;*.ogg") var caminho_som_bip_error: String = "res://songs/bip-error.wav"
 
 
 @export var tempo_total: float = 120.0

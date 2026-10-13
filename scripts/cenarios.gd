@@ -7,9 +7,9 @@ const CENA_CENARIO_3: String = "res://scenes/bar.tscn"
 const CENA_CENARIO_4: String = "res://scenes/arena.tscn"
 const CENA_RANKING: String = "res://scenes/ranking.tscn"
 
-const CAMINHO_SOM_TIRO: String = "res://songs/tiro-de-pistola.mp3"
+const CAMINHO_SOM_TIRO: String = "res://songs/tiro-de-pistola.wav"
 const CAMINHO_THEME: String = "res://songs/theme.ogg"
-const CAMINHO_SOM_CHOICE: String = "res://songs/choice.mp3"
+const CAMINHO_SOM_CHOICE: String = "res://songs/choice.wav"
 const ACAO_TIRO_MENU: String = "input_shot"
 
 const TEMPO_AUTO_ALEATORIO: float = 10.0
@@ -45,6 +45,20 @@ var background: FundoVivo = null
 # quando o fundo é o da abertura; com a mira num cartão some e mostra a arte
 # do cenário. Sem hardware, fica só o fundo vivo (nunca o player lento).
 var video_menu: VideoNativo = null
+# Prévia em vídeo do cenário sob a mira (também pelo hardware). A arte do
+# cenário aparece na hora (já carregada); a prévia só começa se a mira parar
+# no cartão e entra por cima quando o 1º quadro chega.
+const PREVIA_CARDS := {
+	"deserto": "res://background_video/teaser_desert",
+	"mar": "res://background_video/teaser_mar",
+	"bar": "res://background_video/teaser_bar",
+	"arena": "res://background_video/teaser_arena",
+}
+const ATRASO_PREVIA := 0.25
+var video_cartao: VideoNativo = null
+var _previa_atual := "init"
+var _previa_pedida := "init"
+var _espera_previa := 0.0
 @onready var titulo: Label = $Titulo
 @onready var grid: GridContainer = $GridContainer
 @onready var botao_ranking: Button = $BotaoRanking
@@ -155,10 +169,6 @@ var estilo_botao_sens_normal: StyleBoxFlat = null
 var estilo_botao_sens_hover: StyleBoxFlat = null
 
 
-
-
-
-
 # ─────────────────────────────────────────────────────────────────────────────
 func _ready() -> void:
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
@@ -210,7 +220,6 @@ func _ready() -> void:
 	call_deferred("_reaplicar_layout")
 
 
-
 func _preparar_abertura_suave() -> void:
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 
@@ -249,7 +258,6 @@ func _preparar_abertura_suave() -> void:
 		botao_sensibilidade.scale = Vector2(0.94, 0.94)
 
 	call_deferred("_animar_abertura_suave")
-
 
 
 func _animar_abertura_suave() -> void:
@@ -300,7 +308,6 @@ func _animar_abertura_suave() -> void:
 		fade_rect.visible = false
 
 
-
 func _carregar_fonte_google() -> void:
 	if ResourceLoader.exists(FONTE_GOOGLE):
 		fonte_google = load(FONTE_GOOGLE) as FontFile
@@ -329,25 +336,6 @@ func _aplicar_fonte_label(
 	Leve.constant(lbl, "shadow_offset_y", 0)
 
 
-func _aplicar_fonte_botao(
-	btn: Button,
-	tamanho: int,
-	cor: Color = Color.WHITE
-) -> void:
-	if btn == null:
-		return
-
-	if fonte_google != null:
-		Leve.font(btn, "font", fonte_google)
-
-	Leve.font_size(btn, "font_size", tamanho)
-	Leve.color(btn, "font_color", cor)
-	Leve.color(btn, "font_hover_color", Color.WHITE)
-	Leve.color(btn, "font_pressed_color", Color.WHITE)
-	Leve.color(btn, "font_outline_color", Color.BLACK)
-	Leve.constant(btn, "outline_size", 7)
-
-
 func _aplicar_sensibilidade_menu() -> void:
 	if get_tree().has_meta(META_SENS_XBOX):
 		velocidade_mira_xbox = float(
@@ -374,7 +362,6 @@ func _aplicar_sensibilidade_menu() -> void:
 		SENS_MOUSE_MIN,
 		SENS_MOUSE_MAX
 	)
-
 
 
 func _exit_tree() -> void:
@@ -416,7 +403,6 @@ func _process(delta: float) -> void:
 			# ninguém escolheu: vale a dificuldade padrão da configuração
 			get_tree().set_meta("modo_dificuldade", str(Maquina.valor("jogo/dificuldade_padrao")))
 			_fechar_modal_e_ir()
-
 
 
 func _atualizar_hover_modal_dificuldade() -> void:
@@ -503,7 +489,6 @@ func _set_hover_sensibilidade(ativo: bool) -> void:
 
 
 var _ultimo_tamanho_vp: Vector2 = Vector2.ZERO
-
 
 
 func _notification(what: int) -> void:
@@ -728,13 +713,32 @@ func _ajustar_background_fullscreen() -> void:
 
 ## O vídeo aparece com o fundo da abertura e some (0,3 s) com a arte de um
 ## cenário; coberto pelo vídeo, o fundo vivo de baixo nem é desenhado.
+## Orquestra os vídeos do menu (no máximo 2 decodificando ao mesmo tempo):
+## o da abertura aparece com o fundo da abertura e pausa escondido; a prévia
+## do cartão começa depois que a mira para nele; coberto por vídeo, o fundo
+## animado de baixo nem é desenhado.
 func _atualizar_video_menu(delta: float) -> void:
 	if video_menu == null or background == null:
 		return
-	var alvo := 1.0 if background.atual() == "init" else 0.0
-	video_menu.modulate.a = move_toward(video_menu.modulate.a, alvo, delta / 0.3)
-	video_menu.visible = video_menu.modulate.a > 0.001
-	background.visible = not (alvo == 1.0 and video_menu.modulate.a >= 0.999 and video_menu.esta_mostrando())
+
+	if _previa_pedida != _previa_atual:
+		_espera_previa += delta
+		if _espera_previa >= ATRASO_PREVIA:
+			_trocar_previa(_previa_pedida)
+
+	var alvo := 1.0 if _previa_pedida == "init" else 0.0
+	video_menu.modulate.a = move_toward(video_menu.modulate.a, alvo, delta / 0.25)
+	var abertura_visivel := video_menu.modulate.a > 0.001
+	if abertura_visivel != video_menu.visible:
+		video_menu.visible = abertura_visivel
+		if abertura_visivel:
+			video_menu.continuar()
+		else:
+			video_menu.pausar()
+
+	var cobre := (alvo == 1.0 and video_menu.cobre_tela()) \
+		or (video_cartao != null and _previa_atual == _previa_pedida and video_cartao.cobre_tela())
+	background.visible = not cobre
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -770,7 +774,6 @@ func _configurar_layout() -> void:
 	)
 	botao_ranking.size = Vector2(480.0, 92.0)
 	botao_ranking.pivot_offset = botao_ranking.size * 0.5
-
 
 
 func _reposicionar_botao_sensibilidade() -> void:
@@ -843,7 +846,6 @@ func _resetar_hover_cards() -> void:
 	if card_hover_atual != null:
 		_on_sair_hover_cenario(null, card_hover_atual)
 	card_hover_atual = null
-
 
 
 func _configurar_imagens_e_estrelas() -> void:
@@ -957,7 +959,6 @@ func _configurar_imagens_e_estrelas() -> void:
 			1: estrelas_2 = hbox
 			2: estrelas_3 = hbox
 			3: estrelas_4 = hbox
-
 
 
 func _configurar_botoes() -> void:
@@ -1102,7 +1103,6 @@ func _inicializar_sensibilidade() -> void:
 	_criar_botao_sensibilidade()
 
 
-
 func _criar_estilos_sensibilidade() -> void:
 	estilo_botao_sens_normal = StyleBoxFlat.new()
 	estilo_botao_sens_normal.bg_color = Color(0.02, 0.01, 0.012, 0.96)
@@ -1133,7 +1133,6 @@ func _criar_estilos_sensibilidade() -> void:
 	estilo_botao_sens_hover.shadow_color = Color(1.0, 0.0, 0.0, 0.82)
 	estilo_botao_sens_hover.shadow_size = 46
 	estilo_botao_sens_hover.shadow_offset = Vector2.ZERO
-
 
 
 func _criar_botao_sensibilidade() -> void:
@@ -1270,7 +1269,6 @@ func _configurar_contador() -> void:
 	_atualizar_contador()
 
 
-
 func _atualizar_contador() -> void:
 	if contador_label == null:
 		return
@@ -1358,37 +1356,6 @@ func _configurar_fade() -> void:
 # ─────────────────────────────────────────────────────────────────────────────
 # ANIMAÇÕES DE ENTRADA
 # ─────────────────────────────────────────────────────────────────────────────
-func _animar_entrada_titulo() -> void:
-	if titulo != null:
-		titulo.visible = false
-
-	if contador_panel == null:
-		return
-
-	contador_panel.modulate.a = 0.0
-	contador_panel.scale = Vector2(0.94, 0.94)
-
-	var tw := create_tween()
-	tw.set_parallel(true)
-	tw.tween_property(contador_panel, "modulate:a", 1.0, 0.35)
-	tw.tween_property(contador_panel, "scale", Vector2.ONE, 0.35)\
-		.set_trans(Tween.TRANS_BACK)\
-		.set_ease(Tween.EASE_OUT)
-
-
-
-func _animar_entrada_cards() -> void:
-	var cards: Array[Panel] = [card_1, card_2, card_3, card_4]
-	for i in range(cards.size()):
-		var card: Panel = cards[i]
-		card.modulate.a = 0.0
-		card.scale = Vector2(0.92, 0.92)
-		var delay := 0.06 * i
-		var tween := create_tween()
-		tween.tween_property(card, "modulate:a", 1.0, 0.22).set_delay(delay)
-		tween.parallel().tween_property(card, "scale", Vector2.ONE, 0.22).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT).set_delay(delay)
-
-
 func _iniciar_pulso_ranking() -> void:
 	if tween_ranking_pulso != null:
 		tween_ranking_pulso.kill()
@@ -1410,7 +1377,6 @@ func _on_hover_ranking() -> void:
 		tween_ranking_pulso.kill()
 	botao_ranking.scale = Vector2(1.08, 1.08)
 	botao_ranking.modulate = Color(1.0, 0.96, 0.80, 1.0)
-
 
 
 func _on_sair_hover_ranking() -> void:
@@ -1470,12 +1436,56 @@ func _on_hover_cenario(_botao: TextureButton, card: Panel) -> void:
 		tw.tween_property(nome, "scale", Vector2(1.03, 1.03), 0.12)
 
 
-
+## Pede o fundo; o FundoVivo espera o pedido parar e cruza suave.
+## imediato = sem esperar (modal, sensibilidade).
 ## Pede o fundo; o FundoVivo espera o pedido parar e cruza suave.
 ## imediato = sem esperar (modal, sensibilidade).
 func _mostrar_fundo(chave: String, imediato: bool = false) -> void:
 	if background != null:
 		background.mostrar(chave, imediato)
+	if chave == _previa_pedida:
+		return
+	_previa_pedida = chave
+	_espera_previa = ATRASO_PREVIA if imediato else 0.0
+	# a prévia que estava na tela sai já, revelando a arte do novo cenário
+	if video_cartao != null and _previa_atual != chave:
+		_sumir_video(video_cartao)
+		video_cartao = null
+		_previa_atual = ""
+
+
+func _trocar_previa(chave: String) -> void:
+	_previa_atual = chave
+	if video_cartao != null:
+		_sumir_video(video_cartao)
+		video_cartao = null
+	if not PREVIA_CARDS.has(chave):
+		return
+	var base: String = PREVIA_CARDS[chave]
+	var novo := VideoNativo.new(base + ".mp4", base + ".ogv", Vector2(576, 1024), true, 0.0)
+	novo.name = "Previa_" + chave
+	novo.so_hardware = true
+	add_child(novo)
+	move_child(novo, video_menu.get_index() + 1)
+	video_cartao = novo
+	novo.falhou.connect(func() -> void:
+		# sem hardware: fica a arte do cenário
+		if video_cartao == novo:
+			video_cartao = null
+		novo.queue_free()
+	)
+	novo.tocar()
+
+
+func _sumir_video(v: VideoNativo) -> void:
+	if not is_instance_valid(v):
+		return
+	var tw := create_tween()
+	tw.tween_property(v, "modulate:a", 0.0, 0.2)
+	tw.tween_callback(func() -> void:
+		v.parar()
+		v.queue_free()
+	)
 
 
 func _on_sair_hover_cenario(_botao: TextureButton, card: Panel) -> void:
@@ -1624,7 +1634,6 @@ func _input(event: InputEvent) -> void:
 			return
 
 		_executar_tiro_menu()
-
 
 
 func _tentar_escolher_dificuldade_por_mira() -> void:
@@ -2092,7 +2101,6 @@ func _abrir_modal_sensibilidade() -> void:
 	_animar_entrada_modal_sensibilidade()
 
 
-
 func _criar_modal_sensibilidade() -> void:
 	if modal_sens_layer == null:
 		modal_sens_layer = CanvasLayer.new()
@@ -2330,7 +2338,6 @@ func _on_slider_xbox_changed(valor: float) -> void:
 		label_valor_xbox.text = _formatar_xbox(velocidade_mira_xbox)
 
 
-
 func _on_slider_mouse_changed(valor: float) -> void:
 	sensibilidade_mouse = clamp(
 		valor,
@@ -2368,7 +2375,6 @@ func _on_slider_mouse_changed(valor: float) -> void:
 	)
 
 
-
 func _animar_entrada_modal_sensibilidade() -> void:
 	if modal_sens_panel == null:
 		return
@@ -2378,7 +2384,6 @@ func _animar_entrada_modal_sensibilidade() -> void:
 	tw.set_parallel(true)
 	tw.tween_property(modal_sens_panel, "scale", Vector2.ONE, 0.22).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	tw.tween_property(modal_sens_panel, "modulate:a", 1.0, 0.18)
-
 
 
 func _fechar_modal_sensibilidade() -> void:
@@ -2412,7 +2417,6 @@ func _fechar_modal_sensibilidade() -> void:
 		auto_timer_ativo = true
 
 
-
 # ─────────────────────────────────────────────────────────────────────────────
 # TRANSIÇÃO DE CENAS
 # ─────────────────────────────────────────────────────────────────────────────
@@ -2433,15 +2437,8 @@ func _abrir_cena_suave_com_tiro_async(caminho: String) -> void:
 	TransicaoGlobal.trocar_cena(caminho)
 
 
-
-func _abrir_cena_suave(caminho: String) -> void:
-	_call_abrir_cena_suave_async(caminho)
-
-
-
 func _call_abrir_cena_suave_async(caminho: String) -> void:
 	await _abrir_cena_suave_async(caminho)
-
 
 
 func _abrir_cena_suave_async(caminho: String) -> void:
@@ -2497,8 +2494,6 @@ func _criar_material_imagem_arredondada(tamanho: Vector2, raio: float) -> Shader
 	return mat
 
 
-
-
 func _cor_neon_card(indice: int, lado: String = "") -> Color:
 	match indice:
 		0: # DESERTO: esquerda amarelo / direita branco
@@ -2516,7 +2511,6 @@ func _cor_neon_card(indice: int, lado: String = "") -> Color:
 			return Color(1.0, 0.02, 0.02, 1.0)
 
 	return Color(1.0, 0.02, 0.02, 1.0)
-
 
 
 func _aplicar_estilo_card_por_indice(card: Panel, indice: int, hover: bool = false) -> void:

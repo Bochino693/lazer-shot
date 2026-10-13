@@ -61,7 +61,6 @@ var teasers_disponiveis: Array[String] = []
 var teaser_atual: String = ""
 
 
-
 func _ready() -> void:
 	_ocultar_ponteiro_mouse()
 	_configurar_fundos()
@@ -229,35 +228,6 @@ func _ajustar_video_intro(_tela: Vector2) -> void:
 		video_teaser.ajustar()
 
 
-func _carregar_textura_no_sprite(sprite: Sprite2D, caminho: String) -> void:
-	if sprite == null:
-		return
-	if caminho == "":
-		push_warning("Caminho do fundo está vazio.")
-		return
-	if not ResourceLoader.exists(caminho):
-		push_warning("Fundo não encontrado em: " + caminho)
-		return
-
-	sprite.texture = load(caminho)
-
-
-
-func _ajustar_sprite_para_tela_sem_corte(sprite: Sprite2D, tela: Vector2) -> void:
-	if sprite == null or sprite.texture == null:
-		return
-
-	var tex_size: Vector2 = sprite.texture.get_size()
-	if tex_size.x <= 0.0 or tex_size.y <= 0.0:
-		return
-
-	# Sem crop: escala independente em X e Y para ocupar a tela inteira
-	sprite.centered = true
-	sprite.position = tela * 0.5
-	sprite.scale = Vector2(tela.x / tex_size.x, tela.y / tex_size.y)
-
-
-
 # ─────────────────────────────────────────────
 #  CANVAS
 # ─────────────────────────────────────────────
@@ -343,7 +313,6 @@ func _iniciar_com_confirmacao() -> void:
 	call_deferred("_iniciar_com_confirmacao_async")
 
 
-
 func _iniciar_com_confirmacao_async() -> void:
 	transicionando = true
 
@@ -361,7 +330,6 @@ func _iniciar_com_confirmacao_async() -> void:
 	await _efeito_inicio_confirmado()
 
 	_ir_para_jogo()
-
 
 
 func _efeito_inicio_confirmado() -> void:
@@ -440,7 +408,6 @@ func _iniciar_timer_intro() -> void:
 	_tocar_teaser_atrativo()
 
 
-
 func _iniciar_pisca_pressione() -> void:
 	if tween_pressione != null:
 		tween_pressione.kill()
@@ -451,7 +418,6 @@ func _iniciar_pisca_pressione() -> void:
 		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 	tween_pressione.tween_property(pressione, "modulate:a", 1.0, 0.7) \
 		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-
 
 
 func _pegar_teaser_sem_repetir() -> String:
@@ -467,7 +433,6 @@ func _pegar_teaser_sem_repetir() -> String:
 
 	teaser_atual = escolhido
 	return escolhido
-
 
 
 func _tocar_teaser_atrativo() -> void:
@@ -509,7 +474,6 @@ func _tocar_teaser_atrativo() -> void:
 	_rodar_teaser_e_ir_ranking()
 
 
-
 func _rodar_teaser_e_ir_ranking() -> void:
 	await get_tree().create_timer(TEMPO_TEASER).timeout
 
@@ -517,7 +481,6 @@ func _rodar_teaser_e_ir_ranking() -> void:
 		return
 
 	_ir_para_ranking_atrativo()
-
 
 
 func _ir_para_ranking_atrativo() -> void:
@@ -541,19 +504,11 @@ func _ir_para_ranking_atrativo() -> void:
 	_trocar_cena_com_saida(cena_ranking)
 
 
-
 # ─────────────────────────────────────────────
 #  TRANSIÇÃO DE CENA
 # ─────────────────────────────────────────────
 func _ir_para_jogo() -> void:
 	_trocar_cena_com_saida(cena_do_jogo)
-
-
-
-func _ir_para_demo() -> void:
-	var destino: String = cena_demo if cena_demo != "" else cena_do_jogo
-	_trocar_cena_com_saida(destino)
-
 
 
 func _trocar_cena_com_saida(caminho_cena: String) -> void:
@@ -612,18 +567,6 @@ func _trocar_cena_com_saida(caminho_cena: String) -> void:
 
 	# A tela já está preta (flash_intro): troca sem escurecer de novo.
 	TransicaoGlobal.trocar_cena(caminho_cena, 0.0)
-
-
-
-func _restaurar_main_apos_erro() -> void:
-	flash_intro.visible = false
-	pressione.modulate.a = 1.0
-
-	if audio_intro_player != null and audio_intro_player.stream != null:
-		audio_intro_player.volume_db = VOLUME_INTRO_DB
-		audio_intro_player.play()
-
-	_iniciar_pisca_pressione()
 
 
 # ─────────────────────────────────────────────
@@ -687,7 +630,6 @@ func _evento_start(event: InputEvent) -> bool:
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_APPLICATION_FOCUS_IN:
 		_ocultar_ponteiro_mouse()
-
 
 
 # ─────────────────────────────────────────────

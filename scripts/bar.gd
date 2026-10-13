@@ -58,7 +58,7 @@ var ranking_ja_salvo: bool = false
 @export var tempo_troca_turno: float = 5.0
 @export var tempo_partida: float = 120.0
 @export var subir_de_baixo_px: float = 90.0
-@export var som_recharge_path: String = "res://songs/recharge.mp3"
+@export var som_recharge_path: String = "res://songs/recharge.wav"
 @export var som_bar_path: String = "res://songs/song-oldwest.mp3"
 @export var cena_garrafa_falsa: PackedScene = preload("res://entities/garrafa.tscn")
 @export var penalidade_erro: int = 0
@@ -139,7 +139,7 @@ var aviso_texto_extra_label: Label = null
 var mascara_topo: ColorRect = null
 var fundo_ajustado_uma_vez: bool = false
 
-@export var som_bullet_no_path: String = "res://songs/bullet_no.mp3"
+@export var som_bullet_no_path: String = "res://songs/bullet_no.wav"
 var som_bullet_no_stream: AudioStream = null
 
 @export var modo_demo: bool = false
@@ -307,9 +307,9 @@ var aviso_footer_label: Label = null
 var aviso_footer_t: float = 0.0
 
 
-const CAMINHO_SOM_FAIL := "res://songs/fail.mp3"
-const CAMINHO_SOM_SMASH := "res://songs/smash.mp3"
-const CAMINHO_SOM_TIRO := "res://songs/tiro-de-pistola.mp3"
+const CAMINHO_SOM_FAIL := "res://songs/fail.wav"
+const CAMINHO_SOM_SMASH := "res://songs/smash.wav"
+const CAMINHO_SOM_TIRO := "res://songs/tiro-de-pistola.wav"
 const HUD_TOPO_Y := 18.0
 const HUD_ALTURA_FIXA := 24.0
 const CORTE_DESENHO_TOPO_Y := 220.0
@@ -1860,20 +1860,7 @@ func _parar_musica_bar() -> void:
 
 
 func _tocar_som(stream: AudioStream, volume_db: float = 0.0) -> void:
-	if stream == null:
-		return
-
-	var player := AudioStreamPlayer.new()
-	player.bus = "Master"
-	player.stream = stream
-	player.volume_db = volume_db
-	add_child(player)
-	player.play()
-
-	player.finished.connect(func() -> void:
-		if is_instance_valid(player):
-			player.queue_free()
-	)
+	Maquina.efeito(stream, volume_db)
 
 
 func _tocar_som_erro() -> void:
