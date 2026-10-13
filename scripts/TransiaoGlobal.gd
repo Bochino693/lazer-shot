@@ -112,6 +112,7 @@ func trocar_cena(caminho: String, tempo_saida: float = TEMPO_SAIDA, tempo_entrad
 
 	em_transicao = true
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
+	Tela.marca("troca para " + caminho.get_file())
 
 	# Começa a carregar já, em paralelo com o escurecer: a cena e o que ela
 	# lê no _ready (cada arquivo numa thread do pool).
@@ -169,6 +170,7 @@ func trocar_cena(caminho: String, tempo_saida: float = TEMPO_SAIDA, tempo_entrad
 			_segurar.append(ResourceLoader.load_threaded_get(p))
 	if cena == null:
 		cena = load(caminho) as PackedScene
+	Tela.marca("carregou %s em %d ms (%s)" % [caminho.get_file(), Time.get_ticks_msec() - inicio, "ok" if cena != null else "FALHOU"])
 
 	if cena == null or get_tree().change_scene_to_packed(cena) != OK:
 		push_error("Não foi possível abrir a cena: " + caminho)

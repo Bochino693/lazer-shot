@@ -50,7 +50,8 @@ void fragment() {
 			float chama = exp(-fora * 20.0) * (0.5 + 0.5 * sin(a * 23.0 + t * 3.4 + sin(a * 7.0 - t * 2.2) * 2.0));
 			// anel de luz que sai do sol de tempos em tempos
 			float anel_r = rd + fract(t * 0.35) * (1.0 - rd);
-			float anel = exp(-pow((r - anel_r) / 0.025, 2.0)) * (1.0 - fract(t * 0.35)) * 0.35;
+			float ka = (r - anel_r) / 0.025;   // x*x: pow() com base negativa é indefinido no GLSL ES (NaN na Mali)
+			float anel = exp(-ka * ka) * (1.0 - fract(t * 0.35)) * 0.35;
 			luz = raios * 0.7 + coroa * 0.55 + chama * 0.35 + anel;
 		} else {
 			float halo = exp(-fora * 6.0) * (0.42 + 0.12 * sin(t * 1.3) + 0.25 * grave);
@@ -61,7 +62,8 @@ void fragment() {
 			f = f * f * f; f *= f; f *= f;
 			float feixes = f * queda * corre * 0.55;
 			float anel_r = rd + fract(t * 0.22) * (1.0 - rd);
-			float onda = exp(-pow((r - anel_r) / 0.03, 2.0)) * (1.0 - fract(t * 0.22)) * 0.22;
+			float ko = (r - anel_r) / 0.03;
+			float onda = exp(-ko * ko) * (1.0 - fract(t * 0.22)) * 0.22;
 			luz = halo * 0.55 + anel + feixes + onda;
 		}
 		luz += pisco * exp(-fora * 3.0) * 1.4;
