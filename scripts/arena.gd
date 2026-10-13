@@ -86,6 +86,27 @@ var ranking_ja_salvo: bool = false
 @export var xbox_botao_recarga_extra: int = JOY_BUTTON_LEFT_SHOULDER
 
 const Pincel := preload("res://scripts/pincel.gd")
+const FOLHA_LANTERNAS := preload("res://sprites/arena_lanternas.png")
+
+# ordem dos tiros pelas cores: azul 1º, verde 2º, amarelo 3º, vermelho 4º, roxo 5º
+const CORES_SEQ: Array[String] = ["azul", "verde", "amarelo", "vermelho", "roxo"]
+const CORES_FX := {
+	"apagada": Color(0.75, 0.78, 0.85),
+	"azul": Color(0.25, 0.62, 1.0),
+	"verde": Color(0.25, 1.0, 0.35),
+	"amarelo": Color(1.0, 0.86, 0.15),
+	"vermelho": Color(1.0, 0.14, 0.10),
+	"roxo": Color(0.78, 0.32, 1.0),
+}
+const NOMES_COR := {"azul": "AZUL", "verde": "VERDE", "amarelo": "AMARELO", "vermelho": "VERMELHO", "roxo": "ROXO"}
+const BONUS_FIXA: int = 50
+const SOM_SOBE := preload("res://songs/lanterna_sobe.wav")
+const SOM_DESCE := preload("res://songs/lanterna_desce.wav")
+const SOM_LASER_PAREDE := preload("res://songs/laser_parede.wav")
+# tom do bip sobe com a ordem (1º grave ... 5º agudo)
+const TONS_BIP: Array[float] = [0.84, 0.94, 1.06, 1.19, 1.34]
+
+static var _quadros_lanterna: SpriteFrames = null
 const META_SENS_XBOX: String = "sensibilidade_xbox"
 const META_SENS_MOUSE: String = "sensibilidade_mouse"
 
@@ -147,6 +168,11 @@ var indice_sequencia: int       = 0
 var nivel_sequencia: int        = 1
 var mostrando_sequencia: bool   = false
 var bloqueia_tiro_sequencia: bool = false
+var modo_fixo: bool = false               # rodada fixa (true) ou de memória
+var _rodada: int = 0                      # muda a cada rodada: corta as esperas da anterior
+var _fixa_nasceu: Array[int] = []         # ms em que cada lanterna da rodada fixa nasceu
+var _vivo: ArenaVivo = null               # vida do fundo e troca de arte
+var _placar: Placar = null
  
  
 # ─────────────────────────────────────────────
@@ -403,6 +429,8 @@ func _ready() -> void:
 	_configurar_mira()
 	_tocar_musica_arena()
 	_configurar_hud_bar_padrao()
+	_instalar_placar()
+	_criar_vivo()
 	_configurar_modal_fim()
 
 	call_deferred("_reposicionar_modal")
@@ -535,7 +563,7 @@ func _atualizar_repeticao_sequencia_por_inatividade(delta: float) -> void:
 		tempo_sem_jogada = 0.0
 		return
 
-	if sequencia_atual.is_empty():
+	if sequencia_atual.is_empty() or modo_fixo:
 		return
 
 	if indice_sequencia >= sequencia_atual.size():
@@ -566,8 +594,8 @@ func _repetir_sequencia_atual_por_inatividade() -> void:
 
 	await get_tree().create_timer(0.35).timeout
 
-	if jogo_ativo:
-		await _mostrar_sequencia_azul(true, true)
+	if jogo_ativo and not modo_fixo:
+		await _mostrar_sequencia(_rodada, true)
 
 	mostrando_sequencia = false
 	bloqueia_tiro_sequencia = false
@@ -834,10 +862,9 @@ func _tentar_atirar(pos_mouse: Vector2) -> void:
 		return
 	if mostrando_sequencia or bloqueia_tiro_sequencia:
 		return
-
 	if sequencia_atual.is_empty():
 		return
-		
+
 	_resetar_timer_jogada()
 
 	# PROTEÇÃO CONTRA DOUBLE HIT FORA DO TAMANHO DA SEQUÊNCIA
@@ -855,6 +882,7 @@ func _tentar_atirar(pos_mouse: Vector2) -> void:
 	tiros += 1
 	_tocar_som_tiro()
 	_atualizar_hud()
+	Trajetoria.disparar(self, pos_mouse, "laser")
 
 	var alvo: Area2D = _detectar_alvo_no_ponto_visual(pos_mouse)
 
@@ -868,15 +896,24 @@ func _tentar_atirar(pos_mouse: Vector2) -> void:
 
 	if dados_alvos.has(id_clicado):
 		slot_clicado = int(dados_alvos[id_clicado].get("slot", -1))
+		if bool(dados_alvos[id_clicado].get("quebrando", false)):
+			return
 
 	if slot_clicado < 0:
 		_registrar_marca_laser_parede(pos_mouse)
 		return
 
-	var slot_esperado: int = sequencia_atual[indice_sequencia]
+	var minha: int = _rodada
+	var ordem: int = sequencia_atual.find(slot_clicado)
 
-	if slot_clicado == slot_esperado:
+	if ordem == indice_sequencia and (not modo_fixo or _cor_da_lanterna(alvo) != "apagada"):
+		var cor: String = CORES_SEQ[ordem]
 		var pontos_acerto: int = _calcular_pontos_acerto_sequencia()
+		var rapido: bool = false
+		if modo_fixo and ordem < _fixa_nasceu.size():
+			rapido = Time.get_ticks_msec() - int(_fixa_nasceu[ordem]) < 1100
+			if rapido:
+				pontos_acerto += 10
 
 		acertos += 1
 		pontuacao += pontos_acerto
@@ -888,43 +925,55 @@ func _tentar_atirar(pos_mouse: Vector2) -> void:
 		if sequencia_completa:
 			bloqueia_tiro_sequencia = true
 
+		if modo_fixo:
+			dados_alvos[id_clicado]["quebrando"] = true
+
 		_tocar_som_hit_lamp()
-
-		await _tocar_hit_lanterna_vermelha_e_virar_verde(alvo, slot_clicado)
-
-		_registrar_fx_colisao(pos_mouse, pontos_acerto, Color(0.20, 1.0, 0.40))
-		_adicionar_chat_rodape("+%d  |  ACERTO %d/%d" % [
+		_registrar_fx_colisao(pos_mouse, pontos_acerto, CORES_FX[cor])
+		_adicionar_chat_rodape("+%d  |  %s %d/%d%s" % [
 			pontos_acerto,
+			NOMES_COR[cor],
 			indice_sequencia,
-			sequencia_atual.size()
-		], Color(0.20, 1.0, 0.40))
-
+			sequencia_atual.size(),
+			"  RÁPIDO!" if rapido else ""
+		], CORES_FX[cor].lerp(Color.WHITE, 0.25))
 		_atualizar_hud()
+
+		await _tocar_acerto_lanterna(alvo, cor)
+		if not jogo_ativo or minha != _rodada:
+			return
+
+		if modo_fixo:
+			_tirar_lanterna(slot_clicado)
+		else:
+			_trocar_lanterna_slot(slot_clicado, cor)
 
 		if sequencia_completa:
-			_adicionar_chat_rodape("SEQUÊNCIA COMPLETA! NÍVEL %d!" % nivel_sequencia, Color(0.30, 1.0, 0.50))
+			if modo_fixo:
+				pontuacao += BONUS_FIXA
+				_registrar_fx_colisao(Vector2(get_viewport_rect().size.x * 0.5, get_viewport_rect().size.y * 0.5), BONUS_FIXA, Color(1.0, 0.85, 0.3))
+				_adicionar_chat_rodape("SEQUÊNCIA FIXA COMPLETA! +%d" % BONUS_FIXA, Color(1.0, 0.85, 0.30))
+			else:
+				_adicionar_chat_rodape("SEQUÊNCIA COMPLETA! NÍVEL %d!" % nivel_sequencia, Color(0.30, 1.0, 0.50))
+				nivel_sequencia += 1
+			_atualizar_hud()
+			if _vivo != null:
+				_vivo.vitoria()
 
-			nivel_sequencia += 1
+			await get_tree().create_timer(tempo_feedback_verde + 0.25).timeout
 
-			await get_tree().create_timer(tempo_feedback_verde).timeout
+			if jogo_ativo and minha == _rodada:
+				# cicla: memória -> fixa -> memória (um nível acima) -> ...
+				if modo_fixo:
+					_iniciar_nova_sequencia()
+				else:
+					_iniciar_rodada_fixa()
 
-			if jogo_ativo:
-				_iniciar_nova_sequencia()
+	elif ordem >= 0 or not modo_fixo:
+		_erro_sequencia(alvo)
 
 	else:
-		pontuacao -= penalidade_erro_sequencia
-
-		bloqueia_tiro_sequencia = true
-
-		_tocar_som_hit_lamp()
-		await _tocar_hit_lanterna_erro_e_voltar_idle(alvo)
-
-		_tocar_bip_error()
-
-		_adicionar_chat_rodape("ERROU! -%d  |  REINICIANDO..." % penalidade_erro_sequencia, Color.RED)
-		_atualizar_hud()
-
-		_reiniciar_sequencia_por_erro()
+		_registrar_marca_laser_parede(pos_mouse)
 
 
 
@@ -944,6 +993,7 @@ func _configurar_fx_layer_jogo() -> void:
 
 
 func _registrar_marca_laser_parede(pos: Vector2) -> void:
+	Maquina.efeito(SOM_LASER_PAREDE, -6.0, randf_range(0.9, 1.1))
 	marcas_laser_parede.append({
 		"pos": pos,
 		"raio": randf_range(7.0, 10.0)
@@ -1000,14 +1050,11 @@ func _tocar_hit_lanterna_erro_e_voltar_idle(alvo: Area2D) -> void:
 	if anim == null:
 		return
 
-	# Toca o estado quebrado/hit mesmo quando o jogador erra
+	# quebra na cor em que estava, com cacos vermelhos, e volta
+	var cor: String = _cor_da_lanterna(alvo)
 	anim.modulate = Color.WHITE
-
-	if anim.sprite_frames != null:
-		if anim.sprite_frames.has_animation("hit"):
-			anim.play("hit")
-		elif anim.sprite_frames.has_animation("idle"):
-			anim.play("idle")
+	if anim.sprite_frames != null and anim.sprite_frames.has_animation("hit_" + cor):
+		anim.play("hit_" + cor)
 
 	_fx_hit_lanterna(alvo, Color(1.0, 0.05, 0.05))
 	_registrar_fx_vidro_frontal_lanterna(alvo.global_position, Color(1.0, 0.05, 0.05))
@@ -1020,9 +1067,8 @@ func _tocar_hit_lanterna_erro_e_voltar_idle(alvo: Area2D) -> void:
 		return
 
 	if anim != null and is_instance_valid(anim) and anim.sprite_frames != null:
-		anim.modulate = Color.WHITE
-		if anim.sprite_frames.has_animation("idle"):
-			anim.play("idle")
+		if anim.sprite_frames.has_animation("idle_" + cor):
+			anim.play("idle_" + cor)
 
 
 
@@ -1053,185 +1099,253 @@ func _registrar_fx_vidro_frontal_lanterna(pos: Vector2, cor: Color) -> void:
  
 
 
-func _tocar_hit_lanterna_vermelha_e_virar_verde(alvo: Area2D, slot: int) -> void:
+func _tocar_acerto_lanterna(alvo: Area2D, cor: String) -> void:
+	# a lanterna da vez quebra na própria cor
 	if alvo == null or not is_instance_valid(alvo):
 		return
-
 	var anim: AnimatedSprite2D = _obter_animated_do_alvo(alvo)
 	if anim == null:
 		return
-
+	var c: Color = CORES_FX.get(cor, Color.WHITE)
 	anim.modulate = Color.WHITE
-
-	if anim.sprite_frames != null:
-		if anim.sprite_frames.has_animation("hit"):
-			anim.play("hit")
-		elif anim.sprite_frames.has_animation("idle"):
-			anim.play("idle")
-
-	_fx_hit_lanterna(alvo, Color(1.0, 0.05, 0.05))
-	_registrar_fx_vidro_quebrado_lanterna(alvo.global_position, Color(1.0, 0.05, 0.05))
-
+	anim.play("hit_" + cor)
+	_fx_hit_lanterna(alvo, c)
+	_registrar_fx_vidro_quebrado_lanterna(alvo.global_position, c)
+	if _vivo != null:
+		_vivo.acerto(alvo.global_position, c)
 	await get_tree().create_timer(0.22).timeout
 
-	if not jogo_ativo:
-		return
-	if slot < 0 or slot >= alvos_ativos.size():
-		return
-	if alvos_ativos[slot] == null or not is_instance_valid(alvos_ativos[slot]):
-		return
 
-	_trocar_lanterna_slot(slot, "verde")
-
-	var alvo_verde: Area2D = alvos_ativos[slot]
-	if alvo_verde != null and is_instance_valid(alvo_verde):
-		_registrar_fx_vidro_quebrado_lanterna(alvo_verde.global_position, Color(0.20, 1.0, 0.35))
-
-
- 
 # ═══════════════════════════════════════════════════════════
 #  LÓGICA DE SEQUÊNCIA
+#  As cores dão a ordem dos tiros: azul 1º, verde 2º, amarelo 3º,
+#  vermelho 4º, roxo 5º. A partida cicla entre duas rodadas:
+#   MEMÓRIA  as 9 lanternas apagadas; a sequência (1 a 5) acende uma a uma
+#            nas cores da ordem e apaga; o jogador repete. Cada acerto fica
+#            aceso na sua cor.
+#   FIXA     as lanternas descem; 5 lanternas acesas nascem uma depois da
+#            outra (a cada 1 a 1,5 s), cada uma já na cor da sua vez, e
+#            ficam: é acertar na ordem das cores enquanto elas aparecem.
+#  Errar a ordem tira pontos e recomeça a rodada (na memória, volta a 1).
 # ═══════════════════════════════════════════════════════════
- 
+
 func _iniciar_nova_sequencia() -> void:
 	if not jogo_ativo:
 		return
- 
+	_rodada += 1
+	var minha: int = _rodada
+	modo_fixo = false
 	bloqueia_tiro_sequencia = true
 	mostrando_sequencia     = true
 	indice_sequencia        = 0
 	sequencia_atual.clear()
 	tempo_sem_jogada = 0.0
 	repetindo_sequencia_por_inatividade = false
- 
-	for i in range(nivel_sequencia):
-		sequencia_atual.append(randi_range(0, 8))
- 
-	_deixar_todas_vermelhas()
- 
-	await get_tree().create_timer(0.35).timeout
- 
-	_adicionar_chat_rodape(
-		"OBSERVE A SEQUÊNCIA! (%d)" % nivel_sequencia,
-		Color(0.30, 0.85, 1.0)
-	)
- 
-	await _mostrar_sequencia_azul()
- 
-	mostrando_sequencia     = false
-	bloqueia_tiro_sequencia = false
- 
-	_adicionar_chat_rodape("REPITA A SEQUÊNCIA!", Color(0.30, 0.85, 1.0))
- 
- 
+	_arte_modo(false)
 
-func _mostrar_sequencia_azul(manter_acertos_verdes: bool = false, somente_faltantes: bool = false) -> void:
-	if manter_acertos_verdes:
-		_restaurar_cores_da_sequencia_atual()
+	var nasceram: bool = _preencher_lanternas()
+	_deixar_todas_apagadas()
+	await get_tree().create_timer(0.55 if nasceram else 0.35).timeout
+	if minha != _rodada or not jogo_ativo:
+		return
+	_deixar_todas_apagadas()
 
-	var inicio: int = 0
-	if somente_faltantes:
-		inicio = clamp(indice_sequencia, 0, sequencia_atual.size())
+	var slots: Array = range(9)
+	slots.shuffle()
+	for i in range(mini(nivel_sequencia, CORES_SEQ.size())):
+		sequencia_atual.append(int(slots[i]))
 
-	for i in range(inicio, sequencia_atual.size()):
-		if not jogo_ativo:
-			return
-
-		var slot: int = int(sequencia_atual[i])
-
-		if slot < 0 or slot >= alvos_ativos.size():
-			continue
-
-		var alvo: Area2D = alvos_ativos[slot]
-
-		_trocar_lanterna_slot(slot, "azul")
-		_fx_sequencia_lanterna(alvo, Color(0.20, 0.75, 1.0))
-		_tocar_bip()
-
-		await get_tree().create_timer(tempo_mostrar_azul).timeout
-
-		if manter_acertos_verdes and _slot_ja_foi_acertado_na_sequencia(slot):
-			_trocar_lanterna_slot(slot, "verde")
-		else:
-			_trocar_lanterna_slot(slot, "vermelha")
-
-		await get_tree().create_timer(pausa_entre_azuis).timeout
-
-	if manter_acertos_verdes:
-		_restaurar_cores_da_sequencia_atual()
- 
-
-
-func _restaurar_cores_da_sequencia_atual() -> void:
-	for i in range(9):
-		if _slot_ja_foi_acertado_na_sequencia(i):
-			_trocar_lanterna_slot(i, "verde")
-		else:
-			_trocar_lanterna_slot(i, "vermelha")
-
-
-func _slot_ja_foi_acertado_na_sequencia(slot: int) -> bool:
-	for i in range(indice_sequencia):
-		if i >= 0 and i < sequencia_atual.size():
-			if int(sequencia_atual[i]) == slot:
-				return true
-	return false
- 
-
-func _deixar_todas_vermelhas() -> void:
-	for i in range(9):
-		_trocar_lanterna_slot(i, "vermelha")
- 
- 
-
-func _reiniciar_sequencia_por_erro() -> void:
-	if not jogo_ativo:
+	_adicionar_chat_rodape("MEMORIZE A ORDEM DAS CORES! (%d)" % sequencia_atual.size(), Color(0.30, 0.85, 1.0))
+	await _mostrar_sequencia(minha)
+	if minha != _rodada or not jogo_ativo:
 		return
 
-	bloqueia_tiro_sequencia = true
+	mostrando_sequencia     = false
+	bloqueia_tiro_sequencia = false
+	_adicionar_chat_rodape("REPITA NA ORDEM DAS CORES!", Color(0.30, 0.85, 1.0))
 
-	# toca erro uma vez, claro e separado do bip da sequência azul
-	_tocar_bip_error()
 
+func _tempo_mostrar_cor() -> float:
+	# depois do nível 5 a sequência continua com 5, mas acende mais rápido
+	return maxf(0.30, tempo_mostrar_azul - 0.05 * maxi(0, nivel_sequencia - CORES_SEQ.size()))
+
+
+func _mostrar_sequencia(minha: int, somente_faltantes: bool = false) -> void:
+	if somente_faltantes:
+		_restaurar_cores_memoria()
+	var inicio: int = clampi(indice_sequencia, 0, sequencia_atual.size()) if somente_faltantes else 0
+	for i in range(inicio, sequencia_atual.size()):
+		if minha != _rodada or not jogo_ativo:
+			return
+		var slot: int = int(sequencia_atual[i])
+		if slot < 0 or slot >= alvos_ativos.size():
+			continue
+		var cor: String = CORES_SEQ[i]
+		_trocar_lanterna_slot(slot, cor)
+		_fx_sequencia_lanterna(alvos_ativos[slot], CORES_FX[cor])
+		_tocar_bip(i)
+		if _vivo != null and alvos_ativos[slot] != null:
+			_vivo.pulso_cor(CORES_FX[cor])
+		await get_tree().create_timer(_tempo_mostrar_cor()).timeout
+		if minha != _rodada or not jogo_ativo:
+			return
+		_trocar_lanterna_slot(slot, "apagada")
+		await get_tree().create_timer(pausa_entre_azuis).timeout
+	if somente_faltantes:
+		_restaurar_cores_memoria()
+
+
+func _restaurar_cores_memoria() -> void:
+	for i in range(9):
+		_trocar_lanterna_slot(i, "apagada")
+	for i in range(mini(indice_sequencia, sequencia_atual.size())):
+		_trocar_lanterna_slot(int(sequencia_atual[i]), CORES_SEQ[i])
+
+
+func _deixar_todas_apagadas() -> void:
+	for i in range(9):
+		_trocar_lanterna_slot(i, "apagada")
+
+
+## Garante as 9 lanternas nos furos (as que faltam sobem). true = alguma nasceu.
+func _preencher_lanternas() -> bool:
+	_garantir_slots()
+	while alvos_ativos.size() < 9:
+		alvos_ativos.append(null)
+	var nasceu: bool = false
+	for i in range(9):
+		var a: Area2D = alvos_ativos[i]
+		if a == null or not is_instance_valid(a):
+			alvos_ativos[i] = null
+			slots_ocupados[i] = false
+			_spawn_lanterna_no_slot(i)
+			nasceu = true
+	return nasceu
+
+
+## Todas as lanternas descem para dentro dos furos e somem.
+func _recolher_lanternas() -> void:
+	var algum: bool = false
 	for alvo in alvos_ativos:
 		if alvo == null or not is_instance_valid(alvo):
 			continue
+		algum = true
+		var id: int = alvo.get_instance_id()
+		if dados_alvos.has(id):
+			dados_alvos[id]["quebrando"] = true
+		var tw := create_tween()
+		tw.set_parallel(true)
+		tw.tween_property(alvo, "global_position", alvo.global_position + Vector2(0.0, 70.0), 0.26).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_IN)
+		tw.tween_property(alvo, "modulate:a", 0.0, 0.24)
+	if algum:
+		Maquina.efeito(SOM_DESCE, -6.0)
+		await get_tree().create_timer(0.28).timeout
+	_limpar_alvos()
+	while alvos_ativos.size() < 9:
+		alvos_ativos.append(null)
 
-		var anim: AnimatedSprite2D = _obter_animated_do_alvo(alvo)
+
+## Uma lanterna sai do furo (acertada na rodada fixa).
+func _tirar_lanterna(slot: int) -> void:
+	if slot < 0 or slot >= alvos_ativos.size():
+		return
+	var alvo: Area2D = alvos_ativos[slot]
+	alvos_ativos[slot] = null
+	if slot < slots_ocupados.size():
+		slots_ocupados[slot] = false
+	if alvo == null or not is_instance_valid(alvo):
+		return
+	dados_alvos.erase(alvo.get_instance_id())
+	Maquina.efeito(SOM_DESCE, -11.0, randf_range(1.0, 1.15))
+	var tw := create_tween()
+	tw.set_parallel(true)
+	tw.tween_property(alvo, "global_position", alvo.global_position + Vector2(0.0, 50.0), 0.22).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_IN)
+	tw.tween_property(alvo, "modulate:a", 0.0, 0.20)
+	tw.chain().tween_callback(alvo.queue_free)
+
+
+func _iniciar_rodada_fixa() -> void:
+	if not jogo_ativo:
+		return
+	_rodada += 1
+	var minha: int = _rodada
+	modo_fixo = true
+	bloqueia_tiro_sequencia = true
+	mostrando_sequencia     = false
+	indice_sequencia        = 0
+	sequencia_atual.clear()
+	tempo_sem_jogada = 0.0
+	_arte_modo(true)
+	_adicionar_chat_rodape("SEQUÊNCIA FIXA! ACERTE NA ORDEM DAS CORES", Color(1.0, 0.85, 0.30))
+
+	await _recolher_lanternas()
+	if minha != _rodada or not jogo_ativo:
+		return
+	await get_tree().create_timer(0.45).timeout
+	if minha != _rodada or not jogo_ativo:
+		return
+
+	var slots: Array = range(9)
+	slots.shuffle()
+	for i in range(CORES_SEQ.size()):
+		sequencia_atual.append(int(slots[i]))
+	_fixa_nasceu.clear()
+	bloqueia_tiro_sequencia = false
+
+	for i in range(CORES_SEQ.size()):
+		if minha != _rodada or not jogo_ativo:
+			return
+		var slot: int = int(sequencia_atual[i])
+		_spawn_lanterna_no_slot(slot, CORES_SEQ[i])
+		_fixa_nasceu.append(Time.get_ticks_msec())
+		_tocar_bip(i)
+		if _vivo != null:
+			_vivo.pulso_cor(CORES_FX[CORES_SEQ[i]])
+		if i < CORES_SEQ.size() - 1:
+			await get_tree().create_timer(randf_range(1.0, 1.5)).timeout
+
+
+func _erro_sequencia(alvo: Area2D) -> void:
+	pontuacao -= penalidade_erro_sequencia
+	bloqueia_tiro_sequencia = true
+	_rodada += 1
+	var minha: int = _rodada
+
+	_tocar_som_hit_lamp()
+	_tocar_hit_lanterna_erro_e_voltar_idle(alvo)
+	_tocar_bip_error()
+	_adicionar_chat_rodape("ORDEM ERRADA! -%d  |  REINICIANDO..." % penalidade_erro_sequencia, Color.RED)
+	_atualizar_hud()
+	if _vivo != null:
+		_vivo.erro()
+
+	for a in alvos_ativos:
+		if a == null or not is_instance_valid(a):
+			continue
+		var anim: AnimatedSprite2D = _obter_animated_do_alvo(a)
 		if anim == null:
 			continue
-
-		anim.modulate = Color.WHITE
-
 		var tw := create_tween()
-		tw.set_parallel(false)
-
-		tw.tween_property(anim, "modulate", Color(1.0, 0.0, 0.0, 1.0), 0.18)
+		tw.tween_property(anim, "modulate", Color(1.0, 0.15, 0.15, 1.0), 0.18)
 		tw.tween_property(anim, "modulate", Color.WHITE, 0.18)
-
-		tw.tween_property(anim, "modulate", Color(1.0, 0.0, 0.0, 1.0), 0.22)
+		tw.tween_property(anim, "modulate", Color(1.0, 0.15, 0.15, 1.0), 0.22)
 		tw.tween_property(anim, "modulate", Color.WHITE, 0.24)
 
-		tw.tween_property(anim, "modulate", Color(1.0, 0.05, 0.05, 1.0), 0.28)
-		tw.tween_property(anim, "modulate", Color.WHITE, 0.30)
-
 	await get_tree().create_timer(1.45).timeout
-
-	nivel_sequencia = 1
-	indice_sequencia = 0
-	sequencia_atual.clear()
-
-	_deixar_todas_vermelhas()
-
-	if jogo_ativo:
+	if not jogo_ativo or minha != _rodada:
+		return
+	if modo_fixo:
+		_iniciar_rodada_fixa()
+	else:
+		nivel_sequencia = 1
 		_iniciar_nova_sequencia()
- 
 
- 
+
 # ═══════════════════════════════════════════════════════════
 #  TROCA DE COR DA LANTERNA NO SLOT
 # ═══════════════════════════════════════════════════════════
- 
+
+## cor: "apagada" ou uma de CORES_SEQ.
 func _trocar_lanterna_slot(slot: int, cor: String) -> void:
 	if slot < 0 or slot >= alvos_ativos.size():
 		return
@@ -1248,48 +1362,51 @@ func _trocar_lanterna_slot(slot: int, cor: String) -> void:
 	if dados_alvos.has(id):
 		dados_alvos[id]["tipo"] = "lanterna_" + cor
 
-	# NÃO MEXE NA POSIÇÃO DO ALVO
-	# mantém exatamente em cima do furo do background
+	# NÃO MEXE NA POSIÇÃO DO ALVO: fica em cima do furo do fundo
 	alvo.scale = Vector2.ONE * escala_alvo_jogo
 	anim.position = Vector2.ZERO
 	anim.scale = Vector2.ONE
 	anim.rotation_degrees = 0.0
-
-	if cor == "azul":
-		anim.modulate = Color(0.25, 0.65, 1.0, 1.0)
-	elif cor == "verde":
-		anim.modulate = Color(0.25, 1.0, 0.35, 1.0)
-	else:
-		anim.modulate = Color.WHITE
-
-	if anim.sprite_frames != null and anim.sprite_frames.has_animation("idle"):
-		anim.play("idle")
+	anim.modulate = Color.WHITE
+	if anim.sprite_frames != null and anim.sprite_frames.has_animation("idle_" + cor):
+		anim.play("idle_" + cor)
 
 
-
-func _tocar_hit_lanterna(alvo: Area2D, cor: String) -> void:
+func _cor_da_lanterna(alvo: Area2D) -> String:
 	if alvo == null or not is_instance_valid(alvo):
-		return
+		return "apagada"
+	var tipo: String = str(dados_alvos.get(alvo.get_instance_id(), {}).get("tipo", "lanterna_apagada"))
+	return tipo.trim_prefix("lanterna_")
 
-	var anim: AnimatedSprite2D = _obter_animated_do_alvo(alvo)
-	if anim == null:
-		return
 
-	var cor_fx: Color = Color(1.0, 0.05, 0.05)
-	if cor == "azul":
-		cor_fx = Color(0.20, 0.75, 1.0)
-	elif cor == "verde":
-		cor_fx = Color(0.20, 1.0, 0.35)
-
-	if anim.sprite_frames != null:
-		if anim.sprite_frames.has_animation("hit"):
-			anim.play("hit")
-		elif anim.sprite_frames.has_animation("idle"):
-			anim.play("idle")
-
-	_fx_hit_lanterna(alvo, cor_fx)
-	_registrar_fx_vidro_quebrado_lanterna(alvo.global_position, cor_fx)
-
+## Folha das lanternas nas cores (tools/gerar_lanternas.py): idle_<cor> e
+## hit_<cor>; "idle"/"hit" = apagada (nomes antigos).
+func _frames_lanternas() -> SpriteFrames:
+	if _quadros_lanterna != null:
+		return _quadros_lanterna
+	var sf := SpriteFrames.new()
+	var nomes: Array[String] = ["apagada"]
+	nomes.append_array(CORES_SEQ)
+	for i in nomes.size():
+		for linha in 2:
+			var nome_anim: String = ("idle_" if linha == 0 else "hit_") + nomes[i]
+			sf.add_animation(nome_anim)
+			sf.set_animation_loop(nome_anim, false)
+			var at := AtlasTexture.new()
+			at.atlas = FOLHA_LANTERNAS
+			at.region = Rect2(i * 369, linha * 358, 369, 358)
+			sf.add_frame(nome_anim, at)
+	for par in [["idle", 0], ["hit", 1]]:
+		sf.add_animation(par[0])
+		sf.set_animation_loop(par[0], false)
+		var at2 := AtlasTexture.new()
+		at2.atlas = FOLHA_LANTERNAS
+		at2.region = Rect2(0, int(par[1]) * 358, 369, 358)
+		sf.add_frame(par[0], at2)
+	if sf.has_animation("default"):
+		sf.remove_animation("default")
+	_quadros_lanterna = sf
+	return sf
 
 
 func _registrar_fx_vidro_quebrado_lanterna(pos: Vector2, cor: Color) -> void:
@@ -1350,7 +1467,7 @@ func _garantir_3_alvos() -> void:
  
 
  
-func _spawn_lanterna_no_slot(slot: int) -> void:
+func _spawn_lanterna_no_slot(slot: int, cor: String = "apagada") -> void:
 	if cena_lanterna_vermelha == null:
 		push_error("Cena LanternaVermelha.tscn não configurada.")
 		return
@@ -1363,6 +1480,7 @@ func _spawn_lanterna_no_slot(slot: int) -> void:
 	if alvo == null:
 		push_error("Lanterna precisa ter Area2D como nó raiz.")
 		return
+	Maquina.efeito(SOM_SOBE, -13.0 if cor == "apagada" else -8.0, randf_range(0.92, 1.08))
 
 	slots_ocupados[slot] = true
 	camada_alvos.add_child(alvo)
@@ -1386,10 +1504,15 @@ func _spawn_lanterna_no_slot(slot: int) -> void:
 
 	alvo.modulate = Color(1, 1, 1, 0.0)
 
+	var anim_nova: AnimatedSprite2D = _obter_animated_do_alvo(alvo)
+	if anim_nova != null:
+		anim_nova.sprite_frames = _frames_lanternas()
 	_resetar_visual_arco(alvo)
+	if anim_nova != null:
+		anim_nova.play("idle_" + cor)
 
 	dados_alvos[alvo.get_instance_id()] = {
-		"tipo": "lanterna_vermelha",
+		"tipo": "lanterna_" + cor,
 		"slot": slot,
 		"quebrando": false,
 		"nascendo": true,
@@ -1449,8 +1572,9 @@ func _fx_sequencia_lanterna(alvo: Area2D, cor: Color) -> void:
 
 	var tw := create_tween()
 	tw.set_parallel(true)
+	anim.modulate = Color(1.7, 1.7, 1.7, 1.0)
 	tw.tween_property(anim, "scale", escala_base * 1.18, 0.08)
-	tw.tween_property(anim, "modulate", Color(cor.r, cor.g, cor.b, 1.0), 0.08)
+	tw.tween_property(anim, "modulate", Color.WHITE, 0.22)
 	tw.tween_property(anim, "scale", escala_base, 0.14).set_delay(0.08)
 
 	_registrar_fx_estilhaco_lanterna(alvo.global_position, cor)
@@ -1469,8 +1593,9 @@ func _fx_hit_lanterna(alvo: Area2D, cor: Color) -> void:
 
 	var tw := create_tween()
 	tw.set_parallel(true)
+	anim.modulate = Color(1.0 + cor.r, 1.0 + cor.g, 1.0 + cor.b, 1.0)
 	tw.tween_property(anim, "scale", escala_base * 1.22, 0.06)
-	tw.tween_property(anim, "modulate", Color(cor.r, cor.g, cor.b, 1.0), 0.06)
+	tw.tween_property(anim, "modulate", Color.WHITE, 0.20)
 	tw.tween_property(anim, "scale", escala_base, 0.14).set_delay(0.06)
 
  
@@ -2100,6 +2225,8 @@ func _iniciar_partida() -> void:
 	sequencia_atual.clear()
 	mostrando_sequencia    = false
 	bloqueia_tiro_sequencia = false
+	modo_fixo              = false
+	_rodada += 1
 	
 	if info_inicio_texture != null:
 		info_inicio_texture.visible = false
@@ -2130,6 +2257,9 @@ func _encerrar_partida() -> void:
 	reload_tempo_restante = 0.0
 	mostrando_sequencia = false
 	bloqueia_tiro_sequencia = true
+	_rodada += 1
+	if _vivo != null:
+		_vivo.modo(false)
 
 	timer_jogo.stop()
 	timer_spawn.stop()
@@ -2355,6 +2485,55 @@ func _configurar_hud_bar_padrao() -> void:
 	_atualizar_hud()
  
  
+## Placar compacto (scripts/placar.gd) no lugar do placar alto antigo.
+func _instalar_placar() -> void:
+	var velhos: Array = [top_bar_sombra, top_bar, top_bar_linha, timer_panel, score_panel, municao_panel,
+		stats_arena_panel, timer_title_label, timer_label, score_title_label, score_label,
+		municao_title_label, municao_label, recarga_label, acertos_title_label, acertos_label,
+		tiros_title_label, tiros_label, nivel_title_label, nivel_label]
+	_placar = Placar.instalar(self, hud_root, velhos, _dados_placar, 80)
+
+
+func _dados_placar() -> Dictionary:
+	var extra_titulo: String = "NÍVEL"
+	var extra: String = str(nivel_sequencia)
+	var extra_cor: Color = Color(0.40, 0.85, 1.0)
+	if modo_fixo:
+		extra_titulo = "FIXA"
+		extra = "%d/%d" % [mini(indice_sequencia, CORES_SEQ.size()), CORES_SEQ.size()]
+	if jogo_ativo and not sequencia_atual.is_empty() and indice_sequencia < sequencia_atual.size():
+		# a cor do valor é a da próxima lanterna
+		extra_cor = CORES_FX[CORES_SEQ[indice_sequencia]].lerp(Color.WHITE, 0.15)
+	return {
+		"tempo": tempo_restante, "pontos": pontuacao,
+		"municao": municao_atual, "municao_max": capacidade_cartucho,
+		"recarregando": recarregando,
+		"recarga": 1.0 - reload_tempo_restante / maxf(tempo_recarga_seg, 0.01),
+		"acertos": acertos, "tiros": tiros,
+		"extra_titulo": extra_titulo, "extra": extra, "extra_cor": extra_cor,
+		"cor": Color(1.0, 0.16, 0.12) if not modo_fixo else Color(0.75, 0.40, 1.0),
+	}
+
+
+## Vida do fundo da Arena (scripts/arena_vivo.gd), entre o fundo e as lanternas.
+func _criar_vivo() -> void:
+	if background == null or not (background is Sprite2D):
+		return
+	_vivo = ArenaVivo.new()
+	_vivo.name = "ArenaVivo"
+	_vivo.arena = self
+	_vivo.fundo = background as Sprite2D
+	add_child(_vivo)
+	move_child(_vivo, background.get_index() + 1)
+
+
+## Troca de arte da rodada: fixa = neon nas 5 cores, furos frios, faixa de
+## varredura e letreiro; memória = a arena vermelha de sempre.
+func _arte_modo(fixo: bool) -> void:
+	if _vivo != null:
+		_vivo.modo(fixo)
+
+
 func _criar_painel_bar() -> Panel:
 	var painel := Panel.new()
 	Leve.stylebox(painel, "panel", _estilo_card_arena())
@@ -2824,7 +3003,7 @@ func _rodar_intro_comeco_async() -> void:
 	_iniciar_partida()
  
 
-func _tocar_bip() -> void:
+func _tocar_bip(ordem: int = -1) -> void:
 	if audio_bip == null:
 		push_warning("audio_bip não foi criado.")
 		return
@@ -2834,7 +3013,7 @@ func _tocar_bip() -> void:
 		return
 
 	audio_bip.volume_db = 12.0
-	audio_bip.pitch_scale = 1.0
+	audio_bip.pitch_scale = TONS_BIP[ordem] if ordem >= 0 and ordem < TONS_BIP.size() else 1.0
 	audio_bip.stop()
 	audio_bip.play()
 

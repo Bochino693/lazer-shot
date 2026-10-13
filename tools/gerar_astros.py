@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Sol e lua do Egito pintados em 3x (nítidos até em 4K), sem shader no olho.
+"""Sol e lua do Egito pintados em 4x (nítidos até em 4K), sem shader no olho.
 
 O olho é o Olho de Rá (sol) e o Olho de Hórus (lua) feitos como joia
 egípcia, não como ícone:
@@ -10,7 +10,8 @@ egípcia, não como ícone:
     fio de metal acima da pálpebra;
   - olho grande e realista: íris âmbar-castanha no sol, branco-azulada na
     lua, com fibras, aro escuro, pupila e reflexos;
-  - aro do astro gravado com símbolos egípcios (ankh, sol, água, pena, djed).
+  - o olho ocupa o astro inteiro (até ~0,93 do raio), com um filete
+    gravado rente à borda.
   Rá e Hórus são espelhos: no Rá o traço vai para a esquerda e a espiral
   fica embaixo à esquerda; no Hórus, o contrário.
 
@@ -20,6 +21,8 @@ Cada astro sai em camadas simples (Sprite2D comuns, desenhadas nesta ordem):
   egito_<a>_palpebra.png  pálpebra de cima (desce para piscar): pele
                           abaulada, fio gravado, faixa de esmalte com borda
                           de metal em relevo e sombra suave sobre o olho
+  egito_<a>_halo.png      o brilho em volta do astro, em 1x (só luz suave;
+                          o jogo amplia por trás do disco)
   egito_<a>_disco.png     o astro com tudo gravado e um buraco na abertura do
                           olho; por cima de tudo, esconde a íris e a pálpebra
                           fora do olho
@@ -40,17 +43,19 @@ from scipy import ndimage as ndi
 RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SP = os.path.join(RAIZ, "sprites")
 
-X = 3                      # px da textura por px da imagem do fundo
+X = 4                      # px da textura por px da imagem do fundo
+K = X / 3.0                # o desenho foi afinado em 3x: medidas em px escalam por K
 R_IMG = 138.0              # raio do disco (px da imagem do fundo)
 HALO = 1.42                # o halo vai até HALO * raio
 R = R_IMG * X              # raio do disco na textura
-S = int(round(2 * R * HALO / 2)) * 2
+S = int(round(2 * R * HALO / 2 / X)) * 2 * X     # múltiplo de 2X (o halo reduz certinho)
 C = S / 2
-U = 250.0                  # meia largura da abertura do olho (px da textura)
+D = int(round((R + 6) / 2)) * 4                  # lado do disco recortado (par)
+U = 279.0 * K              # meia largura da abertura do olho (px da textura): o olho ocupa o astro
 # o desenho inteiro vai de x=-1.10 a 1.48 e de y=-1.16 a 1.17 (em u, no
 # sentido do Hórus): o centro do olho fica deslocado para ele ficar no meio
 OLHO_DX = -0.19 * U        # (o Rá é o espelho)
-OLHO_DY = 0.0
+OLHO_DY = -0.035 * U        # sobe um pouco: o desenho fica no meio do disco
 CENTRO_IMG = (512, 300)    # centro do disco na imagem do fundo (= deserto_vivo.gd)
 
 
@@ -61,6 +66,7 @@ def suave(a, b, x):
 
 
 def ruido(forma, escala, rng):
+    escala = escala * K
     gh, gw = int(forma[0] / escala) + 4, int(forma[1] / escala) + 4
     g = rng.standard_normal((gh, gw)).astype(np.float32)
     z = ndi.zoom(g, escala, order=3, mode="wrap")
@@ -200,18 +206,19 @@ def tracos(olho):
     """Os traços do hieróglifo: nome -> (linha central, larguras, pontas redondas)."""
     xs = np.linspace(-1.0, 1.0, 180)
     cima = np.stack([xs, olho.cima(xs) - 0.06], 1)
-    rabo = np.stack([np.linspace(1.0, 1.48, 40), np.linspace(olho.cima(1.0) - 0.06, -0.10, 40)], 1)
+    rabo = np.stack([np.linspace(1.0, 1.40, 40), np.linspace(olho.cima(1.0) - 0.06, -0.10, 40)], 1)
     palp = np.vstack([cima, rabo[1:]])
     baixo = np.stack([xs, olho.baixo(xs) + 0.05], 1)
-    sob = bezier((-0.98, -0.70), (-0.40, -1.04), (0.62, -1.04), (1.38, -0.78), 160)
+    # sobrancelha em arco, acompanhando a borda do astro
+    sob = bezier((-0.90, -0.60), (-0.42, -1.14), (0.66, -1.14), (1.24, -0.70), 160)
     # lágrima e espiral nascem dentro da faixa de baixo
     y_lag = float(olho.baixo(-0.20))
     y_esp = float(olho.baixo(0.14))
-    lag = bezier((-0.20, y_lag), (-0.22, 0.62), (-0.25, 0.86), (-0.29, 1.11), 80)
-    c = (0.80, 0.85)
-    desce = bezier((0.14, y_esp), (0.22, 0.72), (0.40, 1.03), (0.66, 1.07), 80)
-    r0 = float(np.hypot(0.66 - c[0], 1.07 - c[1]))      # começa onde a linha chega (sem degrau)
-    voltas = espiral(c, r0, 0.075, np.arctan2(1.07 - c[1], 0.66 - c[0]), 1.3, 220)
+    lag = bezier((-0.20, y_lag), (-0.22, 0.66), (-0.26, 0.94), (-0.31, 1.22), 80)
+    c = (0.78, 0.92)
+    desce = bezier((0.14, y_esp), (0.22, 0.78), (0.40, 1.10), (0.64, 1.14), 80)
+    r0 = float(np.hypot(0.64 - c[0], 1.14 - c[1]))      # começa onde a linha chega (sem degrau)
+    voltas = espiral(c, r0, 0.075, np.arctan2(1.14 - c[1], 0.64 - c[0]), 1.3, 220)
     esp = np.vstack([desce, voltas[1:]])
     return {
         "palpebra": (palp, larguras(palp, [0.10, 0.19, 0.20, 0.20, 0.20, 0.20]), (True, False)),
@@ -251,52 +258,12 @@ def hieroglifo(olho, centro):
 
 
 def gravura_aro():
-    """Aro do astro gravado: duas linhas e uma volta de símbolos egípcios."""
+    """Filete gravado rente à borda do astro (o olho ocupa o resto)."""
     ss = 3
     im = Image.new("L", (S * ss, S * ss), 0)
     d = ImageDraw.Draw(im)
-
-    def P(x, y):
-        return ((C + x) * ss, (C + y) * ss)
-    for rr in (0.872, 0.978):
-        r = rr * R
-        d.ellipse([P(-r, -r), P(r, r)], outline=255, width=int(0.006 * R * ss))
-    n = 30
-    s = 0.034 * R
-    lw = max(1, int(0.0075 * R * ss))
-    for i in range(n):
-        a = 2 * np.pi * i / n
-        cx, cy = np.cos(a) * 0.925 * R, np.sin(a) * 0.925 * R
-        rot = a + np.pi / 2
-
-        def L(pts):
-            out = []
-            for x, y in pts:
-                xr = x * np.cos(rot) - y * np.sin(rot)
-                yr = x * np.sin(rot) + y * np.cos(rot)
-                out.append(P(cx + xr * s, cy + yr * s))
-            return out
-        tipo = i % 5
-        if tipo == 0:      # ankh
-            d.line(L([(0, -0.2), (0, 1.0)]), fill=255, width=lw)
-            d.line(L([(-0.55, 0.05), (0.55, 0.05)]), fill=255, width=lw)
-            d.line(L([(0.0, -0.2), (-0.35, -0.55), (0.0, -1.0), (0.35, -0.55), (0.0, -0.2)]), fill=255, width=lw)
-        elif tipo == 1:    # água
-            for k in (-0.5, 0.0, 0.5):
-                d.line(L([(-0.8, k), (-0.4, k - 0.2), (0.0, k), (0.4, k - 0.2), (0.8, k)]), fill=255, width=lw)
-        elif tipo == 2:    # disco do sol
-            c = L([(0, 0)])[0]
-            r = 0.7 * s * ss
-            d.ellipse([c[0] - r, c[1] - r, c[0] + r, c[1] + r], outline=255, width=lw)
-            r2 = 0.16 * s * ss
-            d.ellipse([c[0] - r2, c[1] - r2, c[0] + r2, c[1] + r2], fill=255)
-        elif tipo == 3:    # pena
-            d.line(L([(0, 1.0), (0, -1.0)]), fill=255, width=lw)
-            d.line(L([(0, -1.0), (0.45, -0.4), (0.4, 0.6), (0, 1.0)]), fill=255, width=lw)
-        else:              # pilar (djed)
-            d.line(L([(0, -1.0), (0, 1.0)]), fill=255, width=lw)
-            for k in (-0.7, -0.35, 0.0):
-                d.line(L([(-0.5, k), (0.5, k)]), fill=255, width=lw)
+    r = 0.975 * R
+    d.ellipse([((C - r) * ss, (C - r) * ss), ((C + r) * ss, (C + r) * ss)], outline=255, width=int(0.006 * R * ss))
     return np.asarray(im.resize((S, S), Image.LANCZOS)).astype(np.float32) / 255
 
 
@@ -305,8 +272,8 @@ def superficie_sol(xx, yy, rng):
     r = np.hypot(xx, yy) / R
     forma = xx.shape
     n1 = fbm(forma, rng)
-    wx = fbm(forma, rng, (160, 80, 40), (1, 0.5, 0.25)) * 26
-    wy = fbm(forma, rng, (160, 80, 40), (1, 0.5, 0.25)) * 26
+    wx = fbm(forma, rng, (160, 80, 40), (1, 0.5, 0.25)) * 26 * K
+    wy = fbm(forma, rng, (160, 80, 40), (1, 0.5, 0.25)) * 26 * K
     gy, gx = np.mgrid[0:forma[0], 0:forma[1]].astype(np.float32)
     plasma = ndi.map_coordinates(n1, [gy + wy, gx + wx], order=1, mode="reflect")
     fino = fbm(forma, rng, (10, 5, 2.5), (1, 0.6, 0.35))
@@ -455,8 +422,8 @@ def palpebra(olho, cor_pele, cor_metal, cor_brilho, cor_esmalte, cor_sombra, rng
     pontinhos = (ruido(dist.shape, 1.6, rng) > 2.3).astype(np.float32)
     esm_cor = cor_esmalte[None, None, :] * (0.85 + 0.25 * fbm(dist.shape, rng, (40, 20, 10), (1, 0.5, 0.3))[..., None])
     esm_cor = esm_cor * (1 - pontinhos[..., None]) + cor_metal * pontinhos[..., None] * 0.9
-    lit_metal = iluminar(altura * 10.0, cor_metal, cor_brilho, brilho_exp=16.0, ambiente=0.35)
-    lit_esm = iluminar(altura * 10.0, esm_cor, np.array([0.85, 0.92, 1.0]), brilho_exp=70.0, ambiente=0.45, brilho=1.2)
+    lit_metal = iluminar(altura * 10.0 * K, cor_metal, cor_brilho, brilho_exp=16.0, ambiente=0.35)
+    lit_esm = iluminar(altura * 10.0 * K, esm_cor, np.array([0.85, 0.92, 1.0]), brilho_exp=70.0, ambiente=0.45, brilho=1.2)
     peca = np.maximum(metal, esm)
     cor_peca = lit_metal * (1 - (esm / np.maximum(peca, 1e-6))[..., None]) + lit_esm * (esm / np.maximum(peca, 1e-6))[..., None]
     cor = cor * (1 - peca[..., None]) + cor_peca * peca[..., None]
@@ -495,7 +462,7 @@ def astro(nome, espelhar, seed):
     disco = suave(1.0, 0.996, r)
     k = X / 3.0
 
-    # aro gravado com símbolos (baixo-relevo: escuro dentro, luz na borda de baixo)
+    # filete gravado na borda (baixo-relevo: escuro dentro, luz na borda de baixo)
     g = gravura_aro()
     luz_g = np.clip(ndi.shift(g, (1.5 * k, 1.5 * k), order=1) - g, 0, 1)
     sup = sup * (1 - 0.45 * g[..., None]) + gravura_cor * (0.25 * g[..., None])
@@ -509,7 +476,8 @@ def astro(nome, espelhar, seed):
     # sombra da peça no astro e contorno escuro (define a joia)
     somb = ndi.shift(ndi.gaussian_filter(peca, 4.0 * k), (5 * k, 4 * k), order=1)
     sup = sup * (1 - 0.5 * somb[..., None]) + sombra_cor * (0.15 * somb[..., None])
-    contorno = np.clip(ndi.grey_dilation(peca, size=(5, 5)) - peca, 0, 1)
+    lado = int(round(2 * K)) * 2 + 1
+    contorno = np.clip(ndi.grey_dilation(peca, size=(lado, lado)) - peca, 0, 1)
     sup = sup * (1 - 0.85 * contorno[..., None]) + contorno_cor * (0.85 * contorno[..., None])
     # relevo: a peça é abaulada, o esmalte fica um pouco abaixo da borda e os
     # fios de metal sobem
@@ -518,8 +486,8 @@ def astro(nome, espelhar, seed):
     pontinhos = (ruido(peca.shape, 1.6, rng) > 2.3).astype(np.float32)      # pirita do lápis-lazúli
     esm_cor = esmalte_cor[None, None, :] * (0.85 + 0.25 * fbm(peca.shape, rng, (40, 20, 10), (1, 0.5, 0.3))[..., None])
     esm_cor = esm_cor * (1 - pontinhos[..., None]) + metal_cor * pontinhos[..., None] * 0.9
-    lit_metal = iluminar(altura * 10.0, metal_cor, metal_brilho, brilho_exp=16.0, ambiente=0.35)
-    lit_esm = iluminar(altura * 10.0, esm_cor, np.array([0.85, 0.92, 1.0]), brilho_exp=70.0, ambiente=0.45, brilho=1.2)
+    lit_metal = iluminar(altura * 10.0 * K, metal_cor, metal_brilho, brilho_exp=16.0, ambiente=0.35)
+    lit_esm = iluminar(altura * 10.0 * K, esm_cor, np.array([0.85, 0.92, 1.0]), brilho_exp=70.0, ambiente=0.45, brilho=1.2)
     cor_peca = lit_metal * (1 - esmalte[..., None]) + lit_esm * esmalte[..., None]
     sup = sup * (1 - peca[..., None]) + cor_peca * peca[..., None]
 
@@ -528,13 +496,19 @@ def astro(nome, espelhar, seed):
     somb_palp = np.exp(-np.clip(yu - olho.cima(np.clip(xu, -1, 1)), 0, None) / 0.12) * 0.28
     somb_canto = suave(0.65, 1.0, np.abs(xu)) * 0.18
     base = np.zeros((S, S, 4), np.float32)
-    base = sobre(base, cor_halo, a_halo)
     base = sobre(base, sup, disco)
     alfa_buraco = np.clip(somb_palp + somb_canto, 0, 0.6)
     out = base.copy()
     out[..., :3] = base[..., :3] * (1 - abre[..., None]) + sombra_cor * abre[..., None]
     out[..., 3] = base[..., 3] * (1 - abre) + alfa_buraco * abre
-    Image.fromarray((np.clip(out, 0, 1) * 255 + 0.5).astype(np.uint8), "RGBA").save(os.path.join(SP, "egito_%s_disco.png" % nome), optimize=True)
+    # o disco nítido (4x) só no tamanho dele; o halo, que é só brilho suave,
+    # vai numa textura pequena (1x) que o jogo amplia por trás
+    a0 = int(C - D / 2)
+    disco_png = out[a0:a0 + D, a0:a0 + D]
+    Image.fromarray((np.clip(disco_png, 0, 1) * 255 + 0.5).astype(np.uint8), "RGBA").save(os.path.join(SP, "egito_%s_disco.png" % nome), optimize=True)
+    halo = np.dstack([np.ones((S, S, 3), np.float32) * cor_halo, a_halo * (1 - disco * 0.0)])
+    halo_im = Image.fromarray((np.clip(halo, 0, 1) * 255 + 0.5).astype(np.uint8), "RGBA").resize((S // X, S // X), Image.LANCZOS)
+    halo_im.save(os.path.join(SP, "egito_%s_halo.png" % nome), optimize=True)
 
     if sol:
         e, tam_e = esclera(olho, np.array([1.0, 0.97, 0.90]), np.array([0.90, 0.76, 0.60]))
@@ -594,12 +568,14 @@ def _medidas(nome):
 
 def previa(nome, med, olhar=(0, 0), piscar=0.0, fundo_cor=None):
     d = Image.open(os.path.join(SP, "egito_%s_disco.png" % nome)).convert("RGBA")
+    h = Image.open(os.path.join(SP, "egito_%s_halo.png" % nome)).convert("RGBA").resize((S, S), Image.BICUBIC)
     e = Image.open(os.path.join(SP, "egito_%s_esclera.png" % nome)).convert("RGBA")
     ir = Image.open(os.path.join(SP, "egito_%s_iris.png" % nome)).convert("RGBA")
     p = Image.open(os.path.join(SP, "egito_%s_palpebra.png" % nome)).convert("RGBA")
     if fundo_cor is None:
         fundo_cor = (40, 30, 30, 255) if nome == "sol" else (12, 18, 34, 255)
-    tela = Image.new("RGBA", d.size, fundo_cor)
+    tela = Image.new("RGBA", (S, S), fundo_cor)
+    tela.alpha_composite(h)
     oc = (C + med["olho"][0], C + med["olho"][1])
 
     def colar(im, centro):
@@ -607,7 +583,7 @@ def previa(nome, med, olhar=(0, 0), piscar=0.0, fundo_cor=None):
     colar(e, oc)
     colar(ir, (oc[0] + med["iris"][0] + olhar[0] * med["u"], oc[1] + med["iris"][1] + olhar[1] * med["u"]))
     colar(p, (oc[0], oc[1] + med["palpebra_y"] + p.height / 2 + piscar * (med["abre"] + 0.03 * med["u"])))
-    tela.alpha_composite(d)
+    tela.alpha_composite(d, (int(C - d.width / 2), int(C - d.height / 2)))
     return tela
 
 

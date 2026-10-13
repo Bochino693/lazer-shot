@@ -10,6 +10,8 @@ shader_type canvas_item;
 uniform float noite = 0.0;
 uniform float grave = 0.0;
 uniform float batida = 0.0;
+// tiro no ouro: xy = ponto (UV), z = idade em s (<0 = nenhum)
+uniform vec3 toque = vec3(0.0, 0.0, -1.0);
 
 varying vec4 cor_no;
 
@@ -44,5 +46,14 @@ void fragment() {
 	ouro_noite += vec3(0.72, 0.86, 1.0) * (reflexo * 0.55 + quina * (0.22 + 0.7 * reflexo + 0.25 * grave));
 
 	vec3 col = mix(ouro_dia, ouro_noite, noite);
+
+	// o ouro "toca": clarão no ponto e um anel de reflexo que corre pelo metal
+	if (toque.z >= 0.0 && toque.z < 0.7) {
+		float dd = length((UV - toque.xy) * vec2(1.0, 0.23));
+		float idade = toque.z;
+		float anel = exp(-pow((dd - idade * 0.22) / 0.012, 2.0)) * (1.0 - idade / 0.7);
+		float clarao = exp(-dd * dd * 2600.0) * max(0.0, 1.0 - idade * 3.0);
+		col += mix(vec3(1.0, 0.92, 0.62), vec3(0.85, 0.92, 1.0), noite) * (anel * 1.6 + clarao * 3.0) * (0.4 + det);
+	}
 	COLOR = vec4(col, cob * cor_no.a);
 }

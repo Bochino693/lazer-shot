@@ -22,6 +22,9 @@ uniform float fase = 0.0;
 // 0 = sem os raios do céu nem o brilho do disco (no jogo quem faz isso são
 // as camadas do scripts/deserto_vivo.gd)
 uniform float ceu = 1.0;
+// energia do cristal (1 = inteiro; cai com os tiros; 0 = quebrado, feixes
+// apagados). Vem do scripts/deserto_vivo.gd; no menu fica 1.
+uniform float energia = 1.0;
 
 // No fragment o COLOR já vem multiplicado pela textura; a cor do nó
 // (modulate, usado no cruzamento sol/lua) é guardada aqui no vertex.
@@ -50,6 +53,11 @@ void fragment() {
 	vec4 base = texture(TEXTURE, uv);
 	vec3 m = texture(mascara, uv).rgb;
 	float lum = dot(base.rgb, vec3(0.3, 0.59, 0.11));
+	// cristal quebrando: os feixes pintados na imagem viram cinza apagado
+	if (energia < 0.999 && m.r + m.g > 0.01) {
+		float apaga = (1.0 - energia) * clamp(m.r * 1.6 + m.g * 0.5, 0.0, 1.0);
+		base.rgb = mix(base.rgb, vec3(lum * 0.50, lum * 0.46, lum * 0.44), apaga * 0.85);
+	}
 
 	// distância ao cristal com a proporção da imagem (2:3)
 	float d = length((uv - centro) * vec2(1.0, 1.5));
@@ -60,12 +68,12 @@ void fragment() {
 		float pulso = 0.5 + 0.5 * sin(d * 52.0 - t * (6.5 + 4.0 * grave));
 		pulso = pulso * pulso * pulso * pulso;
 		pulso = pulso * pulso;
-		float laser = m.r * (0.22 + (1.15 + 0.9 * grave) * pulso + 0.08 * sin(t * 11.0) + 0.6 * batida);
+		float laser = m.r * (0.22 + (1.15 + 0.9 * grave) * pulso + 0.08 * sin(t * 11.0) + 0.6 * batida) * energia;
 
 		float faixa = 0.5 + 0.5 * sin(uv.y * 64.0 + t * 3.2);
 		faixa = faixa * faixa;
 		float cintila = 0.5 + 0.5 * sin(t * 7.3 + uv.x * 90.0);
-		float cristal = m.g * (0.10 + 0.42 * faixa + 0.14 * cintila + 0.45 * batida + 0.2 * grave);
+		float cristal = m.g * (0.10 + 0.42 * faixa + 0.14 * cintila + 0.45 * batida + 0.2 * grave) * energia;
 
 		float disco = m.b * (0.07 + 0.07 * sin(t * 1.35) + 0.25 * grave) * ceu;
 
@@ -84,9 +92,9 @@ void fragment() {
 	}
 
 	// onda de luz que sai do cristal na batida
-	if (onda < 0.625) {
+	if (onda < 0.625 && energia > 0.05) {
 		float anel = smoothstep(0.045, 0.0, abs(d - onda)) * clamp(1.0 - onda * 1.6, 0.0, 1.0);
-		soma += cor_energia * anel * (0.10 + 0.45 * (m.r + m.g)) + base.rgb * anel * 0.18;
+		soma += (cor_energia * anel * (0.10 + 0.45 * (m.r + m.g)) + base.rgb * anel * 0.18) * energia;
 	}
 
 	vec3 rgb = base.rgb * (1.0 + 0.06 * batida) + soma * forca;

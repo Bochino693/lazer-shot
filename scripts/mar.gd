@@ -493,6 +493,7 @@ func _ready() -> void:
 
 	_criar_fx_overlay()
 	_criar_hud()
+	_instalar_placar()
 	_criar_hud_combo()
 	_configurar_intro_comeco()
 	_criar_tela_info_inicio()
@@ -2043,6 +2044,35 @@ func _criar_hud() -> void:
 	_fonte_titulo(bombas_restantes_label, 19, Color(1.0, 0.88, 0.32, 1.0))
 
 	_criar_blocos_municao()
+
+## Placar compacto (scripts/placar.gd) no lugar dos painéis altos.
+func _instalar_placar() -> void:
+	var velhos: Array = [top_bar, top_bar_sombra, top_bar_glow, top_bar_linha, timer_panel, score_panel,
+		tiros_panel, acertos_panel, bombas_restantes_label, timer_title_label, timer_label,
+		score_title_label, score_label, tiros_title_label, tiros_label, municao_title_label,
+		municao_label, recarga_info_label, acertos_title_label, acertos_label,
+		tiros_total_title_label, tiros_total_label]
+	velhos.append_array(bombas_icones)
+	Placar.instalar(self, hud_root, velhos, _dados_placar, hud_layer.layer)
+
+
+func _dados_placar() -> Dictionary:
+	var restantes: int = maxi(0, bombas_erros_max - bombas_erros_atual)
+	var cor_bombas := Color(1.0, 0.86, 0.28)
+	if restantes <= 1:
+		cor_bombas = Color(1.0, 0.25, 0.18)
+	elif restantes == 2:
+		cor_bombas = Color(1.0, 0.62, 0.16)
+	return {
+		"tempo": tempo_restante, "pontos": pontuacao_total,
+		"municao": balas_no_cartucho, "municao_max": capacidade_cartucho,
+		"recarregando": recarregando,
+		"recarga": 1.0 - reload_tempo_restante / maxf(tempo_recarga_seg, 0.01),
+		"acertos": total_acertos, "tiros": total_tiros,
+		"extra_titulo": "BOMBAS", "extra": "%d/%d" % [restantes, bombas_erros_max], "extra_cor": cor_bombas,
+		"cor": Color(0.25, 0.85, 1.0),
+	}
+
 
 func _criar_icones_bombas_hud() -> void:
 	for b in bombas_icones:
@@ -4118,6 +4148,8 @@ func _processar_tiro_global(pos_global: Vector2, primeiro_tiro: bool = false) ->
 
 	balas_no_cartucho -= 1
 	total_tiros += 1
+	# a bala corta a água: risco claro e rastro de bolhas até a mira
+	Trajetoria.disparar(self, get_viewport().get_canvas_transform() * pos_global, "mar")
 
 	# pulso menor na mira para não dar sensação de pipoco/travada
 	alvo_anim_t += 0.08

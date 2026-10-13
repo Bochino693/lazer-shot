@@ -559,6 +559,95 @@ nítida em 1080p e 4K e ainda sem shader:
 - Rá e Hórus continuam espelhados (no Rá o traço vai para a esquerda). Os
   fundos do sol e da lua foram pintados de novo com o olho novo.
 
+## Rodada 11: Arena nas 5 cores, trajetória do tiro, cristal que quebra, placar novo e sons
+
+**Arena: duas mecânicas e as cores da ordem** (`scripts/arena.gd`):
+- As lanternas agora têm **5 cores, sempre na mesma ordem**: 1 azul,
+  2 verde, 3 amarelo, 4 vermelho, 5 roxo (`sprites/arena_lanternas.png`,
+  `tools/gerar_lanternas.py`). A cor diz qual é o 1º, 2º, 3º... tiro.
+- **Rodada de MEMÓRIA**: as lanternas acendem e apagam na ordem das cores, e
+  o jogador repete. Começa com 1 e sobe até 5.
+- **Rodada FIXA**: as lanternas nascem **acesas, uma após a outra a cada 1 a
+  1,5 s**, já na cor da ordem; é acertar na ordem. Acerto rápido (antes de
+  1,1 s) dá +10, a fixa completa dá **+50**.
+- As rodadas **ciclam**: memória → fixa → memória... Errar a ordem continua
+  tirando 100 pontos; na memória volta ao nível 1 e na fixa a rodada
+  recomeça com outra ordem.
+- **Troca de arte** na fixa: o fundo cruza para `sprites/arena_fixa.png`
+  (letreiro nas 5 cores, furos em neon frio, giroflex roxo), uma linha de
+  varredura colorida desce a parede e o letreiro "SEQUÊNCIA FIXA" cruza a
+  tela. Na memória volta à arte normal.
+- A arte de instruções da Arena (`info_scenes/info_arena.png`,
+  `tools/gerar_info_arena.py`) mostra as cores, as duas rodadas e os pontos.
+
+**Arena viva** (`scripts/arena_vivo.gd`), tudo com o Pincel:
+- O fundo usa o mesmo shader dos fundos do menu: luzes piscando com a
+  música, reflexo no chão, brilho na batida.
+- O giroflex gira na troca de rodada, fica vermelho no erro e pisca nas
+  cores na vitória e na cor de cada lanterna acertada.
+- As duas arandelas jogam luz na parede, com poeira no ar. Os canos soltam
+  vapor e a caixa elétrica solta faíscas de vez em quando, com som.
+- Uma faixa com as 5 luzes da ordem fica embaixo dos furos, e a próxima
+  pulsa.
+
+**Trajetória do tiro em todas as telas** (`scripts/trajetoria.gd`). Sai de
+baixo da tela (a arma) e vai até onde a mira estava:
+- **Arena:** laser vermelho como o da abertura, com pulso correndo e
+  clarão no ponto.
+- **Egito:** raio de sol dourado (dia) ou raio de luar prateado (noite),
+  com brilhos soltos e som próprio.
+- **Mar:** a bala corta a água, com um risco claro, um rastro de bolhas que
+  sobem e anéis na água.
+- **Bar:** traçante quente e um fio de fumaça que fica no ar.
+
+**Placar único e compacto** (`scripts/placar.gd`). Uma faixa fina no topo,
+usando a largura toda, igual nas 4 telas: TEMPO | PONTOS | MUNIÇÃO (barra)
+| ACERTOS/TIROS | campo da fase. O campo da fase é FIXA/MEMÓRIA na Arena,
+SOL/LUA no Egito, BOMBAS no Mar e COMBO no Bar. O fundo aparece inteiro. O
+placar antigo fica escondido; as variáveis da fase continuam iguais.
+
+**Egito** (`scripts/deserto_vivo.gd`):
+- **Cristal com dano:** cada tiro trinca o cristal (tremor, cacos, brilho
+  falhando). No 9º tiro ele **quebra**: estilhaços, clarão, onda, som de
+  vidro, e a **energia apaga**. Os feixes do fundo ficam cinza e param o
+  brilho e as faíscas. O cristal fica escuro e rachado
+  (`sprites/egito_cristal_morto_*.png`, `tools/gerar_cristal_morto.py`) por
+  30 s, depois se refaz com som e a energia volta.
+- **Pontas de ouro tocam:** um tiro nas placas de ouro dá clarão e anel no
+  metal (`shaders/egito_pontas.gdshader`), faíscas e lasquinhas de ouro,
+  com um "ping" metálico. Pedra lasca com pó e areia levanta com os grãos.
+- **Olhos em 4x:** o Olho de Rá e o de Hórus foram gerados em 4x (antes 3x)
+  e preenchem o astro até a borda, sem vazar
+  (`tools/gerar_astros.py`). O halo virou uma imagem separada, leve.
+
+**Mar: templo de Atlântida no lugar dos tabletes apagados**
+(`tools/gerar_mar.py`, `scripts/mar_vida.gd`). Os poneglifos quase apagados
+do fundo saíram:
+- O lugar foi preenchido com a textura da própria rocha, sem borrão.
+- No paredão, um **templo** cercado de rocha: escadaria, 6 colunas (uma
+  quebrada, uma só no toco), frontão com a ponta partida e tambores caídos.
+- Uma **estátua de Poseidon** com tridente fica sobre um pedestal, e há
+  pedras, corais e algas nas quinas.
+- A porta tem uma luz de cristal que respira com a música, com pontinhos
+  subindo.
+- Depois que o navio pousa, o templo continua atrás dele
+  (`mar_navio_pouso.png`).
+
+**Sons** (`tools/gerar_sons_efeitos.py`, síntese física em 44,1 kHz):
+- **Cristal:** trinca, quebra (vidro estilhaçando com cacos quicando) e volta.
+- **Egito:** ouro tocando, areia, raio de sol e raio de luar.
+- **Arena:** laser batendo na parede, vapor, faísca, troca de rodada e
+  lanterna subindo/descendo.
+- **Mar:** bolhas do tiro.
+- **Bar:** madeira e papel ao errar.
+
+Tudo em WAV sem compressão, tocado pelo `Maquina.efeito`.
+
+**Custo.** Rajada de tiros (render por software, PC de teste, média por
+quadro): Arena 41 ms, Egito 60 ms, Mar 58 ms, Bar 54 ms. É o mesmo nível da
+Rodada 10, e os nós da tela ficam estáveis. Trajetória e efeitos do fundo
+são desenhos do Pincel (uma textura) e só redesenham enquanto há algo no ar.
+
 ## Para testar no PC como se fosse a TV Box
 
 ```
