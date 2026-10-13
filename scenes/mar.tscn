@@ -1,7 +1,7 @@
 [gd_scene format=3 uid="uid://bmjq0nr2mk24n"]
 
 [ext_resource type="Script" uid="uid://crlq0hk5kt7sj" path="res://scripts/mar.gd" id="1_64n6q"]
-[ext_resource type="Texture2D" uid="uid://bx7f0fq31cp13" path="res://sprites/atlantis.png" id="1_tjuwp"]
+[ext_resource type="Texture2D" uid="uid://c07sdrgye4mqw" path="res://sprites/atlantis_jogo.png" id="1_tjuwp"]
 [ext_resource type="PackedScene" uid="uid://djhftn4f6p1q4" path="res://entities/vaso80.tscn" id="2_64n6q"]
 [ext_resource type="PackedScene" uid="uid://fcwhutgfts5o" path="res://entities/bau100.tscn" id="3_nwgxb"]
 [ext_resource type="PackedScene" uid="uid://b1ng2csvkia7b" path="res://entities/bomba.tscn" id="5_nwgxb"]

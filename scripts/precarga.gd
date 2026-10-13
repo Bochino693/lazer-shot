@@ -63,8 +63,6 @@ const LISTA := {
 		"res://songs/egito.mp3",
 		"res://songs/hit-sun.wav",
 		"res://songs/hit-moon.wav",
-		"res://background_video/back_sun.ogv",
-		"res://background_video/back_moon.ogv",
 		"res://info_scenes/desert_info.png",
 	],
 	"res://scenes/main.tscn": [
@@ -79,7 +77,7 @@ const LISTA := {
 		"res://sprites/fundo_init_mascara.png",
 	],
 	"res://scenes/mar.tscn": [
-		"res://sprites/atlantis.png",
+		"res://sprites/atlantis_jogo.png",
 		"res://songs/buble_hit.wav",
 		"res://songs/xploit.wav",
 		"res://songs/recharge.wav",

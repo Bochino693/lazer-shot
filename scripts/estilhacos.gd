@@ -9,8 +9,14 @@ extends Node2D
 # e somem; os que vêm para a frente crescem e caem pela beirada.
 # Três estilos se revezam: ESTOURO, DESABA e PARTIDA (o gargalo sai inteiro).
 #
+# Junto saem lasquinhas de vidro na cor da garrafa (verde, âmbar, transparente),
+# que cintilam girando, quicam e deitam na prateleira ou caem na de baixo. O
+# líquido forma uma poça na prateleira, escorre pela beirada e pinga na
+# prateleira de baixo (ou no chão), onde respinga e deixa uma mancha.
+#
 # Custo: todos os cacos de uma garrafa saem num desenho só (um triângulo
-# array com a folha de sprites da garrafa) e as gotas/brilhos em outro.
+# array com a folha de sprites da garrafa), as gotas/brilhos em outro e
+# lasquinhas + líquido num terceiro; tudo atualizado no lugar (sem criar nós).
 
 enum { ESTOURO, DESABA, PARTIDA }
 
@@ -20,6 +26,16 @@ const PRATELEIRA_BEIRA := 0.55   # z da beirada da prateleira (passou: cai)
 const ALTURA_PRATELEIRA := 10.0  # quanto o fundo da prateleira aparece acima da beira
 
 static var _proximo_estilo := 0
+
+## Tampos das prateleiras (coordenadas da cena), de cima para baixo; a cena do
+## bar preenche. O líquido que escorre pinga na de baixo (ou no chão).
+static var prateleiras := PackedFloat32Array()
+static var chao_bar := 1560.0
+const LABIO := 24.0          # do tampo até a beirada de baixo da prateleira
+const GRAV_LIQ := 1300.0
+const MAX_PINGOS := 18
+const MAX_MANCHAS := 6
+const SEG_POCA := 14
 
 var _textura: Texture2D
 var _chao := 0.0
@@ -56,6 +72,49 @@ var _g_z := PackedFloat32Array()
 var _g_pontos := PackedVector2Array()
 var _g_cores := PackedColorArray()
 var _g_indices := PackedInt32Array()
+
+# Lasquinhas de vidro na cor da garrafa (triângulos sem textura)
+var _v_pos := PackedVector2Array()
+var _v_vel := PackedVector2Array()
+var _v_ang := PackedFloat32Array()
+var _v_giro := PackedFloat32Array()
+var _v_z := PackedFloat32Array()
+var _v_vida := PackedFloat32Array()
+var _v_pousado := PackedFloat32Array()
+var _v_chao := PackedFloat32Array()
+var _v_forma := PackedVector2Array()   # 3 vértices por lasca
+var _v_cor := Color.WHITE
+
+# Líquido: poça, fio pela beirada, pingos (0 livre, 1 pendurado, 2 caindo,
+# 3 respingo) e manchas na prateleira de baixo
+var _liq := Color.TRANSPARENT
+var _liq_centro := Color.TRANSPARENT   # poça: miolo com o brilho da luz
+var _liq_borda := Color.TRANSPARENT    # poça: borda (madeira molhada)
+var _liq_gota := Color.TRANSPARENT
+var _poca_x := 0.0
+var _poca_larg := 0.0
+var _poca_y := 0.0
+var _beira := 0.0
+var _abaixo := 0.0
+var _prox_pingo := 0.0
+var _escala := 1.0
+var _p_pos := PackedVector2Array()
+var _p_vel := PackedVector2Array()
+var _p_tam := PackedFloat32Array()
+var _p_estado := PackedInt32Array()
+var _p_t := PackedFloat32Array()
+var _m_pos := PackedVector2Array()
+var _m_t := PackedFloat32Array()
+var _m_larg := PackedFloat32Array()
+var _prox_mancha := 0
+# malha única de lasquinhas + líquido, atualizada no lugar
+var _l_pontos := PackedVector2Array()
+var _l_cores := PackedColorArray()
+var _l_indices := PackedInt32Array()
+var _l_poca := 0
+var _l_fio := 0
+var _l_p := 0
+var _l_m := 0
 
 const _HEX := [Vector2(1, 0), Vector2(0.5, 0.866), Vector2(-0.5, 0.866), Vector2(-1, 0), Vector2(-0.5, -0.866), Vector2(0.5, -0.866)]
 
@@ -106,7 +165,7 @@ func _montar(sprite: Node2D, quadro: Texture2D, imagem: Image, ponto_tiro: Vecto
 	tiro.y = clampf(tiro.y, limites.position.y + 4.0, limites.end.y - 4.0)
 
 	# Raios e anéis da rachadura
-	var raios := randi_range(7, 9)
+	var raios := randi_range(9, 12)
 	var giro0 := randf() * TAU
 	var angulos := PackedFloat32Array()
 	for i in range(raios):
@@ -115,10 +174,10 @@ func _montar(sprite: Node2D, quadro: Texture2D, imagem: Image, ponto_tiro: Vecto
 	for c in [limites.position, Vector2(limites.end.x, limites.position.y), limites.end, Vector2(limites.position.x, limites.end.y)]:
 		r_max = maxf(r_max, tiro.distance_to(c))
 	var aneis := PackedFloat32Array([0.0])
-	var r := randf_range(9.0, 14.0)
+	var r := randf_range(7.0, 11.0)
 	while r < r_max:
 		aneis.append(r)
-		r *= randf_range(1.75, 2.1)
+		r *= randf_range(1.55, 1.85)
 	aneis.append(r_max * 1.02)
 
 	var linha_corte := Vector2.RIGHT.rotated(randf_range(-0.5, 0.5))
@@ -133,7 +192,7 @@ func _montar(sprite: Node2D, quadro: Texture2D, imagem: Image, ponto_tiro: Vecto
 			if a1 < a0:
 				a1 += TAU
 			# Pedaços longe do tiro são divididos para não virar placa.
-			var partes := maxi(1, int(round((a1 - a0) * r1 / 46.0)))
+			var partes := maxi(1, int(round((a1 - a0) * r1 / 36.0)))
 			for p in range(partes):
 				var b0 := lerpf(a0, a1, float(p) / partes)
 				var b1 := lerpf(a0, a1, float(p + 1) / partes)
@@ -168,7 +227,16 @@ func _montar(sprite: Node2D, quadro: Texture2D, imagem: Image, ponto_tiro: Vecto
 	_pontos.resize(_forma.size())
 	_cores.resize(_forma.size())
 
-	_criar_gotas(xf * (canto + tiro), cor_liquido, estilo, escala_tela)
+	var origem := xf * (canto + tiro)
+	_criar_gotas(origem, cor_liquido, estilo, escala_tela)
+	_escala = escala_tela
+	_v_cor = _cor_do_vidro(imagem, regiao, cor_liquido)
+	_criar_lasquinhas(origem, randi_range(26, 34), escala_tela)
+	if cor_liquido.a > 0.01:
+		var base_x := (xf * (canto + Vector2((limites.position.x + limites.end.x) * 0.5, limites.end.y))).x
+		_criar_liquido(base_x, limites.size.x * escala_tela, cor_liquido)
+		_duracao = 3.8
+	_montar_malha_liquido()
 	_atualizar(0.0)
 
 
@@ -268,6 +336,129 @@ func _nova_gota(pos: Vector2, vel: Vector2, cor: Color, tam: float, vida: float)
 		_g_indices.append(ini)
 		_g_indices.append(ini + k)
 		_g_indices.append(ini + k + 1)
+
+
+## Cor média do vidro da garrafa (pixels opacos), um pouco mais viva.
+static func _cor_do_vidro(imagem: Image, regiao: Rect2, reserva: Color) -> Color:
+	if imagem == null:
+		return reserva.lerp(Color.WHITE, 0.3)
+	var soma := Color(0, 0, 0, 0)
+	var n := 0
+	for y in range(int(regiao.position.y), int(regiao.end.y), 4):
+		for x in range(int(regiao.position.x), int(regiao.end.x), 4):
+			if x < imagem.get_width() and y < imagem.get_height():
+				var c := imagem.get_pixel(x, y)
+				if c.a > 0.6:
+					soma += c
+					n += 1
+	if n == 0:
+		return reserva.lerp(Color.WHITE, 0.3)
+	var media := Color(soma.r / n, soma.g / n, soma.b / n, 1.0)
+	return Color.from_hsv(media.h, minf(1.0, media.s * 1.25), clampf(media.v * 1.35 + 0.12, 0.0, 1.0), 0.85)
+
+
+func _criar_lasquinhas(origem: Vector2, n: int, escala: float) -> void:
+	for i in range(n):
+		var tam := randf_range(2.5, 7.5) * escala
+		var a0 := randf() * TAU
+		_v_forma.append(Vector2.RIGHT.rotated(a0) * tam)
+		_v_forma.append(Vector2.RIGHT.rotated(a0 + randf_range(1.8, 2.4)) * tam * randf_range(0.4, 0.8))
+		_v_forma.append(Vector2.RIGHT.rotated(a0 + randf_range(3.6, 4.4)) * tam * randf_range(0.5, 0.9))
+		var vel := Vector2.RIGHT.rotated(randf_range(-PI, 0.25)) * randf_range(160.0, 540.0)
+		vel.y -= randf_range(60.0, 260.0)
+		_v_pos.append(origem + Vector2(randf_range(-10.0, 10.0), randf_range(-10.0, 10.0)))
+		_v_vel.append(vel)
+		_v_ang.append(randf() * TAU)
+		_v_giro.append(randf_range(-16.0, 16.0))
+		_v_z.append(randf_range(-0.9, 1.6))
+		_v_vida.append(randf_range(1.1, 2.0))
+		_v_pousado.append(-1.0)
+		_v_chao.append(_chao)
+
+
+## Tampo da prateleira logo abaixo de `y` (ou o chão).
+static func _tampo_abaixo(y: float) -> float:
+	var atual := -1
+	var melhor := 1e9
+	for i in range(prateleiras.size()):
+		var d := absf(prateleiras[i] - y)
+		if d < melhor:
+			melhor = d
+			atual = i
+	if atual >= 0 and atual + 1 < prateleiras.size() and melhor < 120.0:
+		return prateleiras[atual + 1] + (y - prateleiras[atual])
+	return chao_bar
+
+
+func _criar_liquido(x: float, largura: float, cor: Color) -> void:
+	_liq = cor
+	if cor.get_luminance() > 0.7:
+		# transparente (vodka, gin): madeira molhada escura com reflexo claro
+		_liq_centro = Color(1.0, 1.0, 1.0, 0.48)
+		_liq_borda = Color(0.18, 0.08, 0.03, 0.58)
+		_liq_gota = Color(0.88, 0.95, 1.0, 0.95)
+	else:
+		# âmbar (whisky, rum): mais escuro que a madeira, com reflexo de luz
+		# no meio da poça e no alto de cada gota (senão some na madeira)
+		_liq_centro = Color(1.0, 0.86, 0.58, 0.6)
+		_liq_borda = Color(cor.r * 0.75, cor.g * 0.6, cor.b * 0.5, 0.88)
+		_liq_gota = Color(cor.r * 1.25, cor.g * 1.2, cor.b, 0.95)
+	_poca_x = x
+	_poca_larg = maxf(largura, 24.0 * _escala) * randf_range(1.5, 2.1)
+	_poca_y = _chao + 1.0
+	_beira = _chao + LABIO * _escala
+	_abaixo = _tampo_abaixo(_chao)
+	_prox_pingo = 0.22
+	_p_pos.resize(MAX_PINGOS)
+	_p_vel.resize(MAX_PINGOS)
+	_p_tam.resize(MAX_PINGOS)
+	_p_estado.resize(MAX_PINGOS)
+	_p_t.resize(MAX_PINGOS)
+	_p_estado.fill(0)
+	_m_pos.resize(MAX_MANCHAS)
+	_m_t.resize(MAX_MANCHAS)
+	_m_larg.resize(MAX_MANCHAS)
+	_m_t.fill(-1.0)
+
+
+## Malha fixa: lasquinhas, poça (leque), fio na beirada (quadrado), pingos
+## (hexágonos) e manchas (leques). Os índices não mudam; só os pontos.
+func _montar_malha_liquido() -> void:
+	var nv := _v_pos.size()
+	for c in range(nv):
+		_l_indices.append(c * 3)
+		_l_indices.append(c * 3 + 1)
+		_l_indices.append(c * 3 + 2)
+	var total := nv * 3
+	if _liq.a > 0.01:
+		_l_poca = total
+		for k in range(SEG_POCA):
+			_l_indices.append(_l_poca)
+			_l_indices.append(_l_poca + 1 + k)
+			_l_indices.append(_l_poca + 1 + (k + 1) % SEG_POCA)
+		total += SEG_POCA + 1
+		_l_fio = total
+		_l_indices.append_array(PackedInt32Array([_l_fio, _l_fio + 1, _l_fio + 2, _l_fio, _l_fio + 2, _l_fio + 3]))
+		total += 4
+		_l_p = total
+		for p in range(MAX_PINGOS):
+			var ini := _l_p + p * 6
+			for k in range(1, 5):
+				_l_indices.append(ini)
+				_l_indices.append(ini + k)
+				_l_indices.append(ini + k + 1)
+		total += MAX_PINGOS * 6
+		_l_m = total
+		for m in range(MAX_MANCHAS):
+			var ini := _l_m + m * 7
+			for k in range(6):
+				_l_indices.append(ini)
+				_l_indices.append(ini + 1 + k)
+				_l_indices.append(ini + 1 + (k + 1) % 6)
+		total += MAX_MANCHAS * 7
+	_l_pontos.resize(total)
+	_l_cores.resize(total)
+	_l_cores.fill(Color(0, 0, 0, 0))
 
 
 func _process(delta: float) -> void:
@@ -370,6 +561,176 @@ func _atualizar(dt: float) -> void:
 			_g_pontos[ini + k] = pos + h + dir * ao_longo * estica * 1.4
 			_g_cores[ini + k] = cor
 
+	if not _v_pos.is_empty():
+		_atualizar_lasquinhas(dt)
+	if _liq.a > 0.01 and not _l_pontos.is_empty():
+		_atualizar_liquido(dt)
+
+
+func _atualizar_lasquinhas(dt: float) -> void:
+	for c in range(_v_pos.size()):
+		var pos: Vector2 = _v_pos[c]
+		var vel: Vector2 = _v_vel[c]
+		var z: float = _v_z[c]
+		var pousado: float = _v_pousado[c]
+		if dt > 0.0:
+			if pousado < 0.0:
+				vel.y += GRAVIDADE * dt
+				pos += vel * dt
+				_v_ang[c] += _v_giro[c] * dt
+				# na frente da beirada não tem tampo: cai até a prateleira de baixo
+				var chao_aqui: float = _v_chao[c] - (PRATELEIRA_BEIRA - z) / (PRATELEIRA_BEIRA - PRATELEIRA_FUNDO) * ALTURA_PRATELEIRA
+				if z > PRATELEIRA_BEIRA:
+					chao_aqui = _tampo_abaixo(_v_chao[c]) + 4.0
+				if vel.y > 0.0 and pos.y >= chao_aqui:
+					pos.y = chao_aqui
+					if vel.y > 260.0:
+						vel.y = -vel.y * randf_range(0.25, 0.4)
+						vel.x *= 0.55
+						_v_giro[c] *= 0.5
+					else:
+						pousado = 0.0
+						vel = Vector2(vel.x * 0.4, 0.0)
+			else:
+				pousado += dt
+				pos.x += vel.x * dt
+				vel.x *= pow(0.01, dt)
+		_v_pos[c] = pos
+		_v_vel[c] = vel
+		_v_pousado[c] = pousado
+		var ang: float = _v_ang[c]
+		var perspectiva := 1.0 + 0.3 * clampf(z, -1.0, 2.0)
+		var achata := 0.45 if pousado >= 0.0 else 1.0
+		var brilho := 0.8 + 1.1 * pow(absf(cos(ang * 1.7 + _tempo * 2.0)), 14.0)
+		var cor := Color(_v_cor.r * brilho, _v_cor.g * brilho, _v_cor.b * brilho, _v_cor.a)
+		cor.a *= clampf((_v_vida[c] - _tempo) / 0.4, 0.0, 1.0)
+		var giro := Transform2D(ang, pos)
+		for k in range(3):
+			var v: Vector2 = _v_forma[c * 3 + k] * perspectiva
+			_l_pontos[c * 3 + k] = giro * Vector2(v.x, v.y * achata)
+			_l_cores[c * 3 + k] = cor
+
+
+func _atualizar_liquido(dt: float) -> void:
+	var t := _tempo
+	var some := clampf((3.6 - t) / 0.8, 0.0, 1.0)
+	# poça espalhando no tampo
+	var espalha := 1.0 - exp(-maxf(t - 0.05, 0.0) * 3.2)
+	var rx := _poca_larg * 0.5 * espalha
+	var ry := (3.5 + 3.5 * espalha) * _escala
+	var aparece := some * minf(1.0, espalha * 4.0)
+	var claro := _liq_centro
+	claro.a *= aparece
+	var borda := _liq_borda
+	borda.a *= aparece
+	_l_pontos[_l_poca] = Vector2(_poca_x, _poca_y)
+	_l_cores[_l_poca] = claro
+	for k in range(SEG_POCA):
+		var a := TAU * k / SEG_POCA
+		var ond := 1.0 + 0.12 * sin(a * 3.0 + _poca_x)
+		_l_pontos[_l_poca + 1 + k] = Vector2(_poca_x + cos(a) * rx * ond, _poca_y + sin(a) * ry)
+		_l_cores[_l_poca + 1 + k] = borda
+	# fio escorrendo pela beirada da frente
+	var fio := clampf((t - 0.15) / 0.25, 0.0, 1.0) * some
+	var meia := rx * 0.42
+	var cor_fio := _liq_gota
+	cor_fio.a *= 0.55 * fio
+	_l_pontos[_l_fio] = Vector2(_poca_x - meia, _poca_y + ry * 0.6)
+	_l_pontos[_l_fio + 1] = Vector2(_poca_x + meia, _poca_y + ry * 0.6)
+	_l_pontos[_l_fio + 2] = Vector2(_poca_x + meia * 0.8, _beira)
+	_l_pontos[_l_fio + 3] = Vector2(_poca_x - meia * 0.8, _beira)
+	for k in range(4):
+		_l_cores[_l_fio + k] = cor_fio
+
+	# pingos: primeiro um filete (rápido), depois pingando cada vez mais devagar
+	if dt > 0.0 and t > 0.2 and t < 3.0:
+		_prox_pingo -= dt
+		if _prox_pingo <= 0.0:
+			_prox_pingo = lerpf(0.045, 0.34, clampf((t - 0.2) / 1.6, 0.0, 1.0))
+			var livre := _p_estado.find(0)
+			if livre >= 0:
+				_p_estado[livre] = 1
+				_p_t[livre] = 0.0
+				_p_tam[livre] = 1.2 * _escala
+				_p_pos[livre] = Vector2(_poca_x + randf_range(-meia, meia), _beira)
+				_p_vel[livre] = Vector2.ZERO
+	for p in range(MAX_PINGOS):
+		var est: int = _p_estado[p]
+		var pos: Vector2 = _p_pos[p]
+		var vel: Vector2 = _p_vel[p]
+		var tam: float = _p_tam[p]
+		if est != 0 and dt > 0.0:
+			_p_t[p] += dt
+			match est:
+				1:
+					# pendurado na beirada, enchendo
+					var segura := 0.05 if t < 0.9 else 0.3
+					tam = lerpf(1.4, 3.8, clampf(_p_t[p] / segura, 0.0, 1.0)) * _escala
+					if _p_t[p] >= segura:
+						est = 2
+						vel = Vector2(randf_range(-6.0, 6.0), 40.0)
+				2:
+					vel.y += GRAV_LIQ * dt
+					pos += vel * dt
+					if pos.y >= _abaixo:
+						pos.y = _abaixo
+						_nova_mancha(pos)
+						est = 3
+						_p_t[p] = 0.0
+						tam *= 0.55
+						vel = Vector2(randf_range(-70.0, 70.0), -randf_range(90.0, 170.0))
+				3:
+					vel.y += GRAV_LIQ * dt
+					pos += vel * dt
+					if _p_t[p] > 0.32:
+						est = 0
+		_p_estado[p] = est
+		_p_pos[p] = pos
+		_p_vel[p] = vel
+		_p_tam[p] = tam
+		var ini := _l_p + p * 6
+		var cor := _liq_gota
+		if est == 0:
+			cor.a = 0.0
+		var brilho := cor.lerp(Color.WHITE, 0.55)
+		var estica := clampf(vel.length() / 500.0, 0.0, 1.0)
+		var dir := vel.normalized() if vel.length() > 1.0 else Vector2.DOWN
+		for k in range(6):
+			var h: Vector2 = _HEX[k] * tam
+			if est == 1:
+				h.y = h.y * 1.4 + absf(h.y) * 0.3   # gota pendurada (mais embaixo)
+			_l_pontos[ini + k] = pos + h + dir * h.dot(dir) * estica * 1.8
+			_l_cores[ini + k] = brilho if k >= 4 else cor   # reflexo no alto da gota
+
+	# manchas na prateleira de baixo
+	for m in range(MAX_MANCHAS):
+		var ini := _l_m + m * 7
+		var mt: float = _m_t[m]
+		var cor := _liq_borda
+		var larg := 0.0
+		if mt >= 0.0:
+			mt += dt
+			_m_t[m] = mt
+			larg = _m_larg[m] * clampf(mt / 0.15, 0.0, 1.0)
+			cor.a *= clampf((1.6 - mt) / 0.6, 0.0, 1.0)
+		else:
+			cor.a = 0.0
+		var c: Vector2 = _m_pos[m]
+		_l_pontos[ini] = c
+		_l_cores[ini] = cor
+		for k in range(6):
+			var a := TAU * k / 6.0
+			_l_pontos[ini + 1 + k] = c + Vector2(cos(a) * larg, sin(a) * larg * 0.3)
+			_l_cores[ini + 1 + k] = cor
+
+
+func _nova_mancha(pos: Vector2) -> void:
+	var m := _prox_mancha
+	_prox_mancha = (_prox_mancha + 1) % MAX_MANCHAS
+	_m_pos[m] = pos + Vector2(0, 1)
+	_m_t[m] = 0.0
+	_m_larg[m] = randf_range(6.0, 12.0) * _escala
+
 
 func _draw() -> void:
 	var ci := get_canvas_item()
@@ -377,6 +738,8 @@ func _draw() -> void:
 		RenderingServer.canvas_item_add_triangle_array(ci, _indices, _pontos, _cores, _uvs, PackedInt32Array(), PackedFloat32Array(), _textura.get_rid())
 	if not _g_indices.is_empty():
 		RenderingServer.canvas_item_add_triangle_array(ci, _g_indices, _g_pontos, _g_cores)
+	if not _l_indices.is_empty():
+		RenderingServer.canvas_item_add_triangle_array(ci, _l_indices, _l_pontos, _l_cores)
 
 
 static func _caixa_opaca(imagem: Image, regiao: Rect2) -> Rect2:

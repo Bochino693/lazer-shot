@@ -32,8 +32,6 @@ const CENAS_SELO := ["res://scenes/main.tscn"]
 ## Vídeos tocados pelo decodificador de hardware (scripts/video_nativo.gd).
 const VIDEOS_HARDWARE := [
 	"res://background_video/back_init.mp4",
-	"res://background_video/back_sun.mp4",
-	"res://background_video/back_moon.mp4",
 	"res://background_video/teaser_desert.mp4",
 	"res://background_video/teaser_mar.mp4",
 	"res://background_video/teaser_bar.mp4",

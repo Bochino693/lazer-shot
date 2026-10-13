@@ -19,6 +19,9 @@ uniform float batida = 0.0;              // 0..1, salta em cada pancada
 uniform float onda = 9.0;                // raio da onda da última batida (>0,62 = sem onda)
 uniform float respiro = 1.0;             // zoom lento (0 = parado)
 uniform float fase = 0.0;
+// 0 = sem os raios do céu nem o brilho do disco (no jogo quem faz isso são
+// as camadas do scripts/deserto_vivo.gd)
+uniform float ceu = 1.0;
 
 // No fragment o COLOR já vem multiplicado pela textura; a cor do nó
 // (modulate, usado no cruzamento sol/lua) é guardada aqui no vertex.
@@ -64,20 +67,20 @@ void fragment() {
 		float cintila = 0.5 + 0.5 * sin(t * 7.3 + uv.x * 90.0);
 		float cristal = m.g * (0.10 + 0.42 * faixa + 0.14 * cintila + 0.45 * batida + 0.2 * grave);
 
-		float disco = m.b * (0.07 + 0.07 * sin(t * 1.35) + 0.25 * grave);
+		float disco = m.b * (0.07 + 0.07 * sin(t * 1.35) + 0.25 * grave) * ceu;
 
 		soma += cor_energia * laser * 0.85 + base.rgb * (cristal + disco) + cor_energia * cristal * 0.18;
 	}
 
 	// raios girando em volta do sol/lua (só no céu)
-	if (uv.y < 0.62) {
+	if (ceu > 0.0 && uv.y < 0.62) {
 		vec2 ps = (uv - sol) * vec2(1.0, 1.5);
 		float rs = length(ps);
 		float ang = atan(ps.y, ps.x);
 		float raio = 0.5 + 0.5 * sin(ang * 12.0 + t * 0.30) * sin(ang * 7.0 - t * 0.21);
 		raio = raio * raio * raio;
-		float ceu = smoothstep(0.62, 0.30, uv.y);
-		soma += cor_energia * raio * ceu * smoothstep(0.80, 0.08, rs) * (0.07 + 0.10 * grave) * (0.4 + lum);
+		float alto = smoothstep(0.62, 0.30, uv.y);
+		soma += cor_energia * raio * alto * smoothstep(0.80, 0.08, rs) * (0.07 + 0.10 * grave) * (0.4 + lum) * ceu;
 	}
 
 	// onda de luz que sai do cristal na batida

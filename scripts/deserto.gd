@@ -86,14 +86,6 @@ var fim_tempo_voltar: float = 17.0
 
 @export_file("*.tscn") var cena_main_menu: String = "res://scenes/main.tscn"
 
-# Fundo: imagem fixa em alta (sem decodificar vídeo) + shader que anima só
-# os feixes, o cristal e o sol/lua (máscara RGB).
-const FUNDO_SOL := preload("res://sprites/deserto_sol.png")
-const FUNDO_LUA := preload("res://sprites/deserto_lua.png")
-const MASCARA_SOL := preload("res://sprites/deserto_sol_mascara.png")
-const MASCARA_LUA := preload("res://sprites/deserto_lua_mascara.png")
-const SHADER_FUNDO := preload("res://shaders/deserto_fundo.gdshader")
-const TEMPO_TROCA_FUNDO := 0.8
 
 # Ritmo pensado para arma de luz numa TV: poucos alvos na tela, velocidade
 # que dá para acompanhar com a mira e troca de brasão que dá para perceber.
@@ -159,26 +151,16 @@ var mouse_delta_acumulado: Vector2 = Vector2.ZERO
 
 
 @onready var background_video_root: Node2D = $BackgroundVideo
-var fundo_sol: TextureRect = null
-var fundo_lua: TextureRect = null
-# Vida do fundo: faíscas saindo do cristal, poeira no ar e a onda de luz que
-# sai do cristal a cada batida da música (ver shaders/deserto_fundo.gdshader).
-var _faiscas_energia: CPUParticles2D = null
-# Vídeo de fundo do modo (sol/lua) pelo decodificador de hardware, por cima
-# do fundo parado animado; um vídeo por vez (troca cruzada na mudança de modo).
-const VIDEO_SOL := ["res://background_video/back_sun.mp4", "res://background_video/back_sun.ogv"]
-const VIDEO_LUA := ["res://background_video/back_moon.mp4", "res://background_video/back_moon.ogv"]
-var _video_fundo: VideoNativo = null
-var _video_modo: String = ""
-var _poeira: CPUParticles2D = null
-var _onda_som: float = 9.0
+# Fundo: o Egito vivo em camadas na placa de vídeo (scripts/deserto_vivo.gd):
+# sol com o Olho de Rá, lua com o Olho de Hórus, luz girando em volta, pontas
+# de ouro nas pirâmides e o diamante brilhando; troca sol/lua com clarão.
+var _vivo: DesertoVivo = null
 # HUD: só refaz estilo e barra de munição quando algo muda (antes era todo
 # quadro, e o estilo do modo apagava o aviso vermelho/laranja do TEMPO).
 var _hud_estilo_modo: String = ""
 var _barra_balas: int = -1
 var _barra_tam: Vector2 = Vector2.ZERO
 var _fundo_modo: String = ""
-var _tw_fundo: Tween = null
 
 @onready var target_root: Node2D = $Alvos
 @onready var sun_modelo: Area2D = $Alvos/Sun
@@ -344,7 +326,6 @@ func _process(delta: float) -> void:
 		Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 
 	_atualizar_mira_hibrida(delta)
-	_animar_fundo_vivo(delta)
 
 	if ranking_nome_ativo and nome_ranking != null:
 		nome_ranking.mira(mira_pos)
@@ -672,9 +653,8 @@ func _configurar_background() -> void:
 		background_video_root.z_index = -1000
 		background_video_root.y_sort_enabled = false
 
-	fundo_sol = _criar_fundo("FundoSol", FUNDO_SOL, MASCARA_SOL, Color(1.0, 0.74, 0.34))
-	fundo_lua = _criar_fundo("FundoLua", FUNDO_LUA, MASCARA_LUA, Color(1.0, 0.28, 0.30))
-	_criar_vida_fundo()
+	_vivo = DesertoVivo.new()
+	(background_video_root if background_video_root != null else self).add_child(_vivo)
 
 	if target_root != null:
 		target_root.z_index = 50
@@ -686,149 +666,6 @@ func _configurar_background() -> void:
 	if lua_modelo != null:
 		lua_modelo.z_index = 60
 
-	_ajustar_background_full()
-
-
-func _criar_fundo(nome: String, textura: Texture2D, mascara: Texture2D, cor: Color) -> TextureRect:
-	var fundo := TextureRect.new()
-	fundo.name = nome
-	fundo.texture = textura
-	# preenche a tela inteira sem esticar: corta as sobras das laterais
-	fundo.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	fundo.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
-	fundo.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	fundo.focus_mode = Control.FOCUS_NONE
-	fundo.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
-	fundo.visible = false
-	var mat := ShaderMaterial.new()
-	mat.shader = SHADER_FUNDO
-	mat.set_shader_parameter("mascara", mascara)
-	mat.set_shader_parameter("cor_energia", Vector3(cor.r, cor.g, cor.b))
-	fundo.material = mat
-	if background_video_root != null:
-		background_video_root.add_child(fundo)
-	else:
-		add_child(fundo)
-	return fundo
-
-
-func _criar_vida_fundo() -> void:
-	var pai: Node = background_video_root if background_video_root != null else self
-	var rampa := Gradient.new()
-	rampa.offsets = PackedFloat32Array([0.0, 0.2, 0.75, 1.0])
-	rampa.colors = PackedColorArray([Color(1, 1, 1, 0), Color(1, 1, 1, 1), Color(1, 1, 1, 0.5), Color(1, 1, 1, 0)])
-	var soma := CanvasItemMaterial.new()
-	soma.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
-	var ponto := FundoVivo.brilho_redondo()
-
-	# faíscas de energia subindo do cristal
-	var f := CPUParticles2D.new()
-	f.name = "FaiscasEnergia"
-	f.amount = 34
-	f.lifetime = 2.8
-	f.preprocess = 2.8
-	f.emission_shape = CPUParticles2D.EMISSION_SHAPE_SPHERE
-	f.emission_sphere_radius = 70.0
-	f.direction = Vector2(0, -1)
-	f.spread = 40.0
-	f.gravity = Vector2(0, -18)
-	f.initial_velocity_min = 40.0
-	f.initial_velocity_max = 120.0
-	f.scale_amount_min = 0.40
-	f.scale_amount_max = 1.05
-	f.texture = ponto
-	f.color_ramp = rampa
-	f.material = soma
-	f.z_index = 2   # na frente da imagem e do vídeo de fundo (z 1)
-	pai.add_child(f)
-	_faiscas_energia = f
-
-	# poeira dourada atravessando devagar
-	var p := CPUParticles2D.new()
-	p.name = "Poeira"
-	p.amount = 22
-	p.lifetime = 10.0
-	p.preprocess = 10.0
-	p.emission_shape = CPUParticles2D.EMISSION_SHAPE_RECTANGLE
-	p.direction = Vector2(1, -0.12)
-	p.spread = 10.0
-	p.gravity = Vector2.ZERO
-	p.initial_velocity_min = 18.0
-	p.initial_velocity_max = 46.0
-	p.scale_amount_min = 0.15
-	p.scale_amount_max = 0.45
-	p.texture = ponto
-	p.color_ramp = rampa
-	p.material = soma
-	p.z_index = 2
-	pai.add_child(p)
-	_poeira = p
-
-
-## Ponto da imagem do fundo (0..1) na tela, com o corte de "cobrir a tela".
-func _uv_fundo_na_tela(uv: Vector2) -> Vector2:
-	var tela: Vector2 = get_viewport_rect().size
-	var img := Vector2(FUNDO_SOL.get_width(), FUNDO_SOL.get_height())
-	var tam: Vector2 = img * maxf(tela.x / img.x, tela.y / img.y)
-	return (tela - tam) * 0.5 + uv * tam
-
-
-func _animar_fundo_vivo(delta: float) -> void:
-	var som := Maquina.pulso_vivo()
-	if som.y > 0.55 and _onda_som > 0.62:
-		_onda_som = 0.0
-	_onda_som = minf(_onda_som + delta * 0.85, 9.0)
-	for fundo: TextureRect in [fundo_sol, fundo_lua]:
-		if fundo != null and fundo.visible:
-			var mat := fundo.material as ShaderMaterial
-			mat.set_shader_parameter("grave", som.x)
-			mat.set_shader_parameter("batida", som.y)
-			mat.set_shader_parameter("onda", _onda_som)
-	if _faiscas_energia != null:
-		_faiscas_energia.speed_scale = 1.0 + som.y * 1.3
-
-
-## Vídeo do modo: o novo entra por cima do anterior quando o 1º quadro chega e
-## só então o anterior é solto. Com vídeo na tela, os fundos parados de baixo
-## nem são desenhados (placa de vídeo livre); se o hardware falhar, voltam.
-func _trocar_video_fundo(modo: String) -> void:
-	if _video_modo == modo:
-		return
-	_video_modo = modo
-	var arq: Array = VIDEO_SOL if modo == MODO_SOL else VIDEO_LUA
-	var pai: Node = background_video_root if background_video_root != null else self
-	var novo := VideoNativo.new(arq[0], arq[1], Vector2(576, 864), true, 0.0)
-	novo.name = "VideoFundo_" + modo
-	novo.so_hardware = true
-	novo.z_index = 1   # acima dos fundos parados (z 0), abaixo das faíscas (z 2)
-	pai.add_child(novo)
-	var velho := _video_fundo
-	_video_fundo = novo
-	novo.comecou.connect(func() -> void:
-		get_tree().create_timer(0.4).timeout.connect(func() -> void:
-			if is_instance_valid(velho):
-				velho.parar()
-				velho.queue_free()
-			if _video_fundo == novo and novo.esta_mostrando():
-				for f: TextureRect in [fundo_sol, fundo_lua]:
-					if f != null:
-						f.visible = false
-		)
-	)
-	novo.falhou.connect(func() -> void:
-		# sem hardware: o fundo parado animado do modo atual volta a aparecer
-		if is_instance_valid(velho):
-			velho.parar()
-			velho.queue_free()
-		if is_instance_valid(novo):
-			novo.queue_free()
-		if _video_fundo == novo:
-			_video_fundo = null
-			_fundo_modo = ""
-			_aplicar_background_modo()
-	)
-	novo.tocar()
-
 
 func _on_viewport_size_changed() -> void:
 	_ajustar_background_full()
@@ -836,48 +673,16 @@ func _on_viewport_size_changed() -> void:
 
 
 func _ajustar_background_full() -> void:
-	var tela: Vector2 = get_viewport_rect().size
-
-	for fundo in [fundo_sol, fundo_lua]:
-		if fundo != null:
-			fundo.position = Vector2.ZERO
-			fundo.size = tela
-	if _faiscas_energia != null:
-		_faiscas_energia.position = _uv_fundo_na_tela(Vector2(0.5, 0.50))
-	if _poeira != null:
-		_poeira.position = Vector2(-20.0, tela.y * 0.62)
-		_poeira.emission_rect_extents = Vector2(20.0, tela.y * 0.30)
+	if _vivo != null:
+		_vivo.ajustar()
 
 
 func _aplicar_background_modo() -> void:
-	_ajustar_background_full()
-	var entra: TextureRect = fundo_sol if modo_atual == MODO_SOL else fundo_lua
-	var sai: TextureRect = fundo_lua if modo_atual == MODO_SOL else fundo_sol
-	_trocar_video_fundo(modo_atual)
-	if _faiscas_energia != null:
-		_faiscas_energia.color = Color(1.0, 0.80, 0.42) if modo_atual == MODO_SOL else Color(1.0, 0.42, 0.40)
-	if _poeira != null:
-		_poeira.color = Color(1.0, 0.86, 0.6, 0.55) if modo_atual == MODO_SOL else Color(0.75, 0.85, 1.0, 0.45)
-	if entra == null or _fundo_modo == modo_atual:
+	if _vivo == null or _fundo_modo == modo_atual:
 		return
-	var primeira := _fundo_modo == ""
+	# a primeira vez entra direto; depois troca com o clarão
+	_vivo.mostrar(modo_atual, _fundo_modo != "")
 	_fundo_modo = modo_atual
-
-	if _tw_fundo != null and _tw_fundo.is_valid():
-		_tw_fundo.kill()
-
-	# o que entra fica por cima e aparece aos poucos; o outro some no fim
-	entra.get_parent().move_child(entra, -1)
-	entra.visible = true
-	if primeira or sai == null or not sai.visible:
-		entra.modulate.a = 1.0
-		if sai != null:
-			sai.visible = false
-		return
-	entra.modulate.a = 0.0
-	_tw_fundo = create_tween()
-	_tw_fundo.tween_property(entra, "modulate:a", 1.0, TEMPO_TROCA_FUNDO).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-	_tw_fundo.tween_callback(func() -> void: sai.visible = false)
 
 
 func _configurar_hud() -> void:

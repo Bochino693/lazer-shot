@@ -937,6 +937,9 @@ func _estourar_garrafa(alvo: Area2D, pos_tiro: Vector2, cor_liquido: Color) -> v
 		imagem = _imagem_em_cache((quadro as AtlasTexture).atlas)
 	elif quadro != null:
 		imagem = _imagem_em_cache(quadro)
+	if Estilhacos.prateleiras.is_empty():
+		Estilhacos.prateleiras = PackedFloat32Array([Y_PRATELEIRA_100, Y_PRATELEIRA_80, Y_PRATELEIRA_50, Y_PRATELEIRA_20])
+		Estilhacos.chao_bar = get_viewport_rect().size.y - 200.0
 	Estilhacos.quebrar(self, anim, quadro, imagem, pos_tiro, cor_liquido)
 	anim.visible = false
 
