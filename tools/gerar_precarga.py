@@ -18,6 +18,7 @@ EXTS = ("png", "jpg", "jpeg", "webp", "svg", "wav", "ogg", "mp3", "ttf", "otf",
 LITERAL = re.compile(r'"(res://[^"%{}*]+\.(?:' + "|".join(EXTS) + r'))"')
 SCRIPT = re.compile(r'\[ext_resource type="Script"[^\]]*path="(res://[^"]+\.gd)"')
 CLASSE = re.compile(r'^class_name\s+(\w+)', re.M)
+SCRIPT_LITERAL = re.compile(r'"(res://scripts/[^"]+\.gd)"')
 # preload() já é dependência do script: vem junto com a cena na thread dela.
 # Pedir de novo em paralelo fazia duas threads lerem o mesmo arquivo (às vezes
 # a leitura falhava e a cena caía no carregamento travado).
@@ -57,6 +58,10 @@ def scripts_usados(iniciais, mapa):
             texto = f.read()
         for nome, caminho in mapa.items():
             if caminho not in vistos and re.search(r"\b" + nome + r"\b", texto):
+                fila.append(caminho)
+        # componentes sem class_name, pegos pelo caminho (ex.: MarVida)
+        for caminho in SCRIPT_LITERAL.findall(texto):
+            if caminho not in vistos:
                 fila.append(caminho)
     return vistos
 

@@ -33,24 +33,29 @@ extends Node2D
 
 const IMG := Vector2(1024, 1536)
 
-const FUNDO_SOL := preload("res://sprites/deserto_sol.png")
-const FUNDO_LUA := preload("res://sprites/deserto_lua.png")
-const MASCARA_SOL := preload("res://sprites/deserto_sol_mascara.png")
-const MASCARA_LUA := preload("res://sprites/deserto_lua_mascara.png")
+# Imagens e sons com load() da instância, e não preload() em const: o Godot
+# 4.6 nunca descarrega um script já carregado, e o que ele pré-carrega fica
+# junto na memória até o jogo fechar (~50 MB do Egito presos depois da
+# primeira partida). Assim tudo some com a fase. A troca de tela já pede
+# estes arquivos numa thread (scripts/precarga.gd): o load() acha pronto.
+var FUNDO_SOL: Texture2D = load("res://sprites/deserto_sol.png")
+var FUNDO_LUA: Texture2D = load("res://sprites/deserto_lua.png")
+var MASCARA_SOL: Texture2D = load("res://sprites/deserto_sol_mascara.png")
+var MASCARA_LUA: Texture2D = load("res://sprites/deserto_lua_mascara.png")
 # Sol e lua em 4x (tools/gerar_astros.py), camadas comuns sem shader:
 # halo (1x, ampliado), esclera, íris (anda), pálpebra (desce ao piscar) e o disco por cima.
-const TEX_SOL := [preload("res://sprites/egito_sol_disco.png"), preload("res://sprites/egito_sol_esclera.png"),
-	preload("res://sprites/egito_sol_iris.png"), preload("res://sprites/egito_sol_palpebra.png"),
-	preload("res://sprites/egito_sol_halo.png")]
-const TEX_LUA := [preload("res://sprites/egito_lua_disco.png"), preload("res://sprites/egito_lua_esclera.png"),
-	preload("res://sprites/egito_lua_iris.png"), preload("res://sprites/egito_lua_palpebra.png"),
-	preload("res://sprites/egito_lua_halo.png")]
-const AGUIA := preload("res://sprites/egito_aguia.png")
-const SOM_AGUIA := preload("res://songs/aguia.wav")
-const SOM_AGUIA_NOITE := preload("res://songs/aguia_noite.wav")
-const PONTAS := preload("res://sprites/egito_pontas.png")
-const CRISTAL := preload("res://sprites/egito_cristal_mascara.png")
-const ESTRELA := preload("res://sprites/egito_estrela.png")
+var TEX_SOL: Array = [load("res://sprites/egito_sol_disco.png"), load("res://sprites/egito_sol_esclera.png"),
+	load("res://sprites/egito_sol_iris.png"), load("res://sprites/egito_sol_palpebra.png"),
+	load("res://sprites/egito_sol_halo.png")]
+var TEX_LUA: Array = [load("res://sprites/egito_lua_disco.png"), load("res://sprites/egito_lua_esclera.png"),
+	load("res://sprites/egito_lua_iris.png"), load("res://sprites/egito_lua_palpebra.png"),
+	load("res://sprites/egito_lua_halo.png")]
+var AGUIA: Texture2D = load("res://sprites/egito_aguia.png")
+var SOM_AGUIA: AudioStream = load("res://songs/aguia.wav")
+var SOM_AGUIA_NOITE: AudioStream = load("res://songs/aguia_noite.wav")
+var PONTAS: Texture2D = load("res://sprites/egito_pontas.png")
+var CRISTAL: Texture2D = load("res://sprites/egito_cristal_mascara.png")
+var ESTRELA: Texture2D = load("res://sprites/egito_estrela.png")
 const SHADER_FUNDO := preload("res://shaders/deserto_fundo.gdshader")
 const SHADER_RAIOS := preload("res://shaders/egito_raios.gdshader")
 const SHADER_PONTAS := preload("res://shaders/egito_pontas.gdshader")
@@ -80,21 +85,21 @@ const CRISTAL_CAIXA := Rect2(440, 620, 136, 340)
 const TIROS_CRISTAL := 9
 const CRISTAL_VOLTA := 30.0
 const CAIXA_MORTO := Rect2(428, 608, 160, 376)
-const CRISTAL_MORTO_SOL := preload("res://sprites/egito_cristal_morto_sol.png")
-const CRISTAL_MORTO_LUA := preload("res://sprites/egito_cristal_morto_lua.png")
-const SOM_TRINCA := preload("res://songs/cristal_trinca.wav")
-const SOM_QUEBRA := preload("res://songs/cristal_quebra.wav")
-const SOM_VOLTA := preload("res://songs/cristal_volta.wav")
-const SOM_OURO := preload("res://songs/ouro_ping.wav")
-const SOM_PEDRA := preload("res://songs/pedra_lasca.wav")
-const SOM_AREIA := preload("res://songs/areia_tiro.wav")
+var CRISTAL_MORTO_SOL: Texture2D = load("res://sprites/egito_cristal_morto_sol.png")
+var CRISTAL_MORTO_LUA: Texture2D = load("res://sprites/egito_cristal_morto_lua.png")
+var SOM_TRINCA: AudioStream = load("res://songs/cristal_trinca.wav")
+var SOM_QUEBRA: AudioStream = load("res://songs/cristal_quebra.wav")
+var SOM_VOLTA: AudioStream = load("res://songs/cristal_volta.wav")
+var SOM_OURO: AudioStream = load("res://songs/ouro_ping.wav")
+var SOM_PEDRA: AudioStream = load("res://songs/pedra_lasca.wav")
+var SOM_AREIA: AudioStream = load("res://songs/areia_tiro.wav")
 const Pincel := preload("res://scripts/pincel.gd")
-static var POLI_CRISTAL := PackedVector2Array([Vector2(506, 626), Vector2(546, 668), Vector2(560, 720), Vector2(558, 900),
+var POLI_CRISTAL := PackedVector2Array([Vector2(506, 626), Vector2(546, 668), Vector2(560, 720), Vector2(558, 900),
 	Vector2(536, 968), Vector2(478, 968), Vector2(454, 900), Vector2(452, 720), Vector2(466, 668)])
-static var OURO: Array[PackedVector2Array] = [PackedVector2Array([Vector2(508, 444), Vector2(450, 522), Vector2(566, 522)]),
+var OURO: Array[PackedVector2Array] = [PackedVector2Array([Vector2(508, 444), Vector2(450, 522), Vector2(566, 522)]),
 	PackedVector2Array([Vector2(229, 514), Vector2(190, 580), Vector2(268, 580)]),
 	PackedVector2Array([Vector2(776, 514), Vector2(736, 580), Vector2(814, 580)])]
-static var PIRAMIDES: Array[PackedVector2Array] = [PackedVector2Array([Vector2(508, 444), Vector2(298, 742), Vector2(718, 742)]),
+var PIRAMIDES: Array[PackedVector2Array] = [PackedVector2Array([Vector2(508, 444), Vector2(298, 742), Vector2(718, 742)]),
 	PackedVector2Array([Vector2(229, 514), Vector2(88, 706), Vector2(362, 706)]),
 	PackedVector2Array([Vector2(776, 514), Vector2(640, 706), Vector2(916, 706)])]
 
@@ -727,7 +732,7 @@ func _animar_ceu(delta: float) -> void:
 # ───────────────────────────────────────────── tiros no fundo
 ## O que há no ponto (px da imagem do fundo): "cristal", "ouro", "pedra",
 ## "areia" ou "ceu".
-static func material_em(p: Vector2) -> String:
+func material_em(p: Vector2) -> String:
 	if Geometry2D.is_point_in_polygon(p, POLI_CRISTAL):
 		return "cristal"
 	for tri: PackedVector2Array in OURO:

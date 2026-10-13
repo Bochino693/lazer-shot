@@ -55,7 +55,7 @@ Ele abre o jogo, espera 40 s e salva `build/android/LOGCAT-TVBOX.txt` e a
 pasta `build/android/caixa_preta`. Com `-Instalar`, o mesmo acontece logo
 depois de instalar o APK novo.
 
-A versão do APK aparece em Configurações > Apps da TV Box (1.13.0, código 15).
+A versão do APK aparece em Configurações > Apps da TV Box (1.14.0, código 16).
 
 ## Tela em pé na TV Box
 
@@ -805,6 +805,66 @@ refeito: linhas de 116 px, nome e pontos em 52–56 px, pódio em ouro, prata
 e bronze, sem a coluna de modo; rola pelos botões ▲▼.
 
 APK 1.13.0 (código 15).
+
+## Rodada 14: fim de partida novo, memória que não cresce e nada que feche o jogo
+
+**Fim de partida** (`scripts/fim_partida.gd`, igual nas quatro fases).
+- Botão grande **VOLTAR AOS CENÁRIOS** embaixo do resultado: a mira fica por
+  cima do modal e um tiro no botão leva para a escolha de cenário.
+- A contagem do resultado, quando acaba, volta sempre para a **abertura**
+  (apresentação Lazer & Sport e o vídeo), não mais para o menu.
+- **JOGAR DE NOVO** (START) recarrega a fase do zero. Antes a fase se
+  "zerava" por dentro e START repetido deixava partidas e laços duplicados
+  rodando juntos (travava e podia fechar). Agora START várias vezes = uma
+  recarga só, e o START só vale com o resultado na tela há 0,8 s (o START
+  que confirma o nome do recorde não recomeça a partida sem querer).
+- Embaixo do botão: "RANKING: SÓ ACIMA DE 4.000 PONTOS".
+
+**Ranking só acima de 4.000 pontos** (`scripts/RankingManager.gd`):
+partida com 4.000 ou menos não pede nome nem entra; recordes antigos de
+4.000 ou menos deixam de aparecer.
+
+**Mar mais devagar** (`scripts/mar.gd`): águas-vivas, potes, baús e bombas
+caem ~50% mais devagar, o aumento de velocidade por nível caiu de 12% para
+7% e o balanço das águas-vivas ficou mais lento.
+
+**Memória que não cresce — a causa mais provável de o jogo fechar.** No
+Godot 4.6 um script carregado nunca sai da memória, e tudo o que ele
+pré-carrega (`preload`) fica junto. Cada fase visitada deixava as imagens
+dela presas para sempre; depois das quatro fases eram ~200 MB de imagens e
+~70 MB de letras que nenhuma tela usava. Na TV Box, quando a memória acaba,
+o Android fecha o app sem aviso.
+- As imagens grandes das fases (Egito ~50 MB, garrafas do Bar ~35 MB,
+  lanternas e fundo da Arena ~40 MB, navio e pedras do Mar) passaram a ser
+  carregadas pela própria fase (`load`) e somem quando ela sai; a troca de
+  tela continua pedindo tudo numa thread (`scripts/precarga.gd`, gerado de
+  novo por `tools/gerar_precarga.py`, que agora segue também os scripts
+  pelo caminho).
+- `static var` também prende o script para sempre: saiu dos efeitos de
+  acerto (Egito, Mar, Bar), do fundo do Egito e das lanternas da Arena.
+- As letras de cada tamanho viram imagens guardadas na fonte e isso só
+  crescia. Na tela preta de cada troca elas são jogadas fora
+  (`clear_size_cache`) e a tela nova desenha as dela debaixo do cartão.
+- Medido no PC, 5 min passando pelas 4 fases sem parar com tiros, START e
+  RECARGA em rajada: antes o menu chegava a 200 MB + 266 MB de imagens
+  (pico 245 + 271); agora fica em 57–84 MB + 48–65 MB em todas as voltas
+  (pico 108–165 + 103–139), sem crescer.
+
+**Toques rápidos.**
+- START no menu e no ranking: cobrava/trocava de tela mais de uma vez com
+  START repetido; agora uma vez só.
+- Missão do cenário: escolher rápido logo ao abrir o menu apagava o cartão
+  aberto (o pré-aquecimento escondido dele limpava tudo depois de 1,5 s) e
+  dava erro a cada quadro; corrigido.
+- Bar: uma das trocas de garrafa chamava o ciclo dela sem o número do ciclo
+  (a garrafa ficava parada) e a garrafa destruída no meio dava erro.
+- Vídeo pelo hardware: preparar e soltar o player não espera mais a thread
+  no meio do quadro, e a thread não escreve mais num nó já apagado.
+- RECARGA repetida já era ignorada durante a recarga; o botão de recarga da
+  arma (VOLTAR do Android) não fecha o jogo (`quit_on_go_back` desligado).
+  Nenhum botão do jogo fecha o app.
+
+APK 1.14.0 (código 16).
 
 ## Para testar no PC como se fosse a TV Box
 

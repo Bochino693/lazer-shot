@@ -287,9 +287,11 @@ func _iniciar_jogo_pelo_insert_coin() -> void:
 	if transicionando_insert:
 		return
 
-	# Modo crédito: só entra no jogo se houver crédito (desconta aqui).
+	# Modo crédito: só entra no jogo se houver crédito (desconta aqui). Trava
+	# na hora: START repetido não cobra nem entra duas vezes.
 	if not Maquina.cobrar():
 		return
+	transicionando_insert = true
 
 	if get_tree().has_meta("ranking_origem"):
 		get_tree().remove_meta("ranking_origem")

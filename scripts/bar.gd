@@ -53,16 +53,18 @@ var ranking_precisao_pendente: int = 0
 var ranking_ja_salvo: bool = false
 
 @export_file("*.tscn") var cena_main_menu: String = "res://scenes/main.tscn"
-@export var cena_garrafa_gin: PackedScene = preload("res://entities/GarrafaGin.tscn")
-@export var cena_garrafa_rum: PackedScene = preload("res://entities/GarrafaRum.tscn")
-@export var cena_garrafa_vodka: PackedScene = preload("res://entities/GarrafaVodka.tscn")
-@export var cena_garrafa_whisky: PackedScene = preload("res://entities/GarrafaWhisky.tscn")
+# load() e não preload(): o Godot 4.6 nunca descarrega um script já carregado,
+# e o que ele pré-carrega ficava na memória depois da primeira partida.
+@export var cena_garrafa_gin: PackedScene = load("res://entities/GarrafaGin.tscn")
+@export var cena_garrafa_rum: PackedScene = load("res://entities/GarrafaRum.tscn")
+@export var cena_garrafa_vodka: PackedScene = load("res://entities/GarrafaVodka.tscn")
+@export var cena_garrafa_whisky: PackedScene = load("res://entities/GarrafaWhisky.tscn")
 @export var tempo_troca_turno: float = 5.0
 @export var tempo_partida: float = 120.0
 @export var subir_de_baixo_px: float = 90.0
 @export var som_recharge_path: String = "res://songs/recharge.wav"
 @export var som_bar_path: String = "res://songs/song-oldwest.mp3"
-@export var cena_garrafa_falsa: PackedScene = preload("res://entities/garrafa.tscn")
+@export var cena_garrafa_falsa: PackedScene = load("res://entities/garrafa.tscn")
 @export var penalidade_erro: int = 0
 @export var penalidade_garrafa_falsa: int = 500
 @export var idade_minima_para_virar_impostora: float = 1.45
@@ -254,8 +256,10 @@ var marcas_erro: Array[Dictionary] = []
 const MAX_MARCAS_ERRO: int = 80
 ## Furo com profundidade (tools/gerar_bar.py): madeira da estante/barril ou
 ## o cartaz rasgado do barril.
-const FURO_MADEIRA := preload("res://sprites/bar_furo_madeira.png")
-const FURO_PAPEL := preload("res://sprites/bar_furo_papel.png")
+# load() e não preload(): o Godot 4.6 nunca descarrega um script já carregado,
+# e o que ele pré-carrega ficava na memória depois da primeira partida.
+var FURO_MADEIRA: Texture2D = load("res://sprites/bar_furo_madeira.png")
+var FURO_PAPEL: Texture2D = load("res://sprites/bar_furo_papel.png")
 var _camada_estantes: Node2D = null
 var _camada_marcas: Node2D = null
 var fx_madeira: Array[Dictionary] = []
@@ -416,6 +420,7 @@ func _ready() -> void:
 	_coletar_spawn_points()
 	_configurar_hud()
 	_instalar_placar()
+	FimPartida.instalar(self, COR_NEON_BAR, func() -> bool: return not jogo_ativo and not fim_cutscene_ativa and not ranking_nome_ativo and fim_panel != null and fim_panel.is_visible_in_tree(), 150)
 	_criar_nome_ranking()
 	_configurar_alvo_overlay()
 	_configurar_aviso_inicio()
@@ -2174,8 +2179,12 @@ func _obter_config_visual_garrafa(pontos_visual: int, tipo_alvo: String) -> Dict
 	}
 
 
-func _ciclo_individual_da_garrafa(alvo: Area2D, ciclo_id: int) -> void:
-	if alvo == null or not is_instance_valid(alvo):
+func _ciclo_individual_da_garrafa(alvo_v: Variant, ciclo_id: int) -> void:
+	# chamada adiada: a garrafa pode ter sumido no meio (tiro, fim de partida)
+	if not is_instance_valid(alvo_v):
+		return
+	var alvo := alvo_v as Area2D
+	if alvo == null:
 		return
 
 	if _num_int(alvo.get_meta("ciclo_id", -1), -1) != ciclo_id:
@@ -2468,7 +2477,11 @@ func _trocar_garrafa_no_mesmo_slot(alvo_antigo: Area2D, novo_pontos: int, pontos
 	if is_instance_valid(nova) and nova.get("saindo_individual") != true:
 		if not garrafas_ativas.has(nova):
 			garrafas_ativas.append(nova)
-		call_deferred("_ciclo_individual_da_garrafa", nova)
+		# o ciclo precisa do número dele (sem isso a chamada falhava e a
+		# garrafa trocada ficava parada na prateleira)
+		var ciclo_troca: int = randi()
+		nova.set_meta("ciclo_id", ciclo_troca)
+		call_deferred("_ciclo_individual_da_garrafa", nova, ciclo_troca)
 	else:
 		_liberar_slot_por_id(id_slot)
  
@@ -3108,7 +3121,7 @@ func _confirmar_nome_ranking(usar_anonimo: bool = false) -> void:
 		]
 
 	if fim_countdown_label != null:
-		fim_countdown_label.text = "VOLTANDO AO MENU EM %02d" % int(ceil(tempo_fim_menu))
+		fim_countdown_label.text = "VOLTANDO AO INÍCIO EM %02d" % int(ceil(tempo_fim_menu))
 
 	if fim_insert_coin_label != null:
 		fim_insert_coin_label.text = Maquina.texto_jogar_novamente()
@@ -3343,7 +3356,7 @@ func _encerrar_jogo() -> void:
 		if entrou_ranking:
 			fim_countdown_label.text = "DIGITE SEU NOME PARA SALVAR O RECORDE"
 		else:
-			fim_countdown_label.text = "VOLTANDO AO MENU EM %02d" % int(ceil(tempo_fim_menu))
+			fim_countdown_label.text = "VOLTANDO AO INÍCIO EM %02d" % int(ceil(tempo_fim_menu))
 
 	_posicionar_modal_final()
 
@@ -3504,104 +3517,10 @@ func _posicionar_modal_final() -> void:
 
 
 func _reiniciar_jogo() -> void:
-	# Modo crédito: só recomeça se houver crédito (desconta aqui).
-	if not Maquina.cobrar():
-		return
-	_parar_musica_fim()
-	_iniciar_musica_bar_em_loop()
+	# Jogar de novo = recarregar a fase do zero (scripts/fim_partida.gd): nada
+	# da partida anterior fica rodando por baixo, mesmo com START repetido.
+	FimPartida.jogar_de_novo(self)
 
-	pontuacao_total = 0
-	total_tiros = 0
-	total_acertos = 0
-	total_erros = 0
-	tempo_restante = tempo_partida
-	tempo_turno = 0.0
-	jogo_ativo = true
-	trocando_turno = false
-	partida_iniciada = false
-	intro_cenario_em_execucao = false
-	tremor_tempo = 0.0
-	tremor_forca = 0.0
-
-	balas_no_cartucho = capacidade_cartucho
-	recarregando = false
-	reload_tempo_restante = 0.0
-	nivel_dificuldade_atual = 0
-	aviso_recarga_t = 0.0
-
-	marcas_erro.clear()
-	_redesenhar_marcas()
-	fx_madeira.clear()
-	fx_vidro.clear()
-	fx_impacto.clear()
-
-	fim_panel.visible = false
-	fim_title_label.visible = false
-	fim_score_label.visible = false
-	fim_stats_label.visible = false
-	fim_insert_coin_label.visible = false
-	fim_countdown_label.visible = false
-
-	if fim_cutscene_panel != null:
-		fim_cutscene_panel.visible = false
-	if fim_cutscene_titulo != null:
-		fim_cutscene_titulo.visible = false
-	if fim_cutscene_loading != null:
-		fim_cutscene_loading.visible = false
-	if fim_cutscene_barra_bg != null:
-		fim_cutscene_barra_bg.visible = false
-	if fim_cutscene_barra_fill != null:
-		fim_cutscene_barra_fill.visible = false
-
-	fim_cutscene_ativa = false
-	tempo_fim_menu = tempo_auto_retorno_menu_seg
-	fim_pulso_t = 0.0
-
-	hud_animando_entrada = false
-	hud_entrada_t = 0.0
-	hud_top_offset_y = -220.0
-
-	intro_comeco_ativa = false
-	intro_comeco_t = 0.0
-	intro_contagem_valor = 3
-
-	if comeco_root != null:
-		comeco_root.visible = false
-
-	if comeco_titulo != null:
-		comeco_titulo.visible = false
-		comeco_titulo.modulate = Color(1, 1, 1, 1)
-		comeco_titulo.scale = Vector2.ONE
-
-	if comeco_subtitulo != null:
-		comeco_subtitulo.visible = false
-		comeco_subtitulo.modulate = Color(1, 1, 1, 1)
-		comeco_subtitulo.scale = Vector2.ONE
-
-	if fundo != null:
-		fundo.position = fundo_pos_base
-	if fundo_preenchimento != null:
-		fundo_preenchimento.position = fundo_pos_base
-	if garrafas_root != null:
-		garrafas_root.position = garrafas_pos_base
-		garrafas_root.visible = false
-
-	hud_sujo = true
-	_set_status_neutro("")
-	_limpar_garrafas_antigas()
-	_atualizar_hud()
-
-	if aviso_root != null:
-		aviso_root.visible = true
-		if aviso_panel != null:
-			aviso_panel.modulate = Color(1, 1, 1, 1)
-			aviso_panel.scale = Vector2.ONE
-		if aviso_titulo != null:
-			aviso_titulo.modulate = Color(1, 1, 1, 1)
-		if aviso_subtitulo != null:
-			aviso_subtitulo.modulate = Color(1, 1, 1, 1)
-
-	queue_redraw()
 
 func _pontos_da_prateleira(y_base: float) -> int:
 	if abs(y_base - Y_PRATELEIRA_100) <= 12.0:
@@ -3623,11 +3542,8 @@ func _calcular_nivel_impostora() -> int:
 func _retornar_para_menu() -> void:
 	_parar_musica_bar()
 	_parar_musica_fim()
-
-	if cena_main_menu == "":
-		return
-
-	TransicaoGlobal.trocar_cena(cena_main_menu)
+	# a contagem do resultado acabou: volta para a abertura
+	FimPartida.voltar_a_abertura()
 
 
 func _configurar_hud() -> void:
@@ -5230,7 +5146,7 @@ func _animar_fim(delta: float) -> void:
 		if ranking_nome_ativo:
 			fim_countdown_label.text = "DIGITE SEU NOME PARA SALVAR O RECORDE"
 		else:
-			fim_countdown_label.text = "VOLTANDO AO MENU EM %02d" % int(ceil(tempo_fim_menu))
+			fim_countdown_label.text = "VOLTANDO AO INÍCIO EM %02d" % int(ceil(tempo_fim_menu))
 
 	if tempo_fim_menu <= 0.0 and not ranking_nome_ativo:
 		_retornar_para_menu()

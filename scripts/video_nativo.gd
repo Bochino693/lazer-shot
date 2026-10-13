@@ -45,8 +45,13 @@ var _superficie = null           # android.view.Surface
 var _mp = null                   # android.media.MediaPlayer
 var _classe_mp = null
 var _fio: Thread = null
-var _pronto := false             # escrito pela thread
-var _erro := ""                  # escrito pela thread
+var _pronto := false
+var _erro := ""
+# Players que ainda estavam se preparando quando a tela mandou parar: são
+# soltos quando a thread termina, sem a linha do jogo ficar esperando
+# (trocar de cartão rápido no menu não trava nem derruba o jogo).
+static var _soltar_depois: Array = []
+static var _limpeza_ligada := false
 var _espera := 0.0
 var _mostrando := false
 var _conferir := 0
@@ -79,6 +84,10 @@ func tocar() -> void:
 		_iniciar_godot()
 		return
 	if _pode_nativo():
+		if _soltar_depois.size() > 1:
+			# decodificadores ainda sendo soltos: espera um pouco (em _process)
+			modo = "aguardando"
+			return
 		_iniciar_nativo()
 	elif not so_hardware or OS.get_name() != "Android":
 		_iniciar_godot()
@@ -171,33 +180,31 @@ func _iniciar_nativo() -> void:
 	ajustar()
 
 	# Copiar o arquivo (1ª vez) e preparar o decodificador leva um tempinho:
-	# fora da linha do jogo.
+	# fora da linha do jogo. A thread NÃO mexe neste nó (ele pode sair da tela
+	# antes dela acabar): devolve o player pronto, ou o texto do erro.
 	_fio = Thread.new()
-	_fio.start(_preparar_player)
+	_fio.start(Callable(VideoNativo, "_preparar_player").bind(_classe_mp, _superficie, mp4, repetir, volume))
 
 
 ## Thread: copia o .mp4 para a memória interna e prepara o MediaPlayer.
-func _preparar_player() -> void:
-	var caminho := _copia_local(mp4)
+## Devolve o MediaPlayer tocando, ou um String com o erro.
+static func _preparar_player(classe, superficie, origem: String, repetir_: bool, volume_: float) -> Variant:
+	var caminho := _copia_local(origem)
 	if caminho == "":
-		_erro = "cópia do vídeo"
-		return
-	var mp = _classe_mp.MediaPlayer()
+		return "cópia do vídeo"
+	var mp = classe.MediaPlayer()
 	if mp == null:
-		_erro = "MediaPlayer"
-		return
-	mp.setSurface(_superficie)
+		return "MediaPlayer"
+	mp.setSurface(superficie)
 	mp.setDataSource(caminho)
-	mp.setLooping(repetir)
-	mp.setVolume(volume, volume)
+	mp.setLooping(repetir_)
+	mp.setVolume(volume_, volume_)
 	mp.prepare()
 	if JavaClassWrapper.get_exception() != null:
 		mp.release()
-		_erro = "MediaPlayer.prepare"
-		return
+		return "MediaPlayer.prepare"
 	mp.start()
-	_mp = mp
-	_pronto = true
+	return mp
 
 
 ## O MediaPlayer precisa de um arquivo de verdade: copia do pacote do jogo
@@ -237,8 +244,24 @@ static func _copiar(origem: String) -> String:
 
 
 func _process(delta: float) -> void:
+	if modo == "aguardando":
+		if _soltar_depois.size() <= 1:
+			modo = ""
+			_iniciar_nativo()
+		return
 	if modo != "nativo":
 		return
+	# a thread terminou: pega o player (ou o erro) sem esperar
+	if _fio != null and not _fio.is_alive():
+		var r = _fio.wait_to_finish()
+		_fio = null
+		if r is String:
+			_erro = r
+		elif r != null:
+			_mp = r
+			_pronto = true
+		else:
+			_erro = "MediaPlayer"
 	if _erro != "":
 		_falhar(_erro)
 		return
@@ -282,8 +305,17 @@ func _falhar(motivo: String) -> void:
 
 func _soltar_nativo() -> void:
 	if _fio != null:
-		if _fio.is_started():
-			_fio.wait_to_finish()
+		if _fio.is_alive():
+			# ainda preparando: solta tudo quando a thread acabar (sem esperar)
+			_soltar_depois.append({"fio": _fio, "sup": _superficie, "st": _st, "ext": _ext})
+			_ligar_limpeza()
+			_superficie = null
+			_st = null
+		elif _fio.is_started():
+			var r = _fio.wait_to_finish()
+			if r != null and not (r is String):
+				r.stop()
+				r.release()
 		_fio = null
 	if _mp != null:
 		_mp.stop()
@@ -301,6 +333,33 @@ func _soltar_nativo() -> void:
 	_ext = null
 	_pronto = false
 	_erro = ""
+
+
+static func _ligar_limpeza() -> void:
+	if _limpeza_ligada:
+		return
+	_limpeza_ligada = true
+	(Engine.get_main_loop() as SceneTree).process_frame.connect(Callable(VideoNativo, "_limpar_pendentes"))
+
+
+static func _limpar_pendentes() -> void:
+	for i in range(_soltar_depois.size() - 1, -1, -1):
+		var e: Dictionary = _soltar_depois[i]
+		var fio: Thread = e["fio"]
+		if fio.is_alive():
+			continue
+		var r = fio.wait_to_finish()
+		if r != null and not (r is String):
+			r.stop()
+			r.release()
+		if e["sup"] != null:
+			e["sup"].release()
+		if e["st"] != null:
+			e["st"].release()
+		_soltar_depois.remove_at(i)
+	if _soltar_depois.is_empty() and _limpeza_ligada:
+		_limpeza_ligada = false
+		(Engine.get_main_loop() as SceneTree).process_frame.disconnect(Callable(VideoNativo, "_limpar_pendentes"))
 
 
 # ───────────────────────────────────────────── plano B (Godot)

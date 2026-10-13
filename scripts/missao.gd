@@ -59,6 +59,8 @@ var _sob_alvo := false
 var _sob_trocar := false
 var _destaque_alvo := 0.0      # 0..1, sobe com a mira em cima
 var _acertou_t := -1.0         # animação do tiro no alvo
+var _geracao := 0              # muda a cada montagem: o que foi agendado para
+                               # um cartão antigo não mexe no cartão novo
 
 var _painel: Panel
 var _capa: TextureRect
@@ -116,8 +118,9 @@ func aquecer() -> void:
 		return
 	_cor = Color.WHITE
 	_montar(DADOS.values()[0])
+	var g := _geracao
 	await get_tree().create_timer(1.5).timeout
-	if not _ativo and _painel != null:
+	if g == _geracao and not _ativo and _painel != null:
 		for c in get_children():
 			c.queue_free()
 		_painel = null
@@ -129,9 +132,12 @@ func fechar() -> void:
 	if _painel == null:
 		visible = false
 		return
+	var g := _geracao
 	var tw := create_tween()
 	tw.tween_property(_painel, "modulate:a", 0.0, 0.14)
 	await tw.finished
+	if g != _geracao:
+		return   # reabriu enquanto sumia: o cartão novo fica
 	visible = false
 	for c in get_children():
 		c.queue_free()
@@ -183,6 +189,9 @@ func _escolher(acao: String) -> void:
 
 
 func _process(delta: float) -> void:
+	if _painel == null or not is_instance_valid(_alvo):
+		set_process(false)
+		return
 	_t += delta
 	if _acertou_t >= 0.0:
 		_acertou_t += delta
@@ -202,6 +211,7 @@ func _process(delta: float) -> void:
 # ───────────────────────────────────────────── montagem
 
 func _montar(d: Dictionary) -> void:
+	_geracao += 1
 	var tela := get_viewport_rect().size
 	var s := tela.x / 1024.0
 
@@ -306,7 +316,7 @@ func _montar(d: Dictionary) -> void:
 	_alvo.position = Vector2((w - diam) * 0.5, y)
 	_alvo.size = Vector2(diam, diam)
 	_alvo.pivot_offset = _alvo.size * 0.5
-	_alvo.draw.connect(_desenhar_alvo)
+	_alvo.draw.connect(_desenhar_alvo.bind(_alvo))
 	_painel.add_child(_alvo)
 	_alvo_texto = _rotulo("JOGAR", 70, Color.WHITE, FONTE_FORTE, 14, s)
 	_alvo_texto.position = _alvo.position
@@ -361,7 +371,9 @@ func _rotulo(texto: String, tamanho: int, cor: Color, fonte: Font, contorno: int
 	return l
 
 
-func _desenhar_alvo() -> void:
+func _desenhar_alvo(alvo: Control) -> void:
+	if alvo != _alvo:
+		return   # alvo de um cartão antigo, que ainda some neste quadro
 	var c := _alvo.size * 0.5
 	var r := _alvo.size.x * 0.5
 	var forte := _destaque_alvo

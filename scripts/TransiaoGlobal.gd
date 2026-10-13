@@ -79,6 +79,14 @@ var _cartao_t := 0.0
 var _mostrado := 0.0    # progresso desenhado (corre atrás do real)
 var _alvo := 0.0        # progresso real
 
+## Fontes do jogo (as letras de cada tamanho viram imagens guardadas nelas).
+const FONTES := [
+	"res://fonts/Exo2-Bold.ttf",
+	"res://fonts/Exo2-ExtraBold.ttf",
+	"res://fonts/Simbolos.ttf",
+	"res://fonts/SimbolosEmoji.ttf",
+]
+
 var _segurar: Array = []   # mantém a pré-carga viva até a cena nova montar
 var _sons_pausados: Array = []   # sons da tela nova esperando ela aparecer
 
@@ -145,6 +153,7 @@ func trocar_cena(caminho: String, tempo_saida: float = TEMPO_SAIDA, tempo_entrad
 		velha.process_mode = Node.PROCESS_MODE_DISABLED
 		if velha is CanvasItem:
 			(velha as CanvasItem).visible = false
+	_limpar_letras()
 
 	var fase: Dictionary = FASES.get(caminho, {})
 	var com_cartao := not fase.is_empty()
@@ -240,6 +249,36 @@ func trocar_cena(caminho: String, tempo_saida: float = TEMPO_SAIDA, tempo_entrad
 	fade.visible = false
 	set_process(_anel.visible)
 	em_transicao = false
+
+
+## Cada tamanho e contorno de letra que aparece vira uma imagem guardada
+## dentro da fonte, e isso só cresce: depois das quatro fases eram ~70 MB de
+## letras que a tela atual nem usa (na TV Box, memória que faltava). Com a
+## tela preta elas são jogadas fora; a tela nova desenha as dela debaixo do
+## cartão, no pré-aquecimento (scripts/aquecedor.gd). (clear_size_cache e
+## não clear_cache: a fonte continua a mesma e os textos já montados seguem
+## valendo; só as imagens das letras são refeitas quando aparecem.)
+func _limpar_letras() -> void:
+	for p: String in FONTES:
+		if ResourceLoader.has_cached(p):
+			var f := ResourceLoader.load(p) as FontFile
+			if f != null:
+				for i in f.get_cache_count():
+					f.clear_size_cache(i)
+	# o que está à vista com letras (selo de créditos, avisos) é redesenhado
+	# já com as letras novas; o escondido se redesenha sozinho ao aparecer
+	_redesenhar_visiveis(get_tree().root)
+
+
+func _redesenhar_visiveis(n: Node) -> void:
+	if n is CanvasItem:
+		if not (n as CanvasItem).visible:
+			return
+		(n as CanvasItem).queue_redraw()
+	elif n is CanvasLayer and not (n as CanvasLayer).visible:
+		return
+	for c in n.get_children():
+		_redesenhar_visiveis(c)
 
 
 ## Escurece a tela sem trocar de cena (para quem precisa do preto antes).

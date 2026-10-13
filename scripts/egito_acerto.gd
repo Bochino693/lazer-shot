@@ -10,11 +10,12 @@ extends Node2D
 ## Acertar o artefato errado (fora da vez) deixa o anel vermelho.
 ## Um nó só por acerto, desenho em poucas chamadas; some sozinho.
 
-static var _brilho: Texture2D = null
+var _brilho: Texture2D = null
 
-# no máximo 4 efeitos ao mesmo tempo (rajada não pesa na TV Box)
+# no máximo 4 efeitos ao mesmo tempo (rajada não pesa na TV Box); a contagem é
+# pelo grupo (static var prenderia o script na memória até o jogo fechar)
 const MAX_VIVOS := 4
-static var _vivos := 0
+const GRUPO := "fx_egito_acerto"
 
 var _tex: Texture2D
 var _tipo := ""
@@ -33,22 +34,21 @@ var _arcos: Array[Dictionary] = []
 
 
 static func criar(pai: Node, alvo: Node2D, tipo: String, certo: bool) -> void:
-	if _vivos >= MAX_VIVOS:
+	if pai == null or alvo == null or not pai.is_inside_tree():
 		return
-	if pai == null or alvo == null:
+	if pai.get_tree().get_node_count_in_group(GRUPO) >= MAX_VIVOS:
 		return
 	var anim: AnimatedSprite2D = null
 	for f in alvo.get_children():
 		if f is AnimatedSprite2D:
 			anim = f
 			break
-	if _brilho == null:
-		_brilho = FundoVivo.brilho_redondo()
 	var fx := EgitoAcerto.new()
+	fx._brilho = FundoVivo.brilho_redondo()
+	fx.add_to_group(GRUPO)
 	fx.top_level = true
 	fx.z_as_relative = false
 	fx.z_index = 300
-	_vivos += 1
 	pai.add_child(fx)
 	fx._montar(alvo, anim, tipo, certo)
 
@@ -274,5 +274,3 @@ func _desenhar_luz() -> void:
 			_luz.draw_line(f["pos"] - Vector2(0, b), f["pos"] + Vector2(0, b), cor, 1.4 * _k, true)
 
 
-func _exit_tree() -> void:
-	_vivos -= 1
