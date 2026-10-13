@@ -204,7 +204,7 @@ func aplicar() -> void:
 	t.set_meta("admin_volume_fx", float(valor("audio/volume_fx")))
 	t.set_meta("admin_demo_ativa", bool(valor("main/demo_ativa")))
 	t.set_meta("admin_ranking_ativo", bool(valor("ranking/ranking_ativo")))
-	t.set_meta("modo_dificuldade", str(valor("jogo/dificuldade_padrao")))
+	t.set_meta("modo_dificuldade", "facil")   # só existe o jogo com a mira
 	t.set_meta("admin_idioma", str(valor("sistema/idioma")))
 
 	_mapear_botao(ACAO_START, int(valor("botoes/start")))

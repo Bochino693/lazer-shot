@@ -10,6 +10,14 @@ const CENA_INICIO: String = "res://scenes/main.tscn"
 const TEMPO_RANKING_ATRATIVO: float = 20.0
 
 const RankingManagerScript := preload("res://scripts/RankingManager.gd")
+const FONTE_FORTE := preload("res://fonts/Exo2-ExtraBold.ttf")
+const FONTE := preload("res://fonts/Exo2-Bold.ttf")
+
+## Colunas da tabela (largura em proporção). Letras grandes: os nomes e os
+## pontos são lidos de longe, do outro lado do salão.
+const COLUNAS := [["POS", 0.13], ["JOGADOR", 0.35], ["CENÁRIO", 0.18], ["PONTOS", 0.21], ["ACERTO", 0.13]]
+const ALTURA_LINHA := 116.0
+const ALTURA_CABECALHO := 50.0
 var RankingManager := RankingManagerScript.new()
 
 var modo_atrativo: bool = false
@@ -295,89 +303,83 @@ func _iniciar_jogo_pelo_insert_coin() -> void:
 
 func _criar_painel() -> void:
 	painel = Panel.new()
-	painel.position = Vector2(25, 25)
-	painel.size = get_viewport_rect().size - Vector2(50, 50)
+	painel.position = Vector2(16, 16)
+	painel.size = get_viewport_rect().size - Vector2(32, 32)
 	add_child(painel)
 
 	var estilo := StyleBoxFlat.new()
-	estilo.bg_color = Color(0.0, 0.0, 0.0, 0.78)
+	estilo.bg_color = Color(0.0, 0.0, 0.0, 0.80)
 	estilo.border_color = Color(1.0, 0.02, 0.02, 0.95)
-	estilo.border_width_left = 4
-	estilo.border_width_top = 4
-	estilo.border_width_right = 4
-	estilo.border_width_bottom = 4
-	estilo.corner_radius_top_left = 32
-	estilo.corner_radius_top_right = 32
-	estilo.corner_radius_bottom_left = 32
-	estilo.corner_radius_bottom_right = 32
+	estilo.set_border_width_all(4)
+	estilo.set_corner_radius_all(32)
 	estilo.shadow_color = Color(1.0, 0.0, 0.0, 0.26)
-	estilo.shadow_size = 30
-	estilo.shadow_offset = Vector2(0, 10)
+	estilo.shadow_size = 24
+	estilo.shadow_offset = Vector2(0, 8)
 	Leve.stylebox(painel, "panel", estilo)
 
 
 func _criar_titulo() -> void:
 	var titulo := Label.new()
 	titulo.text = "🏆 RANKING DOS 20 MELHORES"
-	titulo.position = Vector2(0, 16)
-	titulo.size = Vector2(painel.size.x, 58)
+	titulo.position = Vector2(0, 18)
+	titulo.size = Vector2(painel.size.x, 80)
 	titulo.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	titulo.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	Leve.font_size(titulo, "font_size", 38)
+	Leve.font(titulo, "font", FONTE_FORTE)
+	Leve.font_size(titulo, "font_size", 58)
 	Leve.color(titulo, "font_color", Color.WHITE)
 	Leve.color(titulo, "font_outline_color", Color.BLACK)
-	Leve.constant(titulo, "outline_size", 8)
+	Leve.constant(titulo, "outline_size", 10)
 	painel.add_child(titulo)
 
 
 func _criar_cabecalho() -> void:
 	var cab := HBoxContainer.new()
-	cab.position = Vector2(26, 148)
-	cab.size = Vector2(painel.size.x - 52, 42)
+	cab.position = Vector2(26, 196)
+	cab.size = Vector2(painel.size.x - 52, ALTURA_CABECALHO)
 	Leve.constant(cab, "separation", 0)
 	painel.add_child(cab)
 
-	var textos := ["POS", "PLAYER", "CENÁRIO", "MODO", "PONTOS", "ACERTO"]
-	var larguras := [75, 225, 165, 120, 155, 115]
-
-	for i in range(textos.size()):
+	var largura_util: float = painel.size.x - 52 - 20
+	for col in COLUNAS:
 		var lbl := Label.new()
-		lbl.text = textos[i]
-		lbl.custom_minimum_size = Vector2(larguras[i], 40)
+		lbl.text = col[0]
+		lbl.custom_minimum_size = Vector2(largura_util * float(col[1]), ALTURA_CABECALHO)
 		lbl.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 		lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		lbl.clip_text = true
-		Leve.font_size(lbl, "font_size", 19)
-		Leve.color(lbl, "font_color", Color(1.0, 0.05, 0.05))
+		Leve.font(lbl, "font", FONTE)
+		Leve.font_size(lbl, "font_size", 28)
+		Leve.color(lbl, "font_color", Color(1.0, 0.25, 0.22))
 		Leve.color(lbl, "font_outline_color", Color.BLACK)
-		Leve.constant(lbl, "outline_size", 4)
+		Leve.constant(lbl, "outline_size", 5)
 		cab.add_child(lbl)
-
 
 
 func _criar_scroll() -> void:
 	scroll = ScrollContainer.new()
-	scroll.position = Vector2(26, 188)
+	scroll.position = Vector2(26, 196 + ALTURA_CABECALHO + 8)
 
-	# menos espaço morto, mas ainda protegendo o botão
-	var margem_botao: float = 82.0
+	# espaço do botão VOLTAR embaixo
+	var margem_botao: float = 136.0
 
 	scroll.size = Vector2(
 		painel.size.x - 52,
 		painel.size.y - scroll.position.y - margem_botao
 	)
 
+	# rola pelos botões ▲▼ (sem barra); com a rolagem desligada a lista
+	# esticava a caixa e passava por baixo do botão VOLTAR
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
 	painel.add_child(scroll)
 
 	lista = VBoxContainer.new()
 	lista.custom_minimum_size = Vector2(scroll.size.x - 12, 0)
 	lista.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	Leve.constant(lista, "separation", 8)
+	Leve.constant(lista, "separation", 10)
 	scroll.add_child(lista)
-
 
 
 func _normalizar_cenario(valor: String) -> String:
@@ -439,8 +441,8 @@ func _criar_ranking() -> void:
 
 func _criar_filtros_cenarios() -> void:
 	filtros_box = HBoxContainer.new()
-	filtros_box.position = Vector2(24, 82)
-	filtros_box.size = Vector2(painel.size.x - 48, 54)
+	filtros_box.position = Vector2(24, 106)
+	filtros_box.size = Vector2(painel.size.x - 48, 76)
 	filtros_box.alignment = BoxContainer.ALIGNMENT_CENTER
 	Leve.constant(filtros_box, "separation", 8)
 	painel.add_child(filtros_box)
@@ -463,9 +465,10 @@ func _criar_filtros_cenarios() -> void:
 func _criar_botao_filtro(texto: String) -> Button:
 	var btn := Button.new()
 	btn.text = texto
-	btn.custom_minimum_size = Vector2(142, 46)
+	btn.custom_minimum_size = Vector2(176, 72)
 	btn.focus_mode = Control.FOCUS_NONE
-	Leve.font_size(btn, "font_size", 18)
+	Leve.font(btn, "font", FONTE_FORTE)
+	Leve.font_size(btn, "font_size", 30)
 
 	btn.pressed.connect(func():
 		filtro_atual = texto
@@ -515,15 +518,15 @@ func _atualizar_visual_filtros() -> void:
 func _criar_botoes_rolagem() -> void:
 	botao_subir = Button.new()
 	botao_subir.text = "▲"
-	botao_subir.position = Vector2(scroll.position.x + scroll.size.x - 68, scroll.position.y + 10)
-	botao_subir.size = Vector2(54, 54)
+	botao_subir.position = Vector2(scroll.position.x + scroll.size.x - 96, scroll.position.y + 10)
+	botao_subir.size = Vector2(88, 88)
 	botao_subir.focus_mode = Control.FOCUS_NONE
 	painel.add_child(botao_subir)
 
 	botao_descer = Button.new()
 	botao_descer.text = "▼"
-	botao_descer.position = Vector2(scroll.position.x + scroll.size.x - 68, scroll.position.y + scroll.size.y - 64)
-	botao_descer.size = Vector2(54, 54)
+	botao_descer.position = Vector2(scroll.position.x + scroll.size.x - 96, scroll.position.y + scroll.size.y - 98)
+	botao_descer.size = Vector2(88, 88)
 	botao_descer.focus_mode = Control.FOCUS_NONE
 	painel.add_child(botao_descer)
 
@@ -531,12 +534,12 @@ func _criar_botoes_rolagem() -> void:
 	_estilizar_botao_rolagem(botao_descer)
 
 	botao_subir.pressed.connect(func():
-		scroll.scroll_vertical = max(0, scroll.scroll_vertical - 220)
+		scroll.scroll_vertical = max(0, scroll.scroll_vertical - int(ALTURA_LINHA * 4))
 		_atualizar_botoes_rolagem()
 	)
 
 	botao_descer.pressed.connect(func():
-		scroll.scroll_vertical += 220
+		scroll.scroll_vertical += int(ALTURA_LINHA * 4)
 		_atualizar_botoes_rolagem()
 	)
 
@@ -565,7 +568,7 @@ func _estilizar_botao_rolagem(btn: Button) -> void:
 	Leve.stylebox(btn, "normal", normal)
 	Leve.stylebox(btn, "hover", normal)
 	Leve.stylebox(btn, "pressed", normal)
-	Leve.font_size(btn, "font_size", 20)
+	Leve.font_size(btn, "font_size", 40)
 	Leve.color(btn, "font_color", Color.WHITE)
 
 
@@ -601,46 +604,36 @@ func _desenhar_alvo_overlay() -> void:
 	Pincel.linha(alvo_overlay, alvo_pos + Vector2(0, -l - e), alvo_pos + Vector2(0, -e), Color.WHITE, 2.2)
 	Pincel.linha(alvo_overlay, alvo_pos + Vector2(0, e), alvo_pos + Vector2(0, l + e), Color.WHITE, 2.2)
 	Pincel.mira_fim(alvo_overlay)
-func _criar_linha_ranking(posicao: int, nome: String, cenario: String, modo: String, pontos: int, precisao: int) -> Panel:
+func _criar_linha_ranking(posicao: int, nome: String, cenario: String, _modo: String, pontos: int, precisao: int) -> Panel:
 	var linha := Panel.new()
-
-	# um pouco maior que antes
-	linha.custom_minimum_size = Vector2(scroll.size.x - 20, 62)
+	linha.custom_minimum_size = Vector2(scroll.size.x - 20, ALTURA_LINHA)
 
 	var estilo := StyleBoxFlat.new()
-
+	var cor_pontos := Color(1.0, 0.86, 0.30)
 	if posicao == 1:
-		estilo.bg_color = Color(0.35, 0.0, 0.0, 0.58)
-		estilo.border_color = Color(1.0, 0.02, 0.02, 1.0)
+		estilo.bg_color = Color(0.40, 0.28, 0.0, 0.62)
+		estilo.border_color = Color(1.0, 0.82, 0.20)
 	elif posicao == 2:
-		estilo.bg_color = Color(0.12, 0.12, 0.12, 0.70)
-		estilo.border_color = Color.WHITE
+		estilo.bg_color = Color(0.20, 0.20, 0.22, 0.75)
+		estilo.border_color = Color(0.90, 0.92, 0.96)
 	elif posicao == 3:
-		estilo.bg_color = Color(0.22, 0.0, 0.0, 0.50)
-		estilo.border_color = Color(1.0, 0.20, 0.18, 0.95)
+		estilo.bg_color = Color(0.30, 0.13, 0.03, 0.62)
+		estilo.border_color = Color(0.95, 0.55, 0.25)
 	else:
 		estilo.bg_color = Color(0.0, 0.0, 0.0, 0.72)
-		estilo.border_color = Color(1.0, 0.02, 0.02, 0.30)
-
-	estilo.border_width_left = 2
-	estilo.border_width_top = 2
-	estilo.border_width_right = 2
-	estilo.border_width_bottom = 2
-	estilo.corner_radius_top_left = 18
-	estilo.corner_radius_top_right = 18
-	estilo.corner_radius_bottom_left = 18
-	estilo.corner_radius_bottom_right = 18
-
+		estilo.border_color = Color(1.0, 0.02, 0.02, 0.35)
+		cor_pontos = Color(1.0, 0.30, 0.25)
+	estilo.set_border_width_all(3 if posicao <= 3 else 2)
+	estilo.set_corner_radius_all(22)
 	Leve.stylebox(linha, "panel", estilo)
 
 	var hbox := HBoxContainer.new()
-	hbox.position = Vector2(8, 7)
-	hbox.size = Vector2(linha.custom_minimum_size.x - 16, 48)
+	hbox.position = Vector2(0, 0)
+	hbox.size = Vector2(linha.custom_minimum_size.x, ALTURA_LINHA)
 	Leve.constant(hbox, "separation", 0)
 	linha.add_child(hbox)
 
 	var medalha := ""
-
 	if posicao == 1:
 		medalha = "🥇"
 	elif posicao == 2:
@@ -648,52 +641,51 @@ func _criar_linha_ranking(posicao: int, nome: String, cenario: String, modo: Str
 	elif posicao == 3:
 		medalha = "🥉"
 
-	var nome_final: String = nome.strip_edges().to_upper().left(9)
+	var nome_final: String = nome.strip_edges().to_upper().left(10)
 	if nome_final == "":
 		nome_final = "PLAYER"
-
 	var cenario_final: String = _normalizar_cenario(cenario).left(8)
 
-	var modo_final: String = modo.strip_edges().to_upper()
-	if modo_final == "DIFICIL" or modo_final == "DIFÍCIL":
-		modo_final = "DIFICIL"
-	else:
-		modo_final = "FACIL"
-
-	var cor_modo: Color = Color(0.35, 1.0, 0.45)
-	if modo_final == "DIFICIL":
-		cor_modo = Color(1.0, 0.20, 0.15)
-
-	_adicionar_campo(hbox, medalha + " " + str(posicao), 75, 18, Color.WHITE)
-	_adicionar_campo(hbox, nome_final, 225, 20, Color.WHITE)
-	_adicionar_campo(hbox, cenario_final, 165, 18, Color(0.82, 0.90, 1.0))
-	_adicionar_campo(hbox, modo_final, 120, 17, cor_modo)
-	_adicionar_campo(hbox, str(pontos), 155, 21, Color(1.0, 0.05, 0.05))
-	_adicionar_campo(hbox, str(precisao) + "%", 115, 18, Color.WHITE)
+	var largura_util: float = linha.custom_minimum_size.x
+	_adicionar_campo(hbox, (medalha + " " if medalha != "" else "") + str(posicao), largura_util * float(COLUNAS[0][1]), 46, Color.WHITE, FONTE_FORTE)
+	_adicionar_campo(hbox, nome_final, largura_util * float(COLUNAS[1][1]), 52, Color.WHITE, FONTE_FORTE)
+	_adicionar_campo(hbox, cenario_final, largura_util * float(COLUNAS[2][1]), 30, Color(0.82, 0.90, 1.0), FONTE)
+	_adicionar_campo(hbox, _milhar(pontos), largura_util * float(COLUNAS[3][1]), 56, cor_pontos, FONTE_FORTE)
+	_adicionar_campo(hbox, str(precisao) + "%", largura_util * float(COLUNAS[4][1]), 36, Color.WHITE, FONTE)
 
 	return linha
 
 
-
-func _adicionar_campo(pai: HBoxContainer, texto: String, largura: float, fonte: int, cor: Color) -> void:
+func _adicionar_campo(pai: HBoxContainer, texto: String, largura: float, fonte: int, cor: Color, tipo: Font = null) -> void:
 	var lbl := Label.new()
 	lbl.text = texto
-
-	# mais altura visual
-	lbl.custom_minimum_size = Vector2(largura, 48)
-
+	lbl.custom_minimum_size = Vector2(largura, ALTURA_LINHA)
 	lbl.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	lbl.clip_text = true
 	lbl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 
+	if tipo != null:
+		Leve.font(lbl, "font", tipo)
+		# diminui só o necessário para caber na coluna
+		while fonte > 16 and tipo.get_string_size(texto, HORIZONTAL_ALIGNMENT_LEFT, -1, fonte).x > largura - 12.0:
+			fonte -= 2
 	Leve.font_size(lbl, "font_size", fonte)
 	Leve.color(lbl, "font_color", cor)
 	Leve.color(lbl, "font_outline_color", Color.BLACK)
-	Leve.constant(lbl, "outline_size", 4)
+	Leve.constant(lbl, "outline_size", 7)
 
 	pai.add_child(lbl)
+
+
+static func _milhar(n: int) -> String:
+	var t := str(absi(n))
+	var out := ""
+	while t.length() > 3:
+		out = "." + t.right(3) + out
+		t = t.left(t.length() - 3)
+	return ("-" if n < 0 else "") + t + out
 
 
 func _criar_botao_voltar() -> void:
@@ -701,11 +693,11 @@ func _criar_botao_voltar() -> void:
 	botao_voltar.text = "VOLTAR AOS CENÁRIOS"
 
 	botao_voltar.position = Vector2(
-		painel.size.x * 0.5 - 190,
-		painel.size.y - 68
+		painel.size.x * 0.5 - 300,
+		painel.size.y - 118
 	)
 
-	botao_voltar.size = Vector2(380, 60)
+	botao_voltar.size = Vector2(600, 96)
 	botao_voltar.focus_mode = Control.FOCUS_NONE
 	botao_voltar.pivot_offset = botao_voltar.size * 0.5
 	painel.add_child(botao_voltar)
@@ -748,7 +740,8 @@ func _criar_botao_voltar() -> void:
 	Leve.stylebox(botao_voltar, "hover", hover)
 	Leve.stylebox(botao_voltar, "pressed", hover)
 
-	Leve.font_size(botao_voltar, "font_size", 24)
+	Leve.font(botao_voltar, "font", FONTE_FORTE)
+	Leve.font_size(botao_voltar, "font_size", 40)
 	Leve.color(botao_voltar, "font_color", Color.WHITE)
 	Leve.color(botao_voltar, "font_hover_color", Color.WHITE)
 	Leve.color(botao_voltar, "font_pressed_color", Color.WHITE)
@@ -975,7 +968,7 @@ func _fechar_modal_limpar_ranking() -> void:
 
 func _criar_lista_vazia() -> void:
 	var painel_vazio := Panel.new()
-	painel_vazio.custom_minimum_size = Vector2(scroll.size.x - 24, 190)
+	painel_vazio.custom_minimum_size = Vector2(scroll.size.x - 24, 300)
 
 	var estilo := StyleBoxFlat.new()
 	estilo.bg_color = Color(0.08, 0.09, 0.13, 0.82)
@@ -991,15 +984,16 @@ func _criar_lista_vazia() -> void:
 	Leve.stylebox(painel_vazio, "panel", estilo)
 
 	var lbl := Label.new()
-	lbl.text = "🏆 RANKING VAZIO\n\nJogue uma partida para registrar os melhores jogadores."
+	lbl.text = "🏆 RANKING VAZIO\n\nJOGUE UMA PARTIDA E\nENTRE PARA O RANKING!"
 	lbl.position = Vector2(20, 20)
-	lbl.size = Vector2(painel_vazio.custom_minimum_size.x - 40, 150)
+	lbl.size = Vector2(painel_vazio.custom_minimum_size.x - 40, 260)
 	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	Leve.font_size(lbl, "font_size", 28)
+	Leve.font(lbl, "font", FONTE)
+	Leve.font_size(lbl, "font_size", 40)
 	Leve.color(lbl, "font_color", Color.WHITE)
 	Leve.color(lbl, "font_outline_color", Color.BLACK)
-	Leve.constant(lbl, "outline_size", 6)
+	Leve.constant(lbl, "outline_size", 7)
 	painel_vazio.add_child(lbl)
 
 	lista.add_child(painel_vazio)

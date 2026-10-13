@@ -32,8 +32,9 @@ const LASER := 15
 
 const ANEIS := [0.035, 0.07, 0.12, 0.2, 0.32, 0.5]
 
-## Tamanho da mira em todas as telas (1.3 = 30% maior que o desenho original).
-const ESCALA_MIRA := 1.3
+## Tamanho da mira em todas as telas (1.7 = 70% maior que o desenho original;
+## grande para ser vista de longe, com a arma na mão).
+const ESCALA_MIRA := 1.7
 
 # Transformação de base: as funções que giram voltam para ela (e não para a
 # identidade), para que a mira inteira possa ser ampliada em volta do centro.

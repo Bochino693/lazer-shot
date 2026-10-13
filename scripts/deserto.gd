@@ -181,6 +181,7 @@ var modal_inicio_panel: TextureRect = null
 var modal_inicio_titulo: Label = null
 var modal_inicio_texto: Label = null
 var modal_inicio_footer: Label = null
+var modal_como_jogar: ComoJogar = null
 
 var hud_layer: CanvasLayer = null
 var hud_root: Control = null
@@ -351,8 +352,6 @@ func _process(delta: float) -> void:
 			TransicaoGlobal.trocar_cena(cena_main_menu)
 			return
 
-	var dificuldade: String = get_tree().get_meta("modo_dificuldade", "facil")
-
 	if crosshair_overlay != null:
 		if ranking_nome_ativo:
 			if overlay_layer != null:
@@ -364,7 +363,7 @@ func _process(delta: float) -> void:
 			if overlay_layer != null:
 				overlay_layer.layer = 90
 
-			crosshair_overlay.visible = (intro_ativa or ranking_nome_ativo or not modal_aberto) and dificuldade != "dificil"
+			crosshair_overlay.visible = intro_ativa or ranking_nome_ativo or not modal_aberto
 			if crosshair_overlay.visible:
 				crosshair_overlay.queue_redraw()
 
@@ -899,10 +898,6 @@ func _configurar_fx_frontal() -> void:
 
 
 func _desenhar_mira() -> void:
-	var dificuldade: String = get_tree().get_meta("modo_dificuldade", "facil")
-	if dificuldade == "dificil" and not ranking_nome_ativo:
-		return
-
 	if crosshair_overlay == null:
 		return
 
@@ -975,11 +970,6 @@ func _configurar_modal_inicio() -> void:
 	modal_inicio_panel.modulate = Color.WHITE
 	overlay_root.add_child(modal_inicio_panel)
 
-	var caminho_info: String = "res://info_scenes/desert_info.png"
-	if ResourceLoader.exists(caminho_info):
-		modal_inicio_panel.texture = load(caminho_info)
-	else:
-		push_warning("Imagem não encontrada: " + caminho_info)
 
 	modal_inicio_footer = Label.new()
 	modal_inicio_footer.name = "TextoAtireComecar"
@@ -999,6 +989,16 @@ func _configurar_modal_inicio() -> void:
 
 	overlay_root.add_child(modal_inicio_footer)
 
+	# COMO JOGAR grande (scripts/como_jogar.gd) no lugar da imagem antiga:
+	# a moldura, a imagem e o rodapé antigos ficam escondidos.
+	for n in [glow_img, borda_img, fundo_img]:
+		n.visible = false
+	modal_como_jogar = ComoJogar.criar("deserto", {
+		"sol": ComoJogar.textura_de(sun_modelo),
+		"lua": ComoJogar.textura_de(lua_modelo),
+	})
+	overlay_root.add_child(modal_como_jogar)
+
 	call_deferred("_ajustar_layout_modal_inicio_imagem")
 
 
@@ -1008,7 +1008,7 @@ func _ajustar_layout_modal_inicio_imagem() -> void:
 	if modal_inicio_bg != null:
 		modal_inicio_bg.position = Vector2.ZERO
 		modal_inicio_bg.size = tela
-		modal_inicio_bg.visible = intro_ativa
+		modal_inicio_bg.visible = false
 
 	if modal_inicio_panel == null:
 		return
@@ -1037,7 +1037,7 @@ func _ajustar_layout_modal_inicio_imagem() -> void:
 		((tela.y - espaco_texto) - altura_img) * 0.5
 	).round()
 
-	modal_inicio_panel.visible = intro_ativa
+	modal_inicio_panel.visible = false
 	modal_inicio_panel.modulate = Color.WHITE
 	modal_inicio_panel.scale = Vector2.ONE
 
@@ -1047,7 +1047,9 @@ func _ajustar_layout_modal_inicio_imagem() -> void:
 			0.0,
 			modal_inicio_panel.position.y + modal_inicio_panel.size.y + distancia_texto
 		).round()
-		modal_inicio_footer.visible = intro_ativa
+		modal_inicio_footer.visible = false
+	if modal_como_jogar != null:
+		modal_como_jogar.visible = intro_ativa
 		
 	var neon_margem: float = 22.0
 	var borda_espessura: float = 8.0
@@ -1622,18 +1624,9 @@ func _atualizar_barra_municao() -> void:
 
 
 func _atualizar_modal_inicio() -> void:
-	if modal_inicio_bg != null:
-		modal_inicio_bg.visible = intro_ativa
-
-	if modal_inicio_panel != null:
-		modal_inicio_panel.visible = intro_ativa
-		modal_inicio_panel.modulate = Color.WHITE
-		modal_inicio_panel.scale = Vector2.ONE
-
-	if modal_inicio_footer != null:
-		modal_inicio_footer.visible = intro_ativa
-		modal_inicio_footer.scale = Vector2.ONE
-		modal_inicio_footer.modulate.a = 0.48 + abs(sin(alvo_anim_t * 4.8)) * 0.52
+	# o aviso é o COMO JOGAR (scripts/como_jogar.gd); a imagem antiga saiu
+	if modal_como_jogar != null and modal_como_jogar.visible != intro_ativa:
+		modal_como_jogar.visible = intro_ativa
 
 
 func _atualizar_modal_fim() -> void:
@@ -1721,6 +1714,8 @@ func _iniciar_countdown() -> void:
 		modal_inicio_bg.visible = false
 	if modal_inicio_panel != null:
 		modal_inicio_panel.visible = false
+	if modal_como_jogar != null:
+		modal_como_jogar.visible = false
 	var glow_img := overlay_root.get_node_or_null("GlowImagemInicio") as ColorRect
 	if glow_img != null:
 		glow_img.visible = false
@@ -2821,27 +2816,13 @@ func _reiniciar_jogo() -> void:
 	if modal_card_vazio != null:
 		modal_card_vazio.visible = true
 
-	if modal_inicio_bg != null:
-		modal_inicio_bg.visible = true
-	if modal_inicio_panel != null:
-		modal_inicio_panel.visible = true
 	if modal_inicio_titulo != null:
 		modal_inicio_titulo.visible = true
 	if modal_inicio_texto != null:
 		modal_inicio_texto.visible = true
-	if modal_inicio_footer != null:
-		modal_inicio_footer.visible = true
-	var glow_img := overlay_root.get_node_or_null("GlowImagemInicio") as ColorRect
-	if glow_img != null:
-		glow_img.visible = true
-
-	var borda_img := overlay_root.get_node_or_null("BordaImagemInicio") as ColorRect
-	if borda_img != null:
-		borda_img.visible = true
-
-	var fundo_img := overlay_root.get_node_or_null("FundoImagemInicio") as ColorRect
-	if fundo_img != null:
-		fundo_img.visible = true
+	# o aviso de novo: o COMO JOGAR (a imagem antiga e a moldura não voltam)
+	if modal_como_jogar != null:
+		modal_como_jogar.visible = true
 
 	if preview_sol != null and is_instance_valid(preview_sol):
 		preview_sol.visible = true

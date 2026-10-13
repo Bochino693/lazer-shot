@@ -27,6 +27,8 @@ var ranking_backspace_trava: float = 0.0
 const RankingManagerScript := preload("res://scripts/RankingManager.gd")
 const Estilhacos := preload("res://scripts/estilhacos.gd")
 const Pincel := preload("res://scripts/pincel.gd")
+# preload: vem junto com a cena, na thread do carregamento (não compila na hora)
+const BarSol := preload("res://scripts/bar_sol.gd")
 var ranking_manager := RankingManagerScript.new()
 
 var ranking_nome_layer: CanvasLayer = null
@@ -1905,7 +1907,7 @@ func _criar_luz_do_sol() -> void:
 		return
 	var sol := Node2D.new()
 	sol.name = "Sol"
-	sol.set_script(load("res://scripts/bar_sol.gd"))
+	sol.set_script(BarSol)
 	fundo.add_child(sol)
 
 
@@ -4169,11 +4171,6 @@ func _configurar_aviso_inicio() -> void:
 	aviso_panel.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	aviso_root.add_child(aviso_panel)
 
-	var caminho_info: String = "res://info_scenes/bar_info.png"
-	if ResourceLoader.exists(caminho_info):
-		aviso_panel.texture = load(caminho_info)
-	else:
-		push_warning("Imagem não encontrada: " + caminho_info)
 
 	aviso_footer_label = Label.new()
 	aviso_footer_label.text = "ATIRE PARA COMEÇAR"
@@ -4193,7 +4190,30 @@ func _configurar_aviso_inicio() -> void:
 	aviso_footer_label.self_modulate = Color(0.88, 1.0, 0.90, 1.0)
 	aviso_root.add_child(aviso_footer_label)
 
+	# COMO JOGAR grande (scripts/como_jogar.gd) no lugar da imagem antiga:
+	# a moldura, a imagem e o rodapé antigos ficam escondidos.
+	for n in [sombra, glow_img, borda_img, fundo_img, aviso_panel, aviso_footer_label]:
+		(n as CanvasItem).visible = false
+	aviso_root.add_child(ComoJogar.criar("bar", {
+		"gin": _icone_da_cena(cena_garrafa_gin),
+		"rum": _icone_da_cena(cena_garrafa_rum),
+		"vodka": _icone_da_cena(cena_garrafa_vodka),
+		"whisky": _icone_da_cena(cena_garrafa_whisky),
+		"falsa": _icone_da_cena(cena_garrafa_falsa),
+	}))
+
 	call_deferred("_ajustar_layout_aviso_inicio")
+
+
+## A figura de uma garrafa (para o COMO JOGAR): monta a cena fora da árvore,
+## pega a imagem e descarta.
+func _icone_da_cena(ps: PackedScene) -> Texture2D:
+	if ps == null:
+		return null
+	var n := ps.instantiate()
+	var t := ComoJogar.textura_de(n)
+	n.free()
+	return t
 
 
 
@@ -5434,9 +5454,9 @@ func _atualizar_mira_se_necessario(novo_alvo_pos: Vector2) -> void:
 
 
 
+## Só existe o jogo com a mira na tela (o "difícil sem mira" saiu).
 func _modo_dificil_sem_mira() -> bool:
-	var dificuldade: String = get_tree().get_meta("modo_dificuldade", "facil")
-	return dificuldade == "dificil"
+	return false
 
 
 
@@ -5547,7 +5567,7 @@ func _carregar_config_admin_jogo() -> void:
 	tempo_auto_retorno_menu_seg = Maquina.tempo_volta_menu()
 	ranking_nome_tempo = float(cfg_admin.get_value("ranking", "tempo_nome", ranking_nome_tempo))
 
-	get_tree().set_meta("modo_dificuldade", str(cfg_admin.get_value("jogo", "dificuldade_padrao", get_tree().get_meta("modo_dificuldade", "facil"))))
+	get_tree().set_meta("modo_dificuldade", "facil")
 
 	tempo_restante = tempo_partida
 	tempo_fim_menu = tempo_auto_retorno_menu_seg

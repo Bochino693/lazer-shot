@@ -1,8 +1,9 @@
 class_name Placar
 extends CanvasLayer
 
-## Placar único das quatro fases: uma faixa fina no topo (~5% da altura) que
-## usa a largura da tela, para o fundo aparecer inteiro.
+## Placar único das quatro fases: uma faixa no topo (~6% da altura) que usa a
+## largura da tela, para o fundo aparecer inteiro. Letras grandes: o jogador
+## lê o placar de longe, com a arma na mão.
 ##
 ##   TEMPO | PONTOS | MUNIÇÃO (barra) | ACERTOS/TIROS | campo da fase
 ##
@@ -17,7 +18,7 @@ extends CanvasLayer
 const FONTE := preload("res://fonts/Exo2-ExtraBold.ttf")
 const FONTE_TITULO := preload("res://fonts/Exo2-Bold.ttf")
 
-const ALTURA := 0.082          # da largura da tela
+const ALTURA := 0.108          # da largura da tela
 const MARGEM := 10.0
 # largura de cada parte (soma 1)
 const PARTES := [0.17, 0.25, 0.30, 0.14, 0.14]
@@ -131,7 +132,7 @@ func _ajustar() -> void:
 	_painel.position = Vector2(MARGEM, MARGEM)
 	_painel.size = Vector2(larg, h)
 	var x := MARGEM
-	var tam_titulo := int(h * 0.19)
+	var tam_titulo := int(h * 0.20)
 	for i in PARTES.size():
 		var w: float = larg * PARTES[i]
 		if i > 0:
