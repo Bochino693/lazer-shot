@@ -29,15 +29,6 @@ const CENAS_ABERTURA := [
 ## aparece por uns segundos quando entra ficha ou falta crédito).
 const CENAS_SELO := ["res://scenes/main.tscn"]
 
-## Vídeos tocados pelo decodificador de hardware (scripts/video_nativo.gd).
-const VIDEOS_HARDWARE := [
-	"res://background_video/back_init.mp4",
-	"res://background_video/teaser_desert.mp4",
-	"res://background_video/teaser_mar.mp4",
-	"res://background_video/teaser_bar.mp4",
-	"res://background_video/teaser_arena.mp4",
-]
-
 ## Valores padrão (e nomes das chaves no arquivo).
 const PADRAO := {
 	"maquina/modo": "livre",
@@ -137,9 +128,8 @@ func _ready() -> void:
 	_criar_rotulo()
 	aplicar()
 	get_tree().node_added.connect(_ao_entrar_no)
-	# Pré-carga dos vídeos (TV Box): cópia para a memória interna já agora,
-	# numa thread, na ordem em que aparecem.
-	VideoNativo.preparar_copias(VIDEOS_HARDWARE)
+	# (Os vídeos são copiados para a memória interna só quando vão tocar, como
+	# na Rodada 6: nada roda em segundo plano enquanto o jogo abre.)
 
 
 ## Ajustes de versões antigas do arquivo de configuração.
@@ -387,8 +377,6 @@ func _salvar_logo() -> void:
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_GO_BACK_REQUEST:
 		_voltar_vira_recarga()
-	elif what == NOTIFICATION_PREDELETE:
-		VideoNativo.encerrar_copias()
 
 
 var _ultimo_voltar := 0

@@ -25,36 +25,34 @@ A janela fica aberta e o histórico completo vai para
   com `GERAR_APK_PRO_ULTRA.bat -MiraGirada`. Os dois podem ir juntos:
   `GERAR_APK_PRO_ULTRA.bat -Giro -1 -MiraGirada`.
 
-### Se o jogo não abrir ou fechar sozinho na TV Box (caixa-preta)
+### Se o jogo não abrir ou fechar sozinho na TV Box
 
-O jogo grava o que estava fazendo (`scripts/caixa_preta.gd`): aparelho, placa
-de vídeo, memória, cada troca de tela, cada erro e um pulso a cada 30 s. Cada
-linha vai para a memória da TV Box na hora, então sobra mesmo se o app fechar
-de repente.
+O jogo não mostra nada técnico na tela. Por trás, ele tem duas proteções:
 
-1. Instale o APK novo e abra o jogo. Se ele fechar ou travar, abra de novo.
-2. Na abertura seguinte aparece a tela **DIAGNÓSTICO: O JOGO PAROU AQUI DA
-   ÚLTIMA VEZ**. Fotografe a tela inteira e mande. START ou um tiro fecha;
-   ela fecha sozinha em 60 s.
-3. Se parou nos primeiros segundos, a abertura só começa depois de fechar o
-   relatório (assim dá tempo de fotografar).
+- **Caixa-preta** (`scripts/caixa_preta.gd`): grava em silêncio, na memória
+  interna da TV Box, o aparelho, a placa de vídeo, a memória, cada troca de
+  tela, cada erro e um pulso a cada 30 s. Cada linha vai para o disco na hora.
+  Na abertura seguinte a um fechamento, as últimas linhas saem no registro do
+  Android.
+- **Modo de segurança** (só na TV Box): se o jogo fechou sozinho com menos de
+  90 s, as próximas aberturas desta versão pulam a abertura Lazer & Sport e
+  não tocam vídeo nenhum (os menus ficam com o fundo animado). Assim o jogo
+  roda mesmo que o problema esteja num desses dois. Instalar uma versão nova
+  volta ao normal.
 
-Ela só aparece quando a sessão anterior parou cedo (menos de 3 min), no meio
-de uma troca de tela ou logo depois de um erro. Desligar a máquina depois de
-jogar não faz o relatório aparecer.
-
-Se nem o relatório aparecer, puxe o registro do Android pelo adb (TV Box com
-a depuração ligada, no cabo ou na rede com `adb connect IP-DA-TVBOX`):
+Para ver o motivo de um fechamento, puxe o registro do Android pelo adb (TV
+Box com a depuração ligada, no cabo ou na rede com
+`adb connect IP-DA-TVBOX`):
 
 ```
 GERAR_APK_PRO_ULTRA.bat -Registro
 ```
 
-Ele abre o jogo, espera 40 s e salva `build/android/LOGCAT-TVBOX.txt`. Com
-`-Instalar`, o mesmo acontece logo depois de instalar o APK novo.
+Ele abre o jogo, espera 40 s e salva `build/android/LOGCAT-TVBOX.txt` (com as
+linhas da caixa-preta da sessão que fechou). Com `-Instalar`, o mesmo
+acontece logo depois de instalar o APK novo.
 
-A versão do APK aparece em Configurações > Apps da TV Box (1.11.1, código 12)
-e na primeira linha do relatório.
+A versão do APK aparece em Configurações > Apps da TV Box (1.11.2, código 13).
 
 ## Tela em pé na TV Box
 
@@ -689,7 +687,20 @@ são desenhos do Pincel (uma textura) e só redesenham enquanto há algo no ar.
 - Shaders do Egito: `pow(x, 2.0)` com `x` negativo virou `x * x`. O GLSL ES
   não define `pow` de base negativa, e nas GPUs Mali isso dá pontos pretos ou
   piscando nos anéis de luz.
-- APK versão 1.11.1 (código 12), para conferir na TV Box qual está instalada.
+
+### Rodada 11c: abrir na TV Box como na Rodada 6
+
+A Rodada 6 foi a última testada na TV Box. Desde então entrou uma coisa que
+só roda no Android, logo ao abrir: a cópia de todos os vídeos de dentro do
+APK para a memória interna, numa thread, enquanto a primeira tela carregava.
+No PC isso nunca roda. Ela saiu: como na Rodada 6, cada vídeo só é copiado
+quando vai tocar.
+
+- Modo de segurança automático (veja "Se o jogo não abrir ou fechar sozinho
+  na TV Box"). Nada de diagnóstico aparece na tela do jogo.
+- Os vídeos pelo hardware marcam cada passo na caixa-preta (preparando,
+  tocando, falhou e por quê).
+- APK 1.11.2 (código 13).
 
 ## Para testar no PC como se fosse a TV Box
 

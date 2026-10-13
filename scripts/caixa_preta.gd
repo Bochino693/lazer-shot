@@ -1,6 +1,7 @@
-extends CanvasLayer
+extends Node
 
-## CAIXA-PRETA: o que o jogo estava fazendo quando parou na TV Box.
+## CAIXA-PRETA: o que o jogo estava fazendo quando parou na TV Box. Não
+## mostra nada na tela; só grava.
 ##
 ## Grava em user://caixa_preta/ (memória interna do app, sem permissão):
 ##   sessao.txt    esta sessão: aparelho, placa de vídeo, memória, cada troca
@@ -9,27 +10,28 @@ extends CanvasLayer
 ##                 hora, então sobra mesmo se o app fechar de repente.
 ##   anterior.txt  a sessão de antes.
 ##   vivo.txt      quanto tempo a sessão está rodando (reescrito a cada 2 s).
+## Na abertura seguinte, as últimas linhas da sessão anterior também saem no
+## registro do Android (GERAR_APK_PRO_ULTRA.bat -Registro as puxa pelo adb).
 ##
-## Na abertura seguinte, se a sessão de antes parou cedo (menos de 3 min), no
-## meio de uma troca de tela ou logo depois de um erro, o relatório dela
-## aparece na tela para ser fotografado. START ou um tiro fecha (fecha
-## sozinho em 60 s). Se parou nos primeiros segundos, a primeira tela só
-## começa depois de fechar o relatório.
+## MODO DE SEGURANÇA (só na TV Box): se o jogo fechou sozinho com menos de
+## 90 s, as próximas aberturas desta versão pulam a abertura Lazer & Sport e
+## não tocam vídeo nenhum (os menus ficam com o fundo animado). Assim o jogo
+## roda mesmo que o problema esteja num desses dois. Instalar uma versão nova
+## volta ao normal.
 ##
 ## Criada pela Tela (o primeiro autoload) no _init, antes de qualquer cena.
 ## Outros scripts marcam etapas com Tela.marca("texto").
 
-const VERSAO := "1.11.1 (Rodada 11b)"
+const VERSAO := "1.11.2"
 const PASTA := "user://caixa_preta"
 const SESSAO := PASTA + "/sessao.txt"
 const ANTERIOR := PASTA + "/anterior.txt"
 const VIVO := PASTA + "/vivo.txt"
+const SEGURANCA := PASTA + "/modo_seguranca.txt"   # guarda a versão em que ligou
+const CEDO_SEGURANCA := 90.0   # s: fechou antes disso -> modo de segurança
+const CENA_MENU := "res://scenes/main.tscn"
 const MAX_LINHAS := 2500      # depois disso o arquivo recomeça (fica o cabeçalho)
-const PAROU_CEDO := 180.0      # s: sessão mais curta que isso parou cedo
-const SEGURAR := 25.0          # s: parou tão cedo que a primeira tela espera
-const MOSTRAR := 60.0          # s: o relatório fecha sozinho
-const LINHAS_NA_TELA := 38
-const FONTE := preload("res://fonts/Exo2-Bold.ttf")
+const LINHAS_NO_REGISTRO := 40
 
 
 ## Escreve no arquivo; o motor chama de qualquer thread.
@@ -105,26 +107,26 @@ class Registro extends Logger:
 		gravador.escrever(("ERRO " if error else "") + m)
 
 
+## true: sem abertura e sem vídeos nesta sessão (ver o começo do arquivo)
+var modo_seguro := false
+
 var _gravador := Gravador.new()
 var _registro: Registro
-var _anterior: PackedStringArray = []
 var _duracao_anterior := -1.0
-var _mostrar := false
-var _segurar := false
-var _cena_segura: Node = null
 var _t := 0.0
 var _vivo_t := 0.0
 var _pulso_t := 0.0
 var _cena_id := 0
-var _painel: Control = null
-var _fechar_t := 0.0
 
 
 func _init() -> void:
-	layer = 128
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	DirAccess.make_dir_recursive_absolute(PASTA)
 	_guardar_sessao_anterior()
+	if FileAccess.file_exists(SEGURANCA):
+		modo_seguro = FileAccess.get_file_as_string(SEGURANCA).strip_edges() == VERSAO
+		if not modo_seguro:
+			DirAccess.remove_absolute(SEGURANCA)   # versão nova: volta ao normal
 	_gravador.arq = FileAccess.open(SESSAO, FileAccess.WRITE)
 	_registro = Registro.new(_gravador)
 	OS.add_logger(_registro)
@@ -134,22 +136,26 @@ func _init() -> void:
 	marca("memória: total %d MB, livre %d MB" % [int(mem.get("physical", 0)) >> 20, int(mem.get("available", 0)) >> 20])
 	if _duracao_anterior >= 0.0:
 		marca("sessão anterior durou %.0f s" % _duracao_anterior)
+	if modo_seguro:
+		marca("MODO DE SEGURANÇA: sem abertura e sem vídeos (o jogo fechou cedo nesta versão)")
 
 
 func _ready() -> void:
 	marca("vídeo: %s | %s | %s | tela %s | janela %s" % [RenderingServer.get_video_adapter_name(), RenderingServer.get_video_adapter_vendor(),
 		RenderingServer.get_video_adapter_api_version(), DisplayServer.screen_get_size(), DisplayServer.window_get_size()])
-	if _mostrar:
-		_montar_relatorio()
-		if _segurar:
-			# parou nos primeiros segundos: a primeira tela fica parada e
-			# escondida até fechar o relatório (ela ainda não desenhou nada)
-			_cena_segura = get_tree().current_scene
-			if _cena_segura != null:
-				_cena_segura.process_mode = Node.PROCESS_MODE_DISABLED
-				if _cena_segura is CanvasItem:
-					(_cena_segura as CanvasItem).visible = false
-				marca("modo seguro: primeira tela segurada até fechar o relatório")
+	var primeira := get_tree().current_scene
+	if modo_seguro and primeira != null and primeira.scene_file_path != CENA_MENU:
+		# pula a abertura: ela fica parada e escondida (ainda não desenhou
+		# nada) e o jogo vai direto para o menu
+		primeira.process_mode = Node.PROCESS_MODE_DISABLED
+		if primeira is CanvasItem:
+			(primeira as CanvasItem).visible = false
+		_ir_para_menu.call_deferred()
+
+
+func _ir_para_menu() -> void:
+	marca("modo de segurança: pulando a abertura")
+	TransicaoGlobal.trocar_cena(CENA_MENU, 0.0, 0.3)
 
 
 func _exit_tree() -> void:
@@ -180,18 +186,6 @@ func _process(delta: float) -> void:
 	if _pulso_t >= 30.0:
 		_pulso_t = 0.0
 		marca("pulso | %s" % _estado())
-	if _painel != null:
-		_fechar_t -= delta
-		if _fechar_t <= 0.0:
-			_fechar_relatorio()
-
-
-func _input(ev: InputEvent) -> void:
-	if _painel == null or _fechar_t > MOSTRAR - 3.0:
-		return
-	if ev.is_action_pressed("input_start") or ev.is_action_pressed("input_shot") or (ev is InputEventMouseButton and ev.pressed):
-		get_viewport().set_input_as_handled()
-		_fechar_relatorio()
 
 
 func _estado() -> String:
@@ -204,119 +198,21 @@ func _estado() -> String:
 func _guardar_sessao_anterior() -> void:
 	if not FileAccess.file_exists(SESSAO):
 		return
-	if FileAccess.file_exists(VIVO):
-		_duracao_anterior = FileAccess.get_file_as_string(VIVO).to_float()
+	_duracao_anterior = FileAccess.get_file_as_string(VIVO).to_float() if FileAccess.file_exists(VIVO) else 0.0
 	DirAccess.remove_absolute(ANTERIOR)
 	DirAccess.rename_absolute(SESSAO, ANTERIOR)
 	DirAccess.remove_absolute(VIVO)
-	_anterior = FileAccess.get_file_as_string(ANTERIOR).strip_edges().split("\n")
-	if _anterior.is_empty():
+	var anterior := FileAccess.get_file_as_string(ANTERIOR).strip_edges().split("\n")
+	if anterior.is_empty() or anterior[anterior.size() - 1].contains("fechou normalmente"):
 		return
-	var ultima := _anterior[_anterior.size() - 1]
-	if ultima.contains("fechou normalmente"):
-		return
-	# erro nos últimos 20 s ou uma troca de tela sem a tela nova aparecer
-	var fim := ultima.strip_edges().split(" ", false)[0].to_float() if ultima.strip_edges() != "" else 0.0
-	var erro_no_fim := false
-	var trocando := false
-	for i in range(_anterior.size() - 1, maxi(-1, _anterior.size() - 40), -1):
-		var l := _anterior[i]
-		var t := l.strip_edges().split(" ", false)[0].to_float() if l.strip_edges() != "" else 0.0
-		if fim - t <= 20.0 and l.contains(" ERRO "):
-			erro_no_fim = true
-		if l.contains("troca para "):
-			trocando = true
-			break
-		if l.contains("TELA "):
-			break
-	var curta := _duracao_anterior >= 0.0 and _duracao_anterior < PAROU_CEDO
-	_mostrar = curta or erro_no_fim or trocando
-	_segurar = _duracao_anterior >= 0.0 and _duracao_anterior < SEGURAR
-
-
-func _montar_relatorio() -> void:
-	_painel = Control.new()
-	_painel.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_painel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(_painel)
-	var fundo := ColorRect.new()
-	fundo.color = Color(0.02, 0.02, 0.04, 0.95)
-	fundo.set_anchors_preset(Control.PRESET_FULL_RECT)
-	fundo.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_painel.add_child(fundo)
-
-	var titulo := _texto("DIAGNÓSTICO: O JOGO PAROU AQUI DA ÚLTIMA VEZ", 34, Color(1.0, 0.82, 0.25))
-	titulo.offset_top = 30
-	titulo.offset_bottom = 78
-	var sub := _texto("Fotografe esta tela inteira e mande. A sessão anterior durou %s.\nSTART ou um tiro fecha (fecha sozinho em %d s)." % [
-		("%.0f s" % _duracao_anterior) if _duracao_anterior >= 0.0 else "?", int(MOSTRAR)], 22, Color(0.85, 0.88, 0.95))
-	sub.offset_top = 86
-	sub.offset_bottom = 150
-
-	# cabeçalho (aparelho, vídeo, memória) + as últimas linhas
-	var linhas: PackedStringArray = []
-	for i in mini(5, _anterior.size()):
-		linhas.append(_anterior[i])
-	var resto := _anterior.slice(maxi(5, _anterior.size() - LINHAS_NA_TELA))
-	if _anterior.size() - 5 > resto.size():
-		linhas.append("   ...")
-	linhas.append_array(resto)
-	var texto := RichTextLabel.new()
-	texto.bbcode_enabled = true
-	texto.scroll_active = false
-	texto.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	texto.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	texto.add_theme_font_override("normal_font", FONTE)
-	texto.add_theme_font_size_override("normal_font_size", 22)
-	texto.set_anchors_preset(Control.PRESET_FULL_RECT)
-	texto.offset_left = 26
-	texto.offset_right = -26
-	texto.offset_top = 166
-	texto.offset_bottom = -24
-	var bb := ""
-	for l in linhas:
-		var seguro := l.replace("[", "(").replace("]", ")")
-		if seguro.length() > 150:
-			seguro = seguro.substr(0, 150) + "..."
-		var cor := "#d8dce6"
-		if l.contains(" ERRO "):
-			cor = "#ff6a5a"
-		elif l.contains(" AVISO "):
-			cor = "#ffc94d"
-		elif l.contains("TELA ") or l.contains("troca para "):
-			cor = "#7fd7ff"
-		bb += "[color=%s]%s[/color]\n" % [cor, seguro]
-	texto.text = bb
-	_painel.add_child(texto)
-	_fechar_t = MOSTRAR
-	marca("relatório da sessão anterior mostrado na tela")
-
-
-## Linha de texto centralizada, da largura da tela.
-func _texto(txt: String, tam: int, cor: Color) -> Label:
-	var l := Label.new()
-	l.text = txt
-	l.add_theme_font_override("font", FONTE)
-	l.add_theme_font_size_override("font_size", tam)
-	l.add_theme_color_override("font_color", cor)
-	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	l.anchor_right = 1.0
-	l.offset_left = 20
-	l.offset_right = -20
-	_painel.add_child(l)
-	return l
-
-
-func _fechar_relatorio() -> void:
-	if _painel == null:
-		return
-	_painel.queue_free()
-	_painel = null
-	marca("relatório fechado")
-	if _cena_segura != null and is_instance_valid(_cena_segura):
-		_cena_segura.process_mode = Node.PROCESS_MODE_INHERIT
-		if _cena_segura is CanvasItem:
-			(_cena_segura as CanvasItem).visible = true
-	_cena_segura = null
+	# a sessão anterior parou sozinha: as últimas linhas vão para o registro do
+	# Android (adb logcat), antes de a caixa-preta desta sessão começar
+	print("CAIXA-PRETA: a sessão anterior parou sozinha aos %.0f s. Últimas linhas:" % _duracao_anterior)
+	for l in anterior.slice(maxi(0, anterior.size() - LINHAS_NO_REGISTRO)):
+		print("CAIXA-PRETA | ", l)
+	if OS.get_name() != "Android" and OS.get_environment("LAZER_CAIXA") != "1":
+		return   # no PC o jogo é parado pelo editor a toda hora: não é falha
+	if _duracao_anterior < CEDO_SEGURANCA:
+		var f := FileAccess.open(SEGURANCA, FileAccess.WRITE)
+		if f != null:
+			f.store_string(VERSAO)
