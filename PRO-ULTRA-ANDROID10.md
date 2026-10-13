@@ -541,6 +541,24 @@ desenho simples e partículas curtas.
 Egito ao mesmo tempo) para a rajada não pesar. O shader do disco do Egito e o
 do navio saíram.
 
+### Rodada 10b: o Olho de Rá e o de Hórus como joia
+
+O traço chapado do hieróglifo virou uma joia egípcia (`tools/gerar_astros.py`),
+nítida em 1080p e 4K e ainda sem shader:
+- **Esmalte azul-lápis** com pontinhos de pirita, em peças de **ouro (sol)**
+  ou **prata (lua)** em relevo, com brilho, contorno e sombra no astro.
+  Sobrancelha em faixas com fio de metal no meio e riscos; fio de metal
+  acima da pálpebra.
+- **Olho maior e realista**: íris grande com fibras, aro escuro, pupila e
+  reflexos. **Sol: amarelo-castanho. Lua: branco-azulado.**
+- **Pálpebra-joia**: abaulada (luz no meio, sombra na dobra), com um fio
+  gravado e a faixa de esmalte com borda de metal na beirada. Ao piscar,
+  desce com uma sombra suave sobre o olho.
+- **Aro gravado** com uma volta de símbolos egípcios (ankh, sol, água, pena,
+  djed).
+- Rá e Hórus continuam espelhados (no Rá o traço vai para a esquerda). Os
+  fundos do sol e da lua foram pintados de novo com o olho novo.
+
 ## Para testar no PC como se fosse a TV Box
 
 ```

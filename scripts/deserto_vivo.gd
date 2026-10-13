@@ -9,12 +9,15 @@ extends Node2D
 ##   fundo (sol / lua)   imagem + shaders/deserto_fundo.gdshader: feixes de
 ##                       energia, cristal, ar quente, onda de luz na batida
 ##   raios               luz em volta do disco girando (egito_raios)
-##   disco               sol com o Olho de Rá (pupila cheia) / lua com o Olho
-##                       de Hórus (pupila vazada), no traço clássico do
-##                       hieróglifo, pintados em 3x (nítidos em 4K), em
-##                       camadas comuns sem shader: esclera, pupila que
-##                       passeia, pálpebra que desce ao piscar e o disco com o
-##                       hieróglifo gravado por cima (tools/gerar_astros.py)
+##   disco               sol com o Olho de Rá / lua com o Olho de Hórus feitos
+##                       como joia egípcia: esmalte azul-lápis com borda de
+##                       ouro (sol) ou prata (lua) em relevo, olho grande e
+##                       realista (íris amarelo-castanha no sol, branco-
+##                       azulada na lua), aro gravado com símbolos; pintados
+##                       em 3x (nítidos em 4K), em camadas comuns sem shader:
+##                       esclera, íris que passeia, pálpebra-joia que desce ao
+##                       piscar e o disco com a joia por cima
+##                       (tools/gerar_astros.py)
 ##   águias              planando ao fundo em térmicas, batendo as asas de vez
 ##                       em quando, inclinando nas curvas, gritando (eco do
 ##                       vale); de noite silhuetas, às vezes cruzando a lua
@@ -61,9 +64,9 @@ const PONTAS_CAIXA := Rect2(180, 438, 644, 148)
 # Medidas do olho (px da textura 3x, a partir do centro do disco), de
 # tools/gerar_astros.py: centro do olho, 1 unidade (meia largura da abertura),
 # lugar da íris, topo da pálpebra e quanto ela desce para fechar.
-# Sol: Olho de Rá (pupila cheia); lua: Olho de Hórus (pupila vazada).
-const ASTRO_SOL := {"olho": Vector2(84.2, -18.7), "u": 234.0, "iris": Vector2(0.0, -18.7), "palpebra_y": -255.1, "abre": 173.2}
-const ASTRO_LUA := {"olho": Vector2(-84.2, -18.7), "u": 234.0, "iris": Vector2(0.0, -18.7), "palpebra_y": -255.1, "abre": 173.2}
+# Sol: Olho de Rá (espelho do de Hórus); lua: Olho de Hórus.
+const ASTRO_SOL := {"olho": Vector2(47.5, 0.0), "u": 250.0, "iris": Vector2(0.0, -10.0), "palpebra_y": -297.6, "abre": 210.1}
+const ASTRO_LUA := {"olho": Vector2(-47.5, 0.0), "u": 250.0, "iris": Vector2(0.0, -10.0), "palpebra_y": -297.6, "abre": 210.1}
 const CRISTAL_CAIXA := Rect2(440, 620, 136, 340)
 
 const COR_SOL := Color(1.0, 0.78, 0.36)
