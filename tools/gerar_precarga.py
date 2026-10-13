@@ -18,6 +18,10 @@ EXTS = ("png", "jpg", "jpeg", "webp", "svg", "wav", "ogg", "mp3", "ttf", "otf",
 LITERAL = re.compile(r'"(res://[^"%{}*]+\.(?:' + "|".join(EXTS) + r'))"')
 SCRIPT = re.compile(r'\[ext_resource type="Script"[^\]]*path="(res://[^"]+\.gd)"')
 CLASSE = re.compile(r'^class_name\s+(\w+)', re.M)
+# preload() já é dependência do script: vem junto com a cena na thread dela.
+# Pedir de novo em paralelo fazia duas threads lerem o mesmo arquivo (às vezes
+# a leitura falhava e a cena caía no carregamento travado).
+PRELOAD = re.compile(r'preload\(\s*"(res://[^"]+)"\s*\)')
 # FundoVivo carrega só os fundos pedidos: FundoVivo.new(["init", ...]).
 FUNDO_VIVO = "res://scripts/fundo_vivo.gd"
 FUNDO_ITEM = re.compile(r'^\t"(\w+)": \["(res://[^"]+)", "(res://[^"]+)"', re.M)
@@ -91,7 +95,10 @@ def main():
                 texto = f.read()
             if s == FUNDO_VIVO:
                 continue   # os fundos entram pelas chaves pedidas (abaixo)
+            ja_vem = set(PRELOAD.findall(texto))
             for res in LITERAL.findall(texto) + literais_fundo_vivo(texto, fundos):
+                if res in ja_vem and texto.count('"%s"' % res) == 1:
+                    continue
                 # outras telas não: só o que esta tela usa
                 if res.startswith("res://scenes/") or res == cena:
                     continue

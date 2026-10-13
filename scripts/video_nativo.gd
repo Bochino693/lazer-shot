@@ -18,6 +18,7 @@ extends Control
 ## Godot, como antes. A configuração "video/nativo" desliga o hardware.
 
 signal comecou   # primeiro quadro na tela
+signal falhou    # sem hardware e sem plano B: a tela fica com o fundo de baixo
 
 const SHADER_OES := "res://shaders/video_oes.gdshader"
 const ESPERA_MAX := 3.0          # segundos sem quadro -> plano B
@@ -75,6 +76,8 @@ func tocar() -> void:
 		_iniciar_nativo()
 	elif not so_hardware or OS.get_name() != "Android":
 		_iniciar_godot()
+	else:
+		falhou.emit.call_deferred()
 
 
 func parar() -> void:
@@ -89,6 +92,31 @@ func parar() -> void:
 
 func esta_mostrando() -> bool:
 	return _mostrando
+
+
+## Já entrou por inteiro (fim do esmaecimento): o que está embaixo pode
+## deixar de ser desenhado.
+func cobre_tela() -> bool:
+	if not _mostrando or modulate.a < 0.999:
+		return false
+	var no: CanvasItem = _rect if _rect != null else _player
+	return no != null and no.modulate.a >= 0.999
+
+
+## Pausa sem soltar o decodificador (escondido, não gasta nada); continua de
+## onde parou.
+func pausar() -> void:
+	if modo == "nativo" and _mp != null and _pronto:
+		_mp.pause()
+	elif _player != null:
+		_player.paused = true
+
+
+func continuar() -> void:
+	if modo == "nativo" and _mp != null and _pronto:
+		_mp.start()
+	elif _player != null:
+		_player.paused = false
 
 
 func _exit_tree() -> void:
@@ -166,7 +194,18 @@ func _preparar_player() -> void:
 
 ## O MediaPlayer precisa de um arquivo de verdade: copia do pacote do jogo
 ## para a memória interna na primeira vez (e quando o vídeo mudar de tamanho).
-func _copia_local(origem: String) -> String:
+static var _trava_copia := Mutex.new()
+static var _fio_copias: Thread = null
+
+
+static func _copia_local(origem: String) -> String:
+	_trava_copia.lock()
+	var caminho := _copiar(origem)
+	_trava_copia.unlock()
+	return caminho
+
+
+static func _copiar(origem: String) -> String:
 	DirAccess.make_dir_recursive_absolute(PASTA_COPIA)
 	var destino := PASTA_COPIA + origem.get_file()
 	var leitor := FileAccess.open(origem, FileAccess.READ)
@@ -177,13 +216,36 @@ func _copia_local(origem: String) -> String:
 		var atual := FileAccess.open(destino, FileAccess.READ)
 		if atual != null and atual.get_length() == tam:
 			return ProjectSettings.globalize_path(destino)
-	var escritor := FileAccess.open(destino, FileAccess.WRITE)
+	# grava num temporário e só renomeia no fim: nunca fica meio arquivo
+	var temp := destino + ".tmp"
+	var escritor := FileAccess.open(temp, FileAccess.WRITE)
 	if escritor == null:
 		return ""
 	while leitor.get_position() < tam:
 		escritor.store_buffer(leitor.get_buffer(mini(1 << 20, tam - leitor.get_position())))
 	escritor.close()
+	if DirAccess.rename_absolute(temp, destino) != OK:
+		return ""
 	return ProjectSettings.globalize_path(destino)
+
+
+## Pré-carga: copia todos os vídeos para a memória interna numa thread, já no
+## início do jogo, para nenhum vídeo esperar cópia na hora de aparecer.
+static func preparar_copias(lista: Array) -> void:
+	if OS.get_name() != "Android" or _fio_copias != null:
+		return
+	_fio_copias = Thread.new()
+	_fio_copias.start(func() -> void:
+		for origem in lista:
+			if FileAccess.file_exists(origem):
+				_copia_local(origem)
+	, Thread.PRIORITY_LOW)
+
+
+static func encerrar_copias() -> void:
+	if _fio_copias != null and _fio_copias.is_started():
+		_fio_copias.wait_to_finish()
+	_fio_copias = null
 
 
 func _process(delta: float) -> void:
@@ -222,6 +284,8 @@ func _falhar(motivo: String) -> void:
 	modo = ""
 	if not so_hardware:
 		_iniciar_godot()
+	if modo == "":
+		falhou.emit()
 
 
 func _soltar_nativo() -> void:

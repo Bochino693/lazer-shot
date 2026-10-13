@@ -324,6 +324,49 @@ Não deu para testar na TV Box real nesta rodada (só no PC e no pacote
 exportado). Se na TV Box o vídeo da abertura aparecer parado (só o quadro de
 baixo) ou trocar pelo vídeo antigo, o hardware não aceitou: avise.
 
+## Rodada 7: mira certa na tela em pé, Egito com vídeo e menu orquestrado
+
+**Mira (o erro de verdade).** Com a tela girada da TV Box, a mira recebia o
+movimento da arma ainda no sentido do HDMI deitado: arma para a direita
+subia a mira, arma para cima ia para a lateral (por isso "não passa de um
+ponto" e "fica nas laterais", até com mouse comum). Agora `MiraGlobal` leva o
+movimento e o ponto para a tela em pé com a mesma conversão que o Godot usa
+nas telas. Conferido no simulador da TV Box (`LAZER_GIRO=1`, janela
+1920x1080): direita = direita, cima = cima, e os 4 cantos do ponteiro caem
+nos 4 cantos da tela.
+
+**Tiros sem travar.**
+- Os efeitos curtos (tiro, acertos, recarga, bips...) eram MP3: cada som
+  decodificava MP3 de novo, e numa rajada eram dezenas ao mesmo tempo no
+  processador da TV Box. Agora são WAV (`songs/*.wav`, PCM, sem compressão):
+  tocar não custa nada. A música continua MP3/OGG.
+- Cada som criava um player novo na árvore e apagava no fim. Agora
+  `Maquina.efeito()` tem um player fixo por efeito, com até 6 vozes juntas.
+  Numa rajada de 145 tiros no Egito, os nós da tela ficaram em 214 (antes
+  subiam a 360).
+
+**Egito com os vídeos de volta.** Sol e lua (`back_sun.mp4`, `back_moon.mp4`)
+tocam pelo decodificador de hardware. Na troca de modo, o novo vídeo entra por
+cima do anterior quando o primeiro quadro chega. Com vídeo na tela, o fundo
+animado de baixo nem é desenhado (placa de vídeo livre). Se o hardware falhar,
+volta o fundo animado do modo.
+
+**Menu: vídeos pré-carregados e troca orquestrada.**
+- Os vídeos são copiados para a memória interna já no início do jogo, numa
+  thread (`Maquina.VIDEOS_HARDWARE`): nenhum espera cópia na hora.
+- Mira num cartão: a arte do cenário aparece na hora (já carregada); a prévia
+  em vídeo daquele cenário só começa se a mira parar 0,25 s e entra suave
+  quando o primeiro quadro chega. A prévia anterior sai em 0,2 s.
+- O vídeo da abertura no fundo pausa enquanto não aparece; no máximo 2
+  decodificadores trabalhando.
+
+**Carregamento entre telas.** A pré-carga pedia de novo, em paralelo, peças
+que já vinham com a tela (`preload` nos scripts): duas threads lendo o mesmo
+arquivo às vezes falhavam e a tela caía no carregamento travado. Agora
+`tools/gerar_precarga.py` só pede o que é carregado em tempo de execução.
+
+**Limpeza:** 12 funções que ninguém chamava saíram (abertura, menu, Egito).
+
 ## Para testar no PC como se fosse a TV Box
 
 ```

@@ -5,6 +5,11 @@ extends Node
 ## A arma é um mouse com giroscópio. Há UMA mira, aqui, e cada tela lê
 ## `MiraGlobal.pos` e desenha/acerta exatamente ali.
 ##
+## O evento chega no sentido da janela (na TV Box, o HDMI deitado); a mira
+## converte movimento e ponto para a tela em pé com a mesma transformação que
+## o Godot usa para as telas (sem isso os eixos ficavam trocados: arma para a
+## direita subia a mira).
+##
 ## Como a mira anda:
 ## - Ponteiro CAPTURADO (o normal): o Android manda só o deslocamento da
 ##   arma; ele soma na mira (com a sensibilidade do botão MIRA do menu), sem
@@ -34,8 +39,7 @@ var capturada := true
 var _iniciada := false
 var _sens := 1.0
 var _android := false
-var _eventos := 0
-var _ultimo_ponteiro := Vector2(INF, INF)
+var _ultima_janela := Vector2(INF, INF)
 var _recapturar_em := 0.0
 
 
@@ -101,10 +105,28 @@ func _ao_evento(ev: InputEvent) -> void:
 	if not (ev is InputEventMouseMotion):
 		return
 	_garantir_inicio()
-	_eventos += 1
-	# soma o deslocamento já (a mira responde no mesmo quadro do movimento)
+	var mm := ev as InputEventMouseMotion
+	# O evento ainda está no sentido da janela (o HDMI deitado, na TV Box);
+	# a mesma conversão que o Godot faz antes de entregar às telas leva o
+	# movimento e o ponto para a tela em pé (arma para cima = mira para cima).
+	var para_jogo := get_tree().root.get_final_transform().affine_inverse()
 	var tela := _tela()
-	pos += (ev as InputEventMouseMotion).relative * _sens
+
+	if _android:
+		# Capturado, o Android manda o ponteiro parado e só o deslocamento;
+		# se a posição anda junto, a captura caiu.
+		var andou := _ultima_janela.x != INF and mm.position.distance_squared_to(_ultima_janela) > 0.25
+		_ultima_janela = mm.position
+		capturada = not andou
+		if not capturada:
+			# sem captura: a mira é o ponteiro real (alcança a tela inteira)
+			pos = para_jogo * mm.position
+			pos = Vector2(clampf(pos.x, 0.0, tela.x), clampf(pos.y, 0.0, tela.y))
+			bruta = pos
+			return
+
+	# soma o deslocamento já (a mira responde no mesmo quadro do movimento)
+	pos += para_jogo.basis_xform(mm.relative) * _sens
 	pos = Vector2(clampf(pos.x, 0.0, tela.x), clampf(pos.y, 0.0, tela.y))
 	bruta = pos
 
@@ -113,34 +135,18 @@ func _process(delta: float) -> void:
 	_garantir_inicio()
 	_sens = clampf(float(get_tree().get_meta(META_SENS_MOUSE, 1.0)), 0.2, 3.0)
 
-	if _android:
-		_conferir_captura(delta)
-
-	var tela := _tela()
-	pos = Vector2(clampf(pos.x, 0.0, tela.x), clampf(pos.y, 0.0, tela.y))
-	bruta = pos
-	_eventos = 0
-
-
-## Capturado, o Android entrega o ponteiro parado e só o deslocamento; se a
-## posição do ponteiro anda junto com os movimentos, a captura caiu.
-func _conferir_captura(delta: float) -> void:
-	var ponteiro: Vector2 = Tela.mouse()
-	var andou := _ultimo_ponteiro.x != INF and ponteiro.distance_squared_to(_ultimo_ponteiro) > 0.25
-	_ultimo_ponteiro = ponteiro
-	if _eventos > 0:
-		capturada = not andou
-	if not capturada:
-		# sem captura: a mira é o ponteiro real (alcança a tela inteira)
-		if andou:
-			pos = ponteiro
+	if _android and not capturada:
+		# pede a captura de novo até o Android aceitar
 		_recapturar_em -= delta
 		if _recapturar_em <= 0.0:
 			_recapturar_em = INTERVALO_RECAPTURA
 			_recapturar()
 
+	var tela := _tela()
+	pos = Vector2(clampf(pos.x, 0.0, tela.x), clampf(pos.y, 0.0, tela.y))
+	bruta = pos
 
-## Força o Godot a pedir a captura de novo (ele só pede quando o modo muda).
+
 func _recapturar() -> void:
 	Input.set_mouse_mode(Input.MOUSE_MODE_HIDDEN)
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)

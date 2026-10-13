@@ -32,7 +32,6 @@ class TargetData:
 	var swap_escala_inicio: float = 1.0  # escala no momento da troca
 
 
-
 var ranking_nome_layer: CanvasLayer = null
 var ranking_nome_root: Control = null
 var ranking_nome_bg: ColorRect = null
@@ -118,14 +117,14 @@ const TEMPO_TROCA_FUNDO := 0.8
 @export var faixa_spawn_topo: float = 330.0
 @export var faixa_spawn_base_margem: float = 180.0
 
-@export var som_tiro_path: String = "res://songs/tiro-de-pistola.mp3"
-@export var som_recharge_path: String = "res://songs/recharge.mp3"
-@export var som_bullet_no_path: String = "res://songs/bullet_no.mp3"
+@export var som_tiro_path: String = "res://songs/tiro-de-pistola.wav"
+@export var som_recharge_path: String = "res://songs/recharge.wav"
+@export var som_bullet_no_path: String = "res://songs/bullet_no.wav"
 @export var som_fim_path: String = "res://songs/end_game.mp3"
 @export var som_egito_path: String = "res://songs/egito.mp3"
-@export var som_hit_sun_path: String = "res://songs/hit-sun.mp3"
+@export var som_hit_sun_path: String = "res://songs/hit-sun.wav"
 var som_hit_sun: AudioStream = null
-@export var som_hit_moon_path: String = "res://songs/hit-moon.mp3"
+@export var som_hit_moon_path: String = "res://songs/hit-moon.wav"
 var som_hit_moon: AudioStream = null
 
 @export var usar_controle_xbox: bool = true
@@ -165,6 +164,12 @@ var fundo_lua: TextureRect = null
 # Vida do fundo: faíscas saindo do cristal, poeira no ar e a onda de luz que
 # sai do cristal a cada batida da música (ver shaders/deserto_fundo.gdshader).
 var _faiscas_energia: CPUParticles2D = null
+# Vídeo de fundo do modo (sol/lua) pelo decodificador de hardware, por cima
+# do fundo parado animado; um vídeo por vez (troca cruzada na mudança de modo).
+const VIDEO_SOL := ["res://background_video/back_sun.mp4", "res://background_video/back_sun.ogv"]
+const VIDEO_LUA := ["res://background_video/back_moon.mp4", "res://background_video/back_moon.ogv"]
+var _video_fundo: VideoNativo = null
+var _video_modo: String = ""
 var _poeira: CPUParticles2D = null
 var _onda_som: float = 9.0
 # HUD: só refaz estilo e barra de munição quando algo muda (antes era todo
@@ -456,7 +461,6 @@ func _process(delta: float) -> void:
 			crosshair_overlay.queue_redraw()
 
 
-
 func _atualizar_mira_hibrida(_delta: float) -> void:
 	# mira única do jogo (MiraGlobal): mesma em todas as telas, sem saltos
 	mira_pos = MiraGlobal.pos
@@ -735,7 +739,7 @@ func _criar_vida_fundo() -> void:
 	f.texture = ponto
 	f.color_ramp = rampa
 	f.material = soma
-	f.z_index = 1   # sempre na frente da imagem (a troca sol/lua a põe por último)
+	f.z_index = 2   # na frente da imagem e do vídeo de fundo (z 1)
 	pai.add_child(f)
 	_faiscas_energia = f
 
@@ -756,7 +760,7 @@ func _criar_vida_fundo() -> void:
 	p.texture = ponto
 	p.color_ramp = rampa
 	p.material = soma
-	p.z_index = 1
+	p.z_index = 2
 	pai.add_child(p)
 	_poeira = p
 
@@ -784,6 +788,48 @@ func _animar_fundo_vivo(delta: float) -> void:
 		_faiscas_energia.speed_scale = 1.0 + som.y * 1.3
 
 
+## Vídeo do modo: o novo entra por cima do anterior quando o 1º quadro chega e
+## só então o anterior é solto. Com vídeo na tela, os fundos parados de baixo
+## nem são desenhados (placa de vídeo livre); se o hardware falhar, voltam.
+func _trocar_video_fundo(modo: String) -> void:
+	if _video_modo == modo:
+		return
+	_video_modo = modo
+	var arq: Array = VIDEO_SOL if modo == MODO_SOL else VIDEO_LUA
+	var pai: Node = background_video_root if background_video_root != null else self
+	var novo := VideoNativo.new(arq[0], arq[1], Vector2(576, 864), true, 0.0)
+	novo.name = "VideoFundo_" + modo
+	novo.so_hardware = true
+	novo.z_index = 1   # acima dos fundos parados (z 0), abaixo das faíscas (z 2)
+	pai.add_child(novo)
+	var velho := _video_fundo
+	_video_fundo = novo
+	novo.comecou.connect(func() -> void:
+		get_tree().create_timer(0.4).timeout.connect(func() -> void:
+			if is_instance_valid(velho):
+				velho.parar()
+				velho.queue_free()
+			if _video_fundo == novo and novo.esta_mostrando():
+				for f: TextureRect in [fundo_sol, fundo_lua]:
+					if f != null:
+						f.visible = false
+		)
+	)
+	novo.falhou.connect(func() -> void:
+		# sem hardware: o fundo parado animado do modo atual volta a aparecer
+		if is_instance_valid(velho):
+			velho.parar()
+			velho.queue_free()
+		if is_instance_valid(novo):
+			novo.queue_free()
+		if _video_fundo == novo:
+			_video_fundo = null
+			_fundo_modo = ""
+			_aplicar_background_modo()
+	)
+	novo.tocar()
+
+
 func _on_viewport_size_changed() -> void:
 	_ajustar_background_full()
 	_ajustar_layout()
@@ -807,6 +853,7 @@ func _aplicar_background_modo() -> void:
 	_ajustar_background_full()
 	var entra: TextureRect = fundo_sol if modo_atual == MODO_SOL else fundo_lua
 	var sai: TextureRect = fundo_lua if modo_atual == MODO_SOL else fundo_sol
+	_trocar_video_fundo(modo_atual)
 	if _faiscas_energia != null:
 		_faiscas_energia.color = Color(1.0, 0.80, 0.42) if modo_atual == MODO_SOL else Color(1.0, 0.42, 0.40)
 	if _poeira != null:
@@ -1020,7 +1067,6 @@ func _configurar_fx_frontal() -> void:
 	fx_front_overlay.draw.connect(_desenhar_fx_frontais)
 
 
-
 func _desenhar_mira() -> void:
 	var dificuldade: String = get_tree().get_meta("modo_dificuldade", "facil")
 	if dificuldade == "dificil" and not ranking_nome_ativo:
@@ -1191,7 +1237,6 @@ func _ajustar_layout_modal_inicio_imagem() -> void:
 		fundo_img.size = modal_inicio_panel.size + Vector2(4.0, 4.0)
 
 
-
 func _configurar_countdown() -> void:
 	countdown_label = Label.new()
 	countdown_label.visible = false
@@ -1208,21 +1253,6 @@ func _configurar_countdown() -> void:
 
 	overlay_root.add_child(countdown_label)
 	
-
-
-func _criar_previews_modal_inicio() -> void:
-	if preview_sol != null and is_instance_valid(preview_sol):
-		preview_sol.queue_free()
-	if preview_lua != null and is_instance_valid(preview_lua):
-		preview_lua.queue_free()
-
-	preview_sol = _criar_preview_do_modelo(sun_modelo)
-	preview_lua = _criar_preview_do_modelo(lua_modelo)
-
-	if preview_sol != null:
-		overlay_root.add_child(preview_sol)
-	if preview_lua != null:
-		overlay_root.add_child(preview_lua)
 
 
 func _criar_preview_do_modelo(modelo: Area2D) -> Area2D:
@@ -1565,7 +1595,6 @@ func _ajustar_layout() -> void:
 	_ajustar_layout_modal_inicio_imagem()
 
 
-
 func _posicionar_card(card: Control) -> void:
 	if card == null:
 		return
@@ -1599,7 +1628,6 @@ func _posicionar_card(card: Control) -> void:
 	if valor != null:
 		valor.position = Vector2(0.0, 42.0)
 		valor.size = Vector2(card.size.x, card.size.y - 50.0)
-
 
 
 func _atualizar_hud() -> void:
@@ -1698,13 +1726,7 @@ func _atualizar_hud() -> void:
 	_atualizar_estilo_hud_por_modo()
 
 
-
 func _sortear_pontos_acerto() -> int:
-	var tabela: Array[int] = [20, 50, 80, 100]
-	return tabela[randi() % tabela.size()]
-
-
-func _sortear_penalidade_erro_vazio() -> int:
 	var tabela: Array[int] = [20, 50, 80, 100]
 	return tabela[randi() % tabela.size()]
 
@@ -1713,7 +1735,6 @@ func _texto_resultado(valor: int) -> String:
 	if valor > 0:
 		return "+%d" % valor
 	return "-%d" % abs(valor)
-
 
 
 func _atualizar_barra_municao() -> void:
@@ -1958,7 +1979,6 @@ func _mostrar_numero_countdown(texto: String, duracao: float) -> void:
 	await get_tree().create_timer(duracao).timeout
 
 
-
 func _obter_collision_shape_do_alvo(area: Node) -> CollisionShape2D:
 	if area == null:
 		return null
@@ -2126,7 +2146,6 @@ func _trocar_modo() -> void:
 	_set_status("MODO " + modo_atual.to_upper(), COR_SOL if modo_atual == MODO_SOL else COR_LUA)
 
 
-
 func _atualizar_alvos(delta: float) -> void:
 	if alvos_ativos.is_empty():
 		return
@@ -2244,7 +2263,6 @@ func _atualizar_alvos(delta: float) -> void:
 		_atualizar_efeito_alvo(alvo)
 
 
-
 func _raio_colisao_alvo(alvo: TargetData) -> float:
 	if alvo == null:
 		return 38.0
@@ -2261,7 +2279,6 @@ func _raio_colisao_alvo(alvo: TargetData) -> float:
 		raio_sprite = 64.0
 
 	return max(34.0, raio_sprite * escala)
-
 
 
 func _resolver_colisoes_entre_alvos() -> void:
@@ -2312,7 +2329,6 @@ func _resolver_colisoes_entre_alvos() -> void:
 						b.vel = b.vel.normalized() * velocidade_minima_alvo
 
 
-
 func _aplicar_sensibilidade_global() -> void:
 	# XBOX travado em 5000 — vale para FÁCIL e DIFÍCIL.
 	velocidade_mira_xbox = 1500.0
@@ -2329,15 +2345,6 @@ func _max_alvos_para_modo() -> int:
 	if pontuacao_total >= 1500:
 		base += 1
 	return mini(9, base + int(floor(nivel_dificuldade - 1.0)))
-
-
-
-func _chance_spawn_por_frame(delta: float) -> float:
-	var base: float = 3.60 if modo_atual == MODO_SOL else 4.00
-	if pontuacao_total >= 1500:
-		base += 1.20
-	return (base + (nivel_dificuldade * 0.55)) * delta
-
 
 
 func _gerar_onda_inicial() -> void:
@@ -2374,7 +2381,6 @@ func _spawn_continuo(delta: float) -> void:
 		_spawn_alvo()
 
 
-
 ## Cópia de um alvo-modelo. O duplicate() padrão reinstancia a cena do
 ## alvo inteira (sun.tscn/lua.tscn): ~1,5 ms por alvo aqui, ~10 ms na TV Box,
 ## um engasgo a cada alvo novo. Copiar só os nós dá o mesmo alvo (mesmas
@@ -2401,7 +2407,6 @@ func _sortear_tipo_alvo() -> String:
 	if randf() < chance_correto:
 		return modo_atual
 	return MODO_LUA if modo_atual == MODO_SOL else MODO_SOL
-
 
 
 func _spawn_alvo_interno(tipo: String) -> void:
@@ -2668,7 +2673,6 @@ func _sortear_penalidade_alvo() -> int:
 	return tabela[randi() % tabela.size()]
 
 
-
 func _remover_alvo(indice: int) -> void:
 	if indice < 0 or indice >= alvos_ativos.size():
 		return
@@ -2796,7 +2800,6 @@ func _desenhar_fx_frontais() -> void:
 		Pincel.lasca(fx_front_overlay, pos2, tam * 0.55, deg_to_rad(rot_deg), cor)
 
 
-
 func _limpar_alvos() -> void:
 	for alvo in alvos_ativos:
 		if alvo != null:
@@ -2875,7 +2878,6 @@ func _finalizar_recarga() -> void:
 	reload_tempo_restante = 0.0
 	balas_no_cartucho = capacidade_cartucho
 	_set_status("", Color.WHITE)
-
 
 
 func _encerrar_jogo() -> void:
@@ -3044,7 +3046,6 @@ func _reiniciar_jogo() -> void:
 	_atualizar_hud()
 
 
-
 func _set_status(texto: String, cor: Color, duracao: float = 1.5) -> void:
 	if texto == "":
 		return
@@ -3059,44 +3060,13 @@ func _set_status(texto: String, cor: Color, duracao: float = 1.5) -> void:
 		status_msgs.pop_front()
 
 
-
 func _tocar_som(stream: AudioStream) -> void:
-	if stream == null:
-		return
-
-	var p: AudioStreamPlayer = AudioStreamPlayer.new()
-	p.bus = "Master"
-	p.stream = stream
-	add_child(p)
-	p.play()
-	p.finished.connect(func() -> void:
-		if is_instance_valid(p):
-			p.queue_free()
-	)
-
-
-func _tocar_musica_fim() -> void:
-	if som_fim == null:
-		return
-
-	_parar_musica_bg()
-
-	if fim_music_player == null:
-		fim_music_player = AudioStreamPlayer.new()
-		fim_music_player.bus = "Master"
-		add_child(fim_music_player)
-
-	if fim_music_player.playing:
-		fim_music_player.stop()
-
-	fim_music_player.stream = som_fim
-	fim_music_player.play()
+	Maquina.efeito(stream)
 
 
 func _parar_musica_fim() -> void:
 	if fim_music_player != null and fim_music_player.playing:
 		fim_music_player.stop()
-
 
 
 func _criar_halo_sol() -> Node2D:
@@ -3250,12 +3220,10 @@ func _executar_recarga_arma() -> void:
 			_iniciar_recarga()
 
 
-
 func _centro_visual_efeito_alvo(alvo: TargetData) -> Vector2:
 	if alvo == null:
 		return Vector2.ZERO
 	return alvo.pos
-
 
 
 func _carregar_config_admin_jogo() -> void:
@@ -3276,7 +3244,6 @@ func _carregar_config_admin_jogo() -> void:
 	get_tree().set_meta("admin_tempo_partida", tempo_partida)
 	get_tree().set_meta("admin_tempo_modal_final", fim_tempo_voltar)
 	get_tree().set_meta("admin_tempo_ranking_nome", ranking_nome_tempo)
-
 
 
 func _carregar_fontes_ui() -> void:

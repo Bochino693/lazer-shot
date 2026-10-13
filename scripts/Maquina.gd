@@ -29,6 +29,17 @@ const CENAS_ABERTURA := [
 ## aparece por uns segundos quando entra ficha ou falta crédito).
 const CENAS_SELO := ["res://scenes/main.tscn"]
 
+## Vídeos tocados pelo decodificador de hardware (scripts/video_nativo.gd).
+const VIDEOS_HARDWARE := [
+	"res://background_video/back_init.mp4",
+	"res://background_video/back_sun.mp4",
+	"res://background_video/back_moon.mp4",
+	"res://background_video/teaser_desert.mp4",
+	"res://background_video/teaser_mar.mp4",
+	"res://background_video/teaser_bar.mp4",
+	"res://background_video/teaser_arena.mp4",
+]
+
 ## Valores padrão (e nomes das chaves no arquivo).
 const PADRAO := {
 	"maquina/modo": "livre",
@@ -128,6 +139,9 @@ func _ready() -> void:
 	_criar_rotulo()
 	aplicar()
 	get_tree().node_added.connect(_ao_entrar_no)
+	# Pré-carga dos vídeos (TV Box): cópia para a memória interna já agora,
+	# numa thread, na ordem em que aparecem.
+	VideoNativo.preparar_copias(VIDEOS_HARDWARE)
 
 
 ## Ajustes de versões antigas do arquivo de configuração.
@@ -375,6 +389,8 @@ func _salvar_logo() -> void:
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_GO_BACK_REQUEST:
 		_voltar_vira_recarga()
+	elif what == NOTIFICATION_PREDELETE:
+		VideoNativo.encerrar_copias()
 
 
 var _ultimo_voltar := 0
@@ -595,6 +611,30 @@ func pulso_vivo() -> Vector2:
 	sint *= sint
 	var peso := 1.0 - clampf(e.x * 6.0, 0.0, 1.0)
 	return Vector2(maxf(e.x, (0.16 + 0.12 * sint) * peso), maxf(e.y, sint * 0.5 * peso))
+
+
+## EFEITOS SONOROS sem criar nó a cada som: um player fixo por efeito, com
+## até 6 vozes ao mesmo tempo (tiros seguidos não se cortam). Antes cada tiro
+## criava um AudioStreamPlayer novo, entrava na árvore e era apagado no fim;
+## numa rajada eram dezenas por segundo.
+var _efeitos: Dictionary = {}
+
+
+func efeito(stream: AudioStream, volume_db: float = 0.0, pitch: float = 1.0, inicio: float = 0.0) -> void:
+	if stream == null:
+		return
+	var p: AudioStreamPlayer = _efeitos.get(stream)
+	if p == null or not is_instance_valid(p):
+		p = AudioStreamPlayer.new()
+		p.name = "Efeito"
+		p.bus = "Efeitos"
+		p.stream = stream
+		p.max_polyphony = 6
+		add_child(p)
+		_efeitos[stream] = p
+	p.volume_db = volume_db
+	p.pitch_scale = pitch
+	p.play(maxf(0.0, inicio))
 
 
 func _bus(nome: String) -> int:

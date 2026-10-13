@@ -37,12 +37,12 @@ var fx_redraw_timer: float = 0.0
 
 @export var caminho_background: String = "res://sprites/atlantis.png"
 @export var tempo_partida: float = 120.0
-@export var som_aguaviva_hit_path: String = "res://songs/buble_hit.mp3"
-@export var som_bomba_xploit_path: String = "res://songs/xploit.mp3"
-@export var som_recharge_path: String = "res://songs/recharge.mp3"
+@export var som_aguaviva_hit_path: String = "res://songs/buble_hit.wav"
+@export var som_bomba_xploit_path: String = "res://songs/xploit.wav"
+@export var som_recharge_path: String = "res://songs/recharge.wav"
 @export var escala_aguaviva_min: float = 0.63
 @export var escala_aguaviva_max: float = 0.81
-@export var som_bullet_no_path: String = "res://songs/bullet_no.mp3"
+@export var som_bullet_no_path: String = "res://songs/bullet_no.wav"
 var som_bullet_no_stream: AudioStream = null
 @export var reducao_spawn_aguaviva: float = 0.5
 @export var reducao_spawn_vaso: float = 0.5
@@ -189,9 +189,9 @@ var mira_desvio_bomba: Vector2 = Vector2.ZERO
 @export var margem_spawn_x: float = 90.0
 @export var overscan_background: float = 1.06
 
-@export var som_tiro_path: String = "res://songs/tiro-de-pistola.mp3"
-@export var som_vaso_hit_path: String = "res://songs/vaso_hit.mp3"
-@export var som_bau_hit_path: String = "res://songs/bau_hit.mp3"
+@export var som_tiro_path: String = "res://songs/tiro-de-pistola.wav"
+@export var som_vaso_hit_path: String = "res://songs/vaso_hit.wav"
+@export var som_bau_hit_path: String = "res://songs/bau_hit.wav"
 @export var som_pirate_path: String = "res://songs/pirate.mp3"
 var ultimo_tiro_ms: int = -1000
 var ultimo_hit_ms: int = -1000
@@ -1804,21 +1804,7 @@ func _tocar_som(
 	pitch_scale: float = 1.0,
 	start_position_seconds: float = 0.0
 ) -> void:
-	if stream == null:
-		return
-
-	var player := AudioStreamPlayer.new()
-	player.bus = "Master"
-	player.stream = stream
-	player.volume_db = volume_db
-	player.pitch_scale = pitch_scale
-	add_child(player)
-	player.play(max(0.0, start_position_seconds))
-
-	player.finished.connect(func() -> void:
-		if is_instance_valid(player):
-			player.queue_free()
-	)
+	Maquina.efeito(stream, volume_db, pitch_scale, start_position_seconds)
 
 func _tocar_som_com_atraso(
 	stream: AudioStream,
