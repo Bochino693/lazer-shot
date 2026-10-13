@@ -72,6 +72,12 @@ func _ready() -> void:
 func tocar() -> void:
 	if modo != "":
 		return
+	if Tela.modo_seguro():
+		# o jogo fechou cedo da última vez: nesta sessão, nenhum vídeo (a tela
+		# fica com o fundo parado de baixo)
+		Tela.marca("vídeo desligado (modo de segurança): " + mp4.get_file())
+		falhou.emit.call_deferred()
+		return
 	if _pode_nativo():
 		_iniciar_nativo()
 	elif not so_hardware or OS.get_name() != "Android":
@@ -133,6 +139,7 @@ func _pode_nativo() -> bool:
 func _iniciar_nativo() -> void:
 	modo = "nativo"
 	_espera = 0.0
+	Tela.marca("vídeo hardware: preparando " + mp4.get_file())
 	_ext = ExternalTexture.new()
 	_ext.size = tamanho
 	var id := _ext.get_external_texture_id()
@@ -195,7 +202,6 @@ func _preparar_player() -> void:
 ## O MediaPlayer precisa de um arquivo de verdade: copia do pacote do jogo
 ## para a memória interna na primeira vez (e quando o vídeo mudar de tamanho).
 static var _trava_copia := Mutex.new()
-static var _fio_copias: Thread = null
 
 
 static func _copia_local(origem: String) -> String:
@@ -229,25 +235,6 @@ static func _copiar(origem: String) -> String:
 	return ProjectSettings.globalize_path(destino)
 
 
-## Pré-carga: copia todos os vídeos para a memória interna numa thread, já no
-## início do jogo, para nenhum vídeo esperar cópia na hora de aparecer.
-static func preparar_copias(lista: Array) -> void:
-	if OS.get_name() != "Android" or _fio_copias != null:
-		return
-	_fio_copias = Thread.new()
-	_fio_copias.start(func() -> void:
-		for origem in lista:
-			if FileAccess.file_exists(origem):
-				_copia_local(origem)
-	, Thread.PRIORITY_LOW)
-
-
-static func encerrar_copias() -> void:
-	if _fio_copias != null and _fio_copias.is_started():
-		_fio_copias.wait_to_finish()
-	_fio_copias = null
-
-
 func _process(delta: float) -> void:
 	if modo != "nativo":
 		return
@@ -265,6 +252,7 @@ func _process(delta: float) -> void:
 	if not _mostrando:
 		_espera += delta
 		if _pronto and int(_st.getTimestamp()) != 0:
+			Tela.marca("vídeo hardware: tocando " + mp4.get_file())
 			_mostrar(_rect)
 		elif _espera > ESPERA_MAX:
 			_falhar("nenhum quadro em %.0f s" % ESPERA_MAX)
@@ -279,6 +267,7 @@ func _excecao() -> bool:
 
 
 func _falhar(motivo: String) -> void:
+	Tela.marca("vídeo hardware falhou (%s): %s" % [mp4.get_file(), motivo])
 	push_warning("VideoNativo: hardware indisponível (%s)" % motivo)
 	_soltar_nativo()
 	modo = ""

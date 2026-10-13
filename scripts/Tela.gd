@@ -33,7 +33,7 @@ var mira_direta := true
 var _janela_px := Vector2.ZERO   # tamanho da janela (HDMI), em pixels
 var _conteudo := BASE            # a tela em pé que os scripts enxergam
 var _escala := 1.0               # pixels do HDMI por pixel do jogo
-var _caixa: CanvasLayer = null   # diagnóstico (scripts/caixa_preta.gd)
+var _caixa: Node = null         # diagnóstico, só grava (scripts/caixa_preta.gd)
 
 
 func _init() -> void:
@@ -47,7 +47,7 @@ func _ready() -> void:
 	mira_direta = _mira_configurada()
 	var janela := get_tree().root
 	_aplicar()
-	add_child(_caixa)   # depois do giro, para o relatório já sair em pé
+	add_child(_caixa)
 	janela.size_changed.connect(_aplicar)
 	janela.window_input.connect(_corrigir_evento)
 
@@ -103,6 +103,11 @@ func _aplicar() -> void:
 func marca(txt: String) -> void:
 	if _caixa != null:
 		_caixa.marca(txt)
+
+
+## O jogo fechou cedo nesta versão: sem abertura e sem vídeos (caixa_preta.gd).
+func modo_seguro() -> bool:
+	return _caixa != null and _caixa.modo_seguro
 
 
 ## Tamanho da tela do jogo (em pé), o mesmo que get_viewport_rect().size.
