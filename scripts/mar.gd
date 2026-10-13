@@ -4842,20 +4842,19 @@ func _acertar_alvo(alvo: Area2D, pos_impacto: Vector2 = Vector2.ZERO) -> void:
 		_flash_tela(Color(1.0, 0.95, 0.70, 0.12))
 		_tremida_rapida(3.5, 2, 0.028)
 
+	# pedaços do próprio alvo, brilhos, anéis e bolhas (antes de trocar a
+	# animação: os pedaços saem do quadro que estava na tela)
+	MarAcerto.criar(self, alvo, impacto, tipo)
 	var duracao_hit_anim: float = _aplicar_animacao_hit(alvo)
 
 	_registrar_fx_agua(impacto)
 
 	match tipo:
 		"aguaviva":
-			for i in range(10):
+			for i in range(4):
 				_registrar_fx_agua(impacto + Vector2(randf_range(-14.0, 14.0), randf_range(-14.0, 14.0)))
 
-		"vaso":
-			_registrar_fx_estilhacos(impacto, "vaso")
-
 		"bau":
-			_registrar_fx_estilhacos(impacto, "bau")
 			_registrar_fx_moedas(impacto)
 
 	var tw: Tween = create_tween()

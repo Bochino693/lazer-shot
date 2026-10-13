@@ -106,25 +106,33 @@ def tirar_peixes(bg_bgr):
 
 
 # ───────────────────────────────────────────── navio recortado
+# Só o navio (mastros, velas, cordas e casco): corta na linha do fundo do
+# casco (sem a areia de baixo) e não pega as rochas e cascatas em volta.
+SO_NAVIO = [(188, 535), (330, 478), (395, 445), (470, 438), (520, 436), (500, 520), (485, 570),
+            (476, 690), (536, 770), (546, 800), (525, 850), (500, 885), (470, 905), (400, 912),
+            (300, 912), (230, 905), (198, 760), (186, 640)]
+
+
 def recortar_navio(orig, bg):
     """Dois recortes do navio (orig/bg em float RGB):
-    - mar_navio.png: só o navio (cordas, mastros, casco), sem o nevoeiro de
-      trás, para cair limpo pela água. Alfa = quanto o pixel é mais escuro que
-      o nevoeiro em volta; cor = o navio "descontado" do nevoeiro.
+    - mar_navio.png: só o navio, com a cor da foto, para cair limpo pela água
+      (sem placa de fundo em volta). Alfa = quanto o pixel é mais escuro que a
+      água atrás dele (o fundo sem navio, borrado); o que é água entre cordas e
+      velas fica transparente.
     - mar_navio_pouso.png: a foto original na caixa do navio (alfa = contorno).
       Quando o navio pousa, a areia sobe e este recorte entra no lugar: o
       cenário volta a ser exatamente a foto."""
     P = poligono(NAVIO, 4)
+    S = ndi.gaussian_filter(poligono(SO_NAVIO, 4), 2.5)
     pe = poligono(PEDRA_ESQ) > 0.5
-    nevoa = np.stack([ndi.gaussian_filter(ndi.grey_closing(orig[..., c], size=(41, 41)), 8) for c in range(3)], -1)
-    lum = orig @ np.array([0.3, 0.59, 0.11], np.float32)
-    lum_n = nevoa @ np.array([0.3, 0.59, 0.11], np.float32)
-    a = np.clip((lum_n - lum - 0.03) / 0.20, 0, 1)
-    a = ndi.gaussian_filter(a, 0.6)
-    # redes e cordas somem aos poucos perto do contorno (sem "placa" de recorte)
-    dentro = ndi.gaussian_filter((P > 0.5).astype(np.float32), 6.0)
-    a = a * np.clip(dentro * 1.8 - 0.6, 0, 1)
-    F = np.clip((orig - (1 - a)[..., None] * nevoa) / np.maximum(a, 0.08)[..., None], 0, 1)
+    L = np.array([0.3, 0.59, 0.11], np.float32)
+    lum = orig @ L
+    agua = ndi.gaussian_filter(bg @ L, 12)
+    claro = ndi.gaussian_filter(ndi.grey_dilation(lum, size=(9, 9)), 6)
+    agua = np.maximum(agua, np.minimum(claro, agua + 0.12))
+    a = np.clip((agua - lum - 0.05) / 0.18, 0, 1)
+    a = ndi.gaussian_filter(a, 0.5) * S
+    F = orig.copy()
     # parte escondida atrás da pedra: continua o casco (só aparece caindo)
     atras = ndi.binary_dilation((P > 0.5) & pe, iterations=2)
     m8 = atras.astype(np.uint8) * 255
@@ -140,7 +148,6 @@ def recortar_navio(orig, bg):
     print("   navio: canto (%d, %d)  tamanho %dx%d" % (x0, y0, x1 - x0, y1 - y0))
 
 
-# ───────────────────────────────────────────── pedras com escritas
 def mascara_pedra(orig, contorno, nome):
     memb = poligono(contorno, 4)
     ys, xs = np.nonzero(memb > 0.01)

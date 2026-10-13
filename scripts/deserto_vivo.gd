@@ -9,10 +9,15 @@ extends Node2D
 ##   fundo (sol / lua)   imagem + shaders/deserto_fundo.gdshader: feixes de
 ##                       energia, cristal, ar quente, onda de luz na batida
 ##   raios               luz em volta do disco girando (egito_raios)
-##   disco               sol com olho masculino (Rá, íris dourada) / lua com
-##                       olho feminino (Hórus, íris branca e cílios), em 2x
-##                       (nítidos em 4K), gravados em relevo; o olho é vivo:
-##                       pisca e a pupila passeia (egito_disco.gdshader)
+##   disco               sol com o Olho de Rá (pupila cheia) / lua com o Olho
+##                       de Hórus (pupila vazada), no traço clássico do
+##                       hieróglifo, pintados em 3x (nítidos em 4K), em
+##                       camadas comuns sem shader: esclera, pupila que
+##                       passeia, pálpebra que desce ao piscar e o disco com o
+##                       hieróglifo gravado por cima (tools/gerar_astros.py)
+##   águias              planando ao fundo em térmicas, batendo as asas de vez
+##                       em quando, inclinando nas curvas, gritando (eco do
+##                       vale); de noite silhuetas, às vezes cruzando a lua
 ##   pontas de ouro      topo das 3 pirâmides: ouro quente ao sol, prateado
 ##                       ao luar, reflexo correndo de uma para outra
 ##   diamante            arco-íris nas arestas de dia, vermelho de noite
@@ -29,31 +34,36 @@ const FUNDO_SOL := preload("res://sprites/deserto_sol.png")
 const FUNDO_LUA := preload("res://sprites/deserto_lua.png")
 const MASCARA_SOL := preload("res://sprites/deserto_sol_mascara.png")
 const MASCARA_LUA := preload("res://sprites/deserto_lua_mascara.png")
-const DISCO_SOL := preload("res://sprites/egito_disco_sol.png")
-const DISCO_LUA := preload("res://sprites/egito_disco_lua.png")
-const OLHO_SOL := preload("res://sprites/egito_olho_sol.png")
-const OLHO_LUA := preload("res://sprites/egito_olho_lua.png")
+# Sol e lua em 3x (tools/gerar_astros.py), camadas comuns sem shader:
+# esclera, íris (anda), pálpebra (desce ao piscar) e o disco por cima.
+const TEX_SOL := [preload("res://sprites/egito_sol_disco.png"), preload("res://sprites/egito_sol_esclera.png"),
+	preload("res://sprites/egito_sol_iris.png"), preload("res://sprites/egito_sol_palpebra.png")]
+const TEX_LUA := [preload("res://sprites/egito_lua_disco.png"), preload("res://sprites/egito_lua_esclera.png"),
+	preload("res://sprites/egito_lua_iris.png"), preload("res://sprites/egito_lua_palpebra.png")]
+const AGUIA := preload("res://sprites/egito_aguia.png")
+const SOM_AGUIA := preload("res://songs/aguia.wav")
+const SOM_AGUIA_NOITE := preload("res://songs/aguia_noite.wav")
 const PONTAS := preload("res://sprites/egito_pontas.png")
 const CRISTAL := preload("res://sprites/egito_cristal_mascara.png")
 const ESTRELA := preload("res://sprites/egito_estrela.png")
 const SHADER_FUNDO := preload("res://shaders/deserto_fundo.gdshader")
 const SHADER_RAIOS := preload("res://shaders/egito_raios.gdshader")
-const SHADER_DISCO := preload("res://shaders/egito_disco.gdshader")
 const SHADER_PONTAS := preload("res://shaders/egito_pontas.gdshader")
 const SHADER_CRISTAL := preload("res://shaders/egito_cristal.gdshader")
 
 # Mesmos números de tools/gerar_egito.py.
-const CENTRO_SOL := Vector2(512, 290)
-const RAIO_SOL := 124.0
-const CENTRO_LUA := Vector2(510, 282)
-const RAIO_LUA := 130.0
+const CENTRO_SOL := Vector2(512, 300)
+const RAIO_SOL := 138.0
+const CENTRO_LUA := Vector2(512, 300)
+const RAIO_LUA := 138.0
 const PONTAS_CAIXA := Rect2(180, 438, 644, 148)
 
-# Olho no disco 2x (UV da textura), de tools/gerar_egito.py: centro da pupila,
-# raio da íris, tamanho de 1 unidade do olho e raio do disco.
-# Sol: olho masculino (olhar intenso); lua: olho feminino (cílios, gatinho).
-const OLHO_RA := {"iris": Vector2(0.5268, 0.4244), "raio": 0.0587, "unidade": 0.2667, "disco": 0.3605}
-const OLHO_HORUS := {"iris": Vector2(0.4718, 0.4432), "raio": 0.0699, "unidade": 0.2797, "disco": 0.3779}
+# Medidas do olho (px da textura 3x, a partir do centro do disco), de
+# tools/gerar_astros.py: centro do olho, 1 unidade (meia largura da abertura),
+# lugar da íris, topo da pálpebra e quanto ela desce para fechar.
+# Sol: Olho de Rá (pupila cheia); lua: Olho de Hórus (pupila vazada).
+const ASTRO_SOL := {"olho": Vector2(84.2, -18.7), "u": 234.0, "iris": Vector2(0.0, -18.7), "palpebra_y": -255.1, "abre": 173.2}
+const ASTRO_LUA := {"olho": Vector2(-84.2, -18.7), "u": 234.0, "iris": Vector2(0.0, -18.7), "palpebra_y": -255.1, "abre": 173.2}
 const CRISTAL_CAIXA := Rect2(440, 620, 136, 340)
 
 const COR_SOL := Color(1.0, 0.78, 0.36)
@@ -63,15 +73,21 @@ const BRILHOS_CRISTAL := [Vector2(506, 634), Vector2(466, 721), Vector2(548, 721
 		Vector2(527, 846), Vector2(505, 893), Vector2(461, 944), Vector2(551, 944)]
 const BRILHOS_PONTAS := [Vector2(229, 520), Vector2(509, 448), Vector2(774, 520)]
 const TEMPO_TROCA := 1.6
+# Águias (tools/gerar_aguias.py): 11 quadros (0 planando, 1..10 batendo asa);
+# voam no céu acima das pirâmides, entre as colunas (px da imagem).
+const AGUIA_QUADROS := 11
+const CEU := Rect2(150, 196, 724, 236)
+const N_AGUIAS := 3
 const N_ESTRELAS_CEU := 18
 
 var _fundo_sol: Sprite2D
 var _fundo_lua: Sprite2D
 var _raios_sol: ColorRect
 var _raios_lua: ColorRect
-var _disco_sol: Sprite2D
-var _disco_lua: Sprite2D
-# olho vivo de cada disco: {mat, unidade, olhar, alvo, prox_olhar, piscar, prox_piscar, fase_piscar, dupla}
+var _disco_sol: Node2D
+var _disco_lua: Node2D
+# olho vivo de cada disco: {disco, iris, palpebra, iris_0, palpebra_0, u, abre,
+# olhar, alvo, prox_olhar, piscar, prox_piscar, fase, dupla}
 var _olhos: Array = []
 var _pontas: Sprite2D
 var _cristal: Sprite2D
@@ -93,6 +109,10 @@ var _cadente_t := -1.0
 var _cadente_em := 6.0
 var _cadente_de := Vector2.ZERO
 var _cadente_para := Vector2.ZERO
+# {no, pos, dir, vel, escala, modo, centro, raio, sentido, alvo, t, t_modo,
+#  vida, bat, fase, inclin, grito, ruido, vento, espera}
+var _aguias: Array = []
+var _grito_espera := 4.0
 
 
 func _init() -> void:
@@ -101,8 +121,9 @@ func _init() -> void:
 	_fundo_lua = _criar_fundo(FUNDO_LUA, MASCARA_LUA, Color(1.0, 0.28, 0.30), 3.7)
 	_raios_sol = _criar_raios(CENTRO_SOL, RAIO_SOL, 3.1, false, COR_SOL)
 	_raios_lua = _criar_raios(CENTRO_LUA, RAIO_LUA, 2.7, true, COR_LUA)
-	_disco_sol = _criar_disco(DISCO_SOL, OLHO_SOL, OLHO_RA, CENTRO_SOL, false, Color(1.0, 0.92, 0.62))
-	_disco_lua = _criar_disco(DISCO_LUA, OLHO_LUA, OLHO_HORUS, CENTRO_LUA, true, Color(0.72, 0.86, 1.0))
+	_disco_sol = _criar_astro(TEX_SOL, ASTRO_SOL, CENTRO_SOL)
+	_disco_lua = _criar_astro(TEX_LUA, ASTRO_LUA, CENTRO_LUA)
+	_criar_aguias()
 
 	_pontas = _sprite_2x(PONTAS, PONTAS_CAIXA.position, SHADER_PONTAS)
 	_cristal = _sprite_2x(CRISTAL, CRISTAL_CAIXA.position, SHADER_CRISTAL)
@@ -184,33 +205,181 @@ func _criar_raios(c: Vector2, r: float, alcance: float, lua: bool, cor: Color) -
 	return q
 
 
-func _criar_disco(tex: Texture2D, mapa_olho: Texture2D, dados: Dictionary, c: Vector2, lua: bool, cor: Color) -> Sprite2D:
-	var s := Sprite2D.new()
-	s.texture = tex
-	s.position = c
-	s.scale = Vector2(0.5, 0.5)    # textura em 2x
-	var mat := ShaderMaterial.new()
-	mat.shader = SHADER_DISCO
-	mat.set_shader_parameter("olho", mapa_olho)
-	mat.set_shader_parameter("lua", lua)
-	mat.set_shader_parameter("cor_luz", Vector3(cor.r, cor.g, cor.b))
-	mat.set_shader_parameter("raio_uv", dados["disco"])
-	mat.set_shader_parameter("iris_c", dados["iris"])
-	mat.set_shader_parameter("iris_r", dados["raio"])
-	if lua:
-		# Hórus: traços de prata escura em relevo, íris branca (prata) na lua;
-		# a íris dourada fica só no sol (Rá)
-		mat.set_shader_parameter("traco_sombra", Vector3(0.04, 0.05, 0.10))
-		mat.set_shader_parameter("traco_luz", Vector3(0.40, 0.48, 0.66))
-		mat.set_shader_parameter("cor_branco", Vector3(0.80, 0.86, 0.95))
-		mat.set_shader_parameter("iris_centro", Vector3(1.0, 1.0, 1.0))
-		mat.set_shader_parameter("iris_borda", Vector3(0.66, 0.74, 0.88))
-		mat.set_shader_parameter("cor_palpebra", Vector3(0.62, 0.68, 0.80))
-	s.material = mat
-	add_child(s)
-	_olhos.append({"mat": mat, "unidade": dados["unidade"], "olhar": Vector2.ZERO, "alvo": Vector2.ZERO,
-		"prox_olhar": randf_range(0.6, 1.5), "piscar": 0.0, "prox_piscar": randf_range(1.5, 3.5), "fase": -1.0, "dupla": false})
-	return s
+func _criar_astro(tex: Array, dados: Dictionary, c: Vector2) -> Node2D:
+	var astro := Node2D.new()
+	astro.position = c
+	astro.scale = Vector2.ONE / 3.0    # texturas em 3x
+	astro.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS   # reduzida sem serrilhar
+	add_child(astro)
+	var olho: Vector2 = dados["olho"]
+	var esclera := Sprite2D.new()
+	esclera.texture = tex[1]
+	esclera.position = olho
+	astro.add_child(esclera)
+	var iris := Sprite2D.new()
+	iris.texture = tex[2]
+	iris.position = olho + dados["iris"]
+	astro.add_child(iris)
+	var palpebra := Sprite2D.new()
+	palpebra.texture = tex[3]
+	palpebra.position = olho + Vector2(0.0, dados["palpebra_y"] + (tex[3] as Texture2D).get_height() * 0.5)
+	astro.add_child(palpebra)
+	var disco := Sprite2D.new()
+	disco.texture = tex[0]
+	astro.add_child(disco)
+	_olhos.append({"disco": disco, "iris": iris, "palpebra": palpebra, "iris_0": iris.position,
+		"palpebra_0": palpebra.position, "u": dados["u"], "abre": dados["abre"],
+		"olhar": Vector2.ZERO, "alvo": Vector2.ZERO, "prox_olhar": randf_range(0.6, 1.5),
+		"piscar": 0.0, "prox_piscar": randf_range(1.5, 3.5), "fase": -1.0, "dupla": false})
+	return astro
+
+
+# ───────────────────────────────────────────── águias
+## Águias planando ao fundo: sobem em térmicas (círculos que o vento leva),
+## planam de uma térmica a outra, batem as asas de vez em quando e inclinam
+## nas curvas. Cada uma tem tamanho (distância), rapidez, raio, vento e
+## turbulência próprios, sorteados de novo a cada volta: nenhum voo se repete.
+## Chegam de longe crescendo e vão embora subindo. Gritam de vez em quando
+## (de noite o grito vem de mais longe). Contra o sol ou a lua viram silhueta.
+func _criar_aguias() -> void:
+	for i in N_AGUIAS:
+		var s := Sprite2D.new()
+		s.texture = AGUIA
+		s.hframes = AGUIA_QUADROS
+		s.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+		s.visible = false
+		add_child(s)
+		_aguias.append({"no": s, "espera": 1.5 + i * randf_range(3.0, 6.0)})
+
+
+func _nova_aguia(a: Dictionary) -> void:
+	var e := randf_range(0.15, 0.33)
+	a["escala"] = e
+	a["vel"] = lerpf(24.0, 46.0, (e - 0.15) / 0.18) * randf_range(0.85, 1.15)
+	a["pos"] = Vector2(randf_range(CEU.position.x + 90.0, CEU.end.x - 90.0), randf_range(CEU.position.y + 30.0, CEU.end.y - 40.0))
+	a["dir"] = randf() * TAU
+	a["t"] = 0.0
+	a["vida"] = randf_range(26.0, 50.0)
+	a["bat"] = randf_range(0.8, 1.6)
+	a["fase"] = randf()
+	a["inclin"] = 0.0
+	a["grito"] = randf_range(3.0, 12.0)
+	a["ruido"] = randf() * 100.0
+	a["vento"] = Vector2(randf_range(-9.0, 9.0), randf_range(-3.0, 2.0))
+	a["modo"] = "termica" if randf() < 0.6 else "plana"
+	_entrar_modo(a)
+	(a["no"] as Sprite2D).visible = true
+
+
+func _entrar_modo(a: Dictionary) -> void:
+	if a["modo"] == "termica":
+		a["raio"] = randf_range(40.0, 105.0) * (a["escala"] / 0.25)
+		a["sentido"] = 1.0 if randf() < 0.5 else -1.0
+		var lado := Vector2.RIGHT.rotated(a["dir"] + PI * 0.5 * a["sentido"])
+		a["centro"] = a["pos"] + lado * a["raio"]
+		a["t_modo"] = randf_range(6.0, 15.0)
+	else:
+		var alvo := Vector2.ZERO
+		for i in 6:
+			alvo = Vector2(randf_range(CEU.position.x + 60.0, CEU.end.x - 60.0), randf_range(CEU.position.y + 20.0, CEU.end.y - 30.0))
+			if _noite > 0.5 and randf() < 0.35:
+				alvo = CENTRO_LUA + Vector2(randf_range(-60.0, 60.0), randf_range(-30.0, 40.0))   # passa na frente da lua
+			if alvo.distance_to(a["pos"]) > 220.0:
+				break
+		a["alvo"] = alvo
+		a["t_modo"] = randf_range(5.0, 11.0)
+		a["bat"] = maxf(a["bat"], randf_range(0.7, 1.6))
+
+
+func _animar_aguias(delta: float) -> void:
+	_grito_espera -= delta
+	for a in _aguias:
+		var s: Sprite2D = a["no"]
+		if a["espera"] > 0.0:
+			a["espera"] -= delta
+			if a["espera"] <= 0.0:
+				_nova_aguia(a)
+			continue
+		a["t"] += delta
+		a["t_modo"] -= delta
+		var t: float = a["t"]
+		var v: float = a["vel"]
+		var giro := 0.0
+		if a["modo"] == "termica":
+			a["centro"] += a["vento"] * delta
+			var para_centro: Vector2 = a["centro"] - a["pos"]
+			var r := maxf(para_centro.length(), 0.01)
+			var tang := para_centro.rotated(-PI * 0.5 * a["sentido"]) / r
+			var desejo := (tang + para_centro / r * clampf((r - a["raio"]) / a["raio"], -1.0, 1.0) * 0.8).angle()
+			giro = angle_difference(a["dir"], desejo) * 1.8
+			v *= 0.9
+			# a térmica saiu do céu: plana de volta
+			if not CEU.has_point(a["centro"]):
+				a["t_modo"] = 0.0
+		else:
+			var desejo2: float = (a["alvo"] - a["pos"]).angle()
+			giro = angle_difference(a["dir"], desejo2) * 0.9
+			v *= 1.15
+			if (a["pos"] as Vector2).distance_to(a["alvo"]) < 50.0:
+				a["t_modo"] = 0.0
+		if a["t_modo"] <= 0.0:
+			a["modo"] = "plana" if a["modo"] == "termica" else "termica"
+			_entrar_modo(a)
+		# turbulência suave (cada águia com a sua)
+		var rr: float = a["ruido"]
+		giro += sin(t * 0.73 + rr) * 0.11 + sin(t * 1.91 + rr * 2.3) * 0.05
+		giro = clampf(giro, -0.95, 0.95)
+		a["dir"] += giro * delta
+		a["inclin"] = lerpf(a["inclin"], giro * 0.6, 1.0 - exp(-delta * 2.5))
+		a["pos"] += Vector2.RIGHT.rotated(a["dir"]) * v * delta + Vector2(0.0, sin(t * 1.3 + rr) * 3.0 * delta)
+
+		# asas: batidas de vez em quando, senão planando
+		if a["bat"] > 0.0:
+			a["bat"] -= delta
+			a["fase"] += delta * 2.3
+			s.frame = 1 + int(a["fase"] * 10.0) % 10
+		else:
+			s.frame = 0
+			if randf() < delta * 0.06:
+				a["bat"] = randf_range(0.7, 1.5)
+
+		# chega de longe e vai embora subindo (fica menor)
+		var chega := clampf(t / 2.8, 0.0, 1.0)
+		var vai := clampf((a["vida"] - t) / 3.0, 0.0, 1.0)
+		var perto := chega * chega * (3.0 - 2.0 * chega) * vai
+		if t > a["vida"]:
+			s.visible = false
+			a["espera"] = randf_range(2.0, 9.0)
+			continue
+		var esc: float = a["escala"] * (0.25 + 0.75 * perto)
+		var inc: float = a["inclin"]
+		s.position = a["pos"]
+		s.rotation = a["dir"] + PI * 0.5
+		s.scale = Vector2(esc * (1.0 - 0.35 * absf(inc)), esc)
+		s.skew = inc * 0.45
+
+		# luz: contra o sol/a lua vira silhueta; longe some na névoa do céu
+		var astro := CENTRO_SOL.lerp(CENTRO_LUA, _noite)
+		var raio_astro := lerpf(RAIO_SOL, RAIO_LUA, _noite)
+		var contra := clampf(1.0 - ((a["pos"] as Vector2).distance_to(astro) - raio_astro * 0.9) / (raio_astro * 0.6), 0.0, 1.0)
+		var dia := Color(1.0, 0.93, 0.84).lerp(Color(0.16, 0.10, 0.06), contra)
+		var noite := Color(0.24, 0.28, 0.40).lerp(Color(0.03, 0.04, 0.08), contra)
+		var cor := dia.lerp(noite, _noite)
+		var nevoa: float = (1.0 - (a["escala"] - 0.15) / 0.18) * 0.35 * (1.0 - contra)
+		cor = cor.lerp(Color(1.0, 0.78, 0.48).lerp(Color(0.22, 0.30, 0.48), _noite), nevoa)
+		cor.a = perto
+		s.modulate = cor
+
+		# grito (um de cada vez, de tempos em tempos)
+		a["grito"] -= delta
+		if a["grito"] <= 0.0 and perto > 0.95:
+			a["grito"] = randf_range(9.0, 22.0)
+			if _grito_espera <= 0.0 and is_visible_in_tree():
+				_grito_espera = 6.0
+				var forca: float = (a["escala"] - 0.15) / 0.18
+				var noite_som := _noite > 0.5
+				Maquina.efeito(SOM_AGUIA_NOITE if noite_som else SOM_AGUIA,
+					lerpf(-17.0, -8.0, forca) - (2.0 if noite_som else 0.0), randf_range(0.92, 1.08))
 
 
 func _sprite_2x(tex: Texture2D, canto: Vector2, shader: Shader) -> Sprite2D:
@@ -359,12 +528,16 @@ func _process(delta: float) -> void:
 			mf.set_shader_parameter("grave", som.x)
 			mf.set_shader_parameter("batida", som.y)
 			mf.set_shader_parameter("onda", _onda)
-	for no: CanvasItem in [_raios_sol, _raios_lua, _disco_sol, _disco_lua]:
+	for no: CanvasItem in [_raios_sol, _raios_lua]:
 		if no.visible:
 			var m := no.material as ShaderMaterial
 			m.set_shader_parameter("grave", som.x)
 			m.set_shader_parameter("batida", som.y)
 			m.set_shader_parameter("pisco", _pisco)
+	# o astro clareia no "pisco" e com a batida (só a cor, sem shader)
+	var luz := 1.0 + 0.30 * _pisco + 0.06 * som.y
+	for o in _olhos:
+		(o["disco"] as Sprite2D).self_modulate = Color(luz, luz, luz, 1.0)
 	for no: CanvasItem in [_pontas, _cristal]:
 		var m2 := no.material as ShaderMaterial
 		m2.set_shader_parameter("grave", som.x)
@@ -372,6 +545,7 @@ func _process(delta: float) -> void:
 	_faiscas.speed_scale = 1.0 + som.y * 1.3
 
 	_animar_olhos(delta)
+	_animar_aguias(delta)
 	_animar_brilhos(delta)
 	if _noite > 0.01:
 		_animar_ceu(delta)
@@ -385,12 +559,12 @@ func _animar_olhos(delta: float) -> void:
 		var visivel: bool = (_disco_sol if i == 0 else _disco_lua).visible
 		if not visivel:
 			continue
-		var u: float = o["unidade"]
+		var u: float = o["u"]
 		o["prox_olhar"] -= delta
 		if o["prox_olhar"] <= 0.0:
 			o["prox_olhar"] = randf_range(0.7, 2.2)
-			var escolhas := [Vector2(0, 0), Vector2(-0.30, 0.0), Vector2(0.30, 0.0), Vector2(-0.22, -0.05),
-				Vector2(0.22, -0.05), Vector2(-0.18, 0.05), Vector2(0.18, 0.05), Vector2(0.0, -0.05)]
+			var escolhas := [Vector2(0, 0), Vector2(-0.30, 0.0), Vector2(0.30, 0.0), Vector2(-0.22, -0.04),
+				Vector2(0.22, -0.04), Vector2(-0.18, 0.04), Vector2(0.18, 0.04), Vector2(0.0, -0.04)]
 			o["alvo"] = escolhas[randi() % escolhas.size()] * u
 		var olhar: Vector2 = o["olhar"]
 		olhar = olhar.lerp(o["alvo"], 1.0 - exp(-delta * 18.0))
@@ -421,9 +595,9 @@ func _animar_olhos(delta: float) -> void:
 					o["dupla"] = false
 					o["prox_piscar"] = randf_range(2.5, 5.5)
 		o["piscar"] = p
-		var mat: ShaderMaterial = o["mat"]
-		mat.set_shader_parameter("olhar", olhar)
-		mat.set_shader_parameter("piscar", p * p * (3.0 - 2.0 * p))
+		(o["iris"] as Sprite2D).position = o["iris_0"] + olhar
+		var fecha: float = p * p * (3.0 - 2.0 * p)
+		(o["palpebra"] as Sprite2D).position = o["palpebra_0"] + Vector2(0.0, fecha * (o["abre"] + 0.03 * u))
 
 
 func _animar_brilhos(delta: float) -> void:

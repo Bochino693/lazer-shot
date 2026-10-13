@@ -477,6 +477,70 @@ do Godot saiu e a tela de splash do Godot continua desligada. Tudo gerado por
 condições: igual (os efeitos do navio só existem na queda). A abertura usa
 desenho simples e partículas curtas.
 
+## Rodada 10: Olho de Rá e de Hórus nítidos, águias, efeitos de acerto e navio limpo
+
+**Egito: sol e lua refeitos, sem shader no olho.** Arte nova pintada em 3x
+(`tools/gerar_astros.py`), nítida em 1080p e 4K, com o disco 11% maior:
+- **Sol = Olho de Rá** (pupila cheia) e **lua = Olho de Hórus** (pupila
+  vazada), no traço clássico do hieróglifo e espelhados entre si:
+  sobrancelha em barra, pálpebra de cima grossa que segue reta para o lado,
+  lágrima reta e espiral embaixo. O traço é esmalte escuro com brilho na
+  borda e sombra, gravado no astro.
+- O sol é plasma dourado com grânulos e coroa; a lua, prata com mares e
+  crateras em relevo.
+- Continua vivo, mas sem efeito de shader: são camadas comuns (branco do olho,
+  pupila que passeia, pálpebra que desce ao piscar e o disco por cima). O
+  disco só clareia no "pisco" e na batida da música.
+- O sol e a lua novos também foram pintados nos fundos (o menu já mostra).
+
+**Egito: águias ao fundo** (`tools/gerar_aguias.py`, `scripts/deserto_vivo.gd`):
+- Três águias vistas de baixo, com as penas da ponta das asas abertas. Sobem
+  em térmicas (círculos que o vento leva), planam de uma para outra, batem as
+  asas de vez em quando e inclinam nas curvas. Tamanho, rapidez, raio, vento e
+  turbulência são sorteados a cada voo: nenhum se repete.
+- Chegam de longe crescendo e vão embora subindo. Contra o sol ou a lua viram
+  silhueta; de noite são silhuetas e às vezes cruzam a lua.
+- Grito da águia com eco do vale (`songs/aguia.wav`); de noite vem de mais
+  longe (`songs/aguia_noite.wav`). Um grito de cada vez, a cada 9 a 22 s.
+
+**Egito: acertos e dificuldade.**
+- Acertar sol ou lua solta efeito (`scripts/egito_acerto.gd`), além da troca
+  do sprite. No sol: clarão quente, leque de raios de luz, anéis dourados,
+  estilhaços do próprio medalhão e brasas. Na lua: clarão frio, anéis
+  prateados, arcos de luar e pó de estrelas. Acertar o astro errado deixa o
+  anel vermelho.
+- Mais difícil: o artefato encolhe rápido no começo e passa a maior parte do
+  tempo pequeno; o tamanho mínimo caiu de 0,33 para 0,27 e a área de acerto
+  mínima de 34 para 28 px.
+
+**Mar.**
+- **Navio sem a borda:** o recorte agora é só o navio (o fundo entre cordas e
+  velas fica transparente, sem a placa de névoa em volta), com a cor da foto
+  (sem tinta azul e sem shader).
+- **O mar cedendo:** na descida, redemoinhos claros sobem pelo casco e bolhas
+  saem das vergas e do fundo; tábuas do fundo do casco se soltam e ficam para
+  trás. Na batida: colunas de areia e água jogadas para cima, jatos nas pontas
+  do casco, grãos de areia, 14 tábuas do fundo voando, farpas e bolhas, tudo
+  atrás das pedras da frente.
+- **Alvos com efeito próprio** (`scripts/mar_acerto.gd`), por cima da animação
+  de acerto. Água-viva: o sino se desfaz em pedaços de geleia, com brilhos
+  piscando, anéis na água, tentáculos afundando e bolhas. Vaso: cacos da
+  própria imagem voando e afundando, pó de barro, grãos e brilhos verdes. Baú:
+  tábuas voando, estrelas de ouro, anel dourado e as moedas.
+
+**Bar: tiro que erra** (`scripts/bar_tiro.gd`, `tools/gerar_bar.py`):
+- Na estante: lascas recortadas da própria madeira pulam para a frente,
+  giram e caem, com cavacos e pó.
+- No cartaz JOY-BOY do barril: pedaços do próprio cartaz caem planando e
+  virando como papel, com fiapos brancos. Na madeira do barril, lascas.
+- O furo que fica tem profundidade: madeira crua lascada no sentido do veio,
+  buraco escuro com fundo e borda clara embaixo; no cartaz, papel rasgado com
+  a madeira do barril aparecendo e uma aba dobrada.
+
+**Custo.** Os efeitos de acerto/erro ficam limitados (5 no Bar, 4 no Mar e no
+Egito ao mesmo tempo) para a rajada não pesar. O shader do disco do Egito e o
+do navio saíram.
+
 ## Para testar no PC como se fosse a TV Box
 
 ```

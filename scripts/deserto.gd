@@ -105,7 +105,7 @@ var fim_tempo_voltar: float = 17.0
 
 @export var preview_scale: float = 0.52
 @export var alvo_scale_base: float = 0.66
-@export var alvo_scale_min: float = 0.33
+@export var alvo_scale_min: float = 0.27
 
 @export var faixa_spawn_topo: float = 330.0
 @export var faixa_spawn_base_margem: float = 180.0
@@ -2033,7 +2033,9 @@ func _atualizar_alvos(delta: float) -> void:
 		alvo.vel = vel
 
 		var progresso: float = clamp(alvo.idade / max(alvo.vida, 0.01), 0.0, 1.0)
-		alvo.raio = lerp(alvo.raio_inicial, alvo.raio_final, progresso)
+		# encolhe rápido no começo e passa a maior parte da vida pequeno
+		var encolhe: float = 1.0 - pow(1.0 - progresso, 2.4)
+		alvo.raio = lerp(alvo.raio_inicial, alvo.raio_final, encolhe)
 
 		# ============== ESCALA DO BRASÃO ==============
 		# Comportamento normal: começa em alvo_scale_base e encolhe pra alvo_scale_min.
@@ -2045,7 +2047,7 @@ func _atualizar_alvos(delta: float) -> void:
 			var prog_cresc: float = clamp(tempo_apos_swap / duracao_crescimento, 0.0, 1.0)
 			escala_atual = lerp(alvo.swap_escala_inicio, alvo_scale_base, prog_cresc)
 		else:
-			escala_atual = lerp(alvo_scale_base, alvo_scale_min, progresso)
+			escala_atual = lerp(alvo_scale_base, alvo_scale_min, encolhe)
 		alvo.node.scale = Vector2.ONE * escala_atual
 		# ==============================================
 
@@ -2089,7 +2091,7 @@ func _raio_colisao_alvo(alvo: TargetData) -> float:
 	else:
 		raio_sprite = 64.0
 
-	return max(34.0, raio_sprite * escala)
+	return max(28.0, raio_sprite * escala)
 
 
 func _resolver_colisoes_entre_alvos() -> void:
@@ -2525,42 +2527,6 @@ func _atualizar_marcas_tiro_errado(delta: float) -> void:
 			marcas_tiro_errado.remove_at(i)
 
 
-func _registrar_fx_cacos(pos: Vector2, tipo: String) -> void:
-	var qtd: int = 22 if tipo == MODO_SOL else 18
-
-	for i in range(qtd):
-		var ang: float = randf_range(-PI, PI)
-		var vel: Vector2 = Vector2.RIGHT.rotated(ang) * randf_range(120.0, 340.0)
-		vel.y -= randf_range(40.0, 180.0)
-
-		var cor: Color = Color.WHITE
-		if tipo == MODO_SOL:
-			cor = Color(
-				randf_range(0.95, 1.00),
-				randf_range(0.70, 0.88),
-				randf_range(0.18, 0.30),
-				1.0
-			)
-		else:
-			cor = Color(
-				randf_range(0.88, 1.00),
-				randf_range(0.92, 1.00),
-				randf_range(0.96, 1.00),
-				1.0
-			)
-
-		fx_cacos.append({
-			"pos": pos + Vector2(randf_range(-8.0, 8.0), randf_range(-8.0, 8.0)),
-			"vel": vel,
-			"idade": 0.0,
-			"vida": randf_range(0.28, 0.62),
-			"rot": randf_range(-180.0, 180.0),
-			"rot_vel": randf_range(-540.0, 540.0),
-			"tam": Vector2(randf_range(5.0, 16.0), randf_range(2.0, 8.0)),
-			"cor": cor
-		})
-
-
 func _atualizar_fx_cacos(delta: float) -> void:
 	for i in range(fx_cacos.size() - 1, -1, -1):
 		var fx: Dictionary = fx_cacos[i]
@@ -2636,7 +2602,8 @@ func _explodir_alvo_visual(alvo: TargetData) -> void:
 	if alvo == null or alvo.node == null or not is_instance_valid(alvo.node):
 		return
 
-	_registrar_fx_cacos(alvo.node.global_position, alvo.tipo)
+	# clarão, raios/arcos de luz, anéis e estilhaços do próprio artefato
+	EgitoAcerto.criar(self, alvo.node, alvo.tipo, alvo.tipo == modo_atual)
 
 	if alvo.halo != null and is_instance_valid(alvo.halo):
 		alvo.halo.queue_free()

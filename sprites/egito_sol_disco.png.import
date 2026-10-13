@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://jub2bwuy5psi"
-path="res://.godot/imported/egito_disco_sol.png-d7233f0d6386d863bb06e896ec9e3a56.ctex"
+uid="uid://dkg8v5vh5n5hg"
+path="res://.godot/imported/egito_sol_disco.png-16c60f0ea2dae07b000a4c9a39206ae4.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://sprites/egito_disco_sol.png"
-dest_files=["res://.godot/imported/egito_disco_sol.png-d7233f0d6386d863bb06e896ec9e3a56.ctex"]
+source_file="res://sprites/egito_sol_disco.png"
+dest_files=["res://.godot/imported/egito_sol_disco.png-16c60f0ea2dae07b000a4c9a39206ae4.ctex"]
 
 [params]
 
@@ -23,7 +23,7 @@ compress/rdo_quality_loss=0.0
 compress/hdr_compression=1
 compress/normal_map=0
 compress/channel_pack=0
-mipmaps/generate=false
+mipmaps/generate=true
 mipmaps/limit=-1
 roughness/mode=0
 roughness/src_normal=""

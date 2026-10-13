@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://b6pewavvcx0d3"
-path="res://.godot/imported/egito_disco_lua.png-c723caaafa1fbd1ebaa9454723e5ec7d.ctex"
+uid="uid://cm288bxgf5h33"
+path="res://.godot/imported/egito_lua_palpebra.png-99a5b099c94427b18460713e9733ec5f.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://sprites/egito_disco_lua.png"
-dest_files=["res://.godot/imported/egito_disco_lua.png-c723caaafa1fbd1ebaa9454723e5ec7d.ctex"]
+source_file="res://sprites/egito_lua_palpebra.png"
+dest_files=["res://.godot/imported/egito_lua_palpebra.png-99a5b099c94427b18460713e9733ec5f.ctex"]
 
 [params]
 
@@ -23,7 +23,7 @@ compress/rdo_quality_loss=0.0
 compress/hdr_compression=1
 compress/normal_map=0
 compress/channel_pack=0
-mipmaps/generate=false
+mipmaps/generate=true
 mipmaps/limit=-1
 roughness/mode=0
 roughness/src_normal=""
