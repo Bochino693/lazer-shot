@@ -13,6 +13,9 @@ Parte de sprites/atlantis.png (a foto do menu, que não muda) e gera:
   sprites/mar_pedra_dir_mascara.png  uma: R=runas G=altura (0 topo, 1 base)
                                      B=pedra A=halo das runas
   sprites/mar_peixe.png              peixinho dos cardumes (silhueta)
+  sprites/mar_bolha.png, mar_lodo.png, mar_farpa.png
+                                     bolha de verdade, nuvem de lodo e farpa de
+                                     madeira (água em volta do navio)
   songs/baleia.wav                   canto de baleia ao longe
   songs/navio_desce.wav              água correndo, madeira rangendo, bolhas
   songs/navio_impacto.wav            batida surda no fundo + areia + bolhas
@@ -35,6 +38,7 @@ RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SP = os.path.join(RAIZ, "sprites")
 SONGS = os.path.join(RAIZ, "songs")
 rng = np.random.default_rng(11)
+rng_agua = np.random.default_rng(23)   # só para bolha/lodo/pontos (não mexe nos outros sorteios)
 W, H = 1024, 1536
 
 # Contornos em px de atlantis.png (mesmos números em scripts/mar_vida.gd).
@@ -318,6 +322,72 @@ def som_pedra():
     return reverb(s, 0.6, 0.18, 0.25)
 
 
+# ───────────────────────────────────────────── água em volta do navio
+def bolha():
+    """Bolha de verdade: quase transparente, aro claro, reflexo no alto."""
+    N = 64
+    yy, xx = (np.mgrid[0:N, 0:N] + 0.5 - N / 2) / (N / 2)
+    r = np.hypot(xx, yy)
+    aro = np.exp(-((r - 0.86) / 0.07) ** 2)
+    dentro = np.clip(1 - r, 0, 1) ** 2 * 0.18
+    reflexo = np.exp(-(((xx + 0.32) / 0.22) ** 2 + ((yy + 0.38) / 0.13) ** 2))
+    fundo_claro = np.exp(-(((xx - 0.2) / 0.35) ** 2 + ((yy - 0.45) / 0.18) ** 2)) * 0.35
+    a = np.clip(aro * 0.85 + dentro + reflexo + fundo_claro, 0, 1) * (r < 1.0)
+    cor = np.dstack([0.85 + 0.15 * reflexo, 0.95 + 0.05 * reflexo, np.ones_like(a)])
+    gravar_img(np.dstack([cor, a]), "mar_bolha.png", "RGBA")
+
+
+def lodo():
+    """Nuvem de lodo/areia: ruído em várias escalas dentro de um borrão redondo."""
+    N = 128
+    ruido = np.zeros((N, N))
+    for esc, peso in [(4, 0.5), (8, 0.3), (16, 0.2)]:
+        base = rng_agua.random((esc, esc))
+        ruido += peso * np.asarray(Image.fromarray((base * 255).astype(np.uint8)).resize((N, N), Image.BICUBIC)).astype(np.float32) / 255
+    yy, xx = (np.mgrid[0:N, 0:N] + 0.5 - N / 2) / (N / 2)
+    r = np.hypot(xx, yy)
+    borrao = np.clip(1 - r, 0, 1) ** 1.6
+    a = np.clip((ruido - 0.25) * 1.6, 0, 1) * borrao
+    a = ndi.gaussian_filter(a, 2.0)
+    a = a / max(a.max(), 1e-3)
+    cor = np.dstack([0.78 + 0.22 * ruido, 0.84 + 0.16 * ruido, 0.86 + 0.14 * ruido])
+    gravar_img(np.dstack([np.clip(cor, 0, 1), a]), "mar_lodo.png", "RGBA")
+
+
+def farpa():
+    """Farpa de madeira molhada: tira com veios e pontas lascadas."""
+    W_, H_ = 48, 12
+    S = 4
+    im = Image.new("L", (W_ * S, H_ * S), 0)
+    d = ImageDraw.Draw(im)
+    d.polygon([(0, H_ * S * 0.55), (W_ * S * 0.12, H_ * S * 0.1), (W_ * S * 0.85, 0), (W_ * S, H_ * S * 0.35),
+               (W_ * S * 0.92, H_ * S * 0.9), (W_ * S * 0.2, H_ * S), (W_ * S * 0.05, H_ * S * 0.8)], fill=255)
+    a = np.asarray(im.resize((W_, H_), Image.LANCZOS)).astype(np.float32) / 255
+    yy = np.linspace(0, 1, H_)[:, None] * np.ones((1, W_))
+    xx = np.ones((H_, 1)) * np.linspace(0, 1, W_)[None, :]
+    veio = 0.5 + 0.5 * np.sin(yy * 22 + xx * 3)
+    # madeira encharcada e desbotada pela água (o azul vem do tom da partícula):
+    # clara em cima, onde pega a luz que desce, escura embaixo
+    base = np.array([0.62, 0.56, 0.48])
+    luz = 1.15 - 0.55 * yy
+    cor = base[None, None, :] * ((0.78 + 0.22 * veio) * luz)[..., None]
+    # pontas mais finas e meio translúcidas (lascas, não palitos)
+    ponta = np.clip(np.minimum(xx, 1 - xx) / 0.18, 0, 1)
+    gravar_img(np.dstack([np.clip(cor, 0, 1), a * (0.45 + 0.55 * ponta) * 0.9]), "mar_farpa.png", "RGBA")
+
+
+def pontos_navio():
+    """Pontos no alto do casco, mastros e vergas (px do recorte), de onde sai o
+    rastro de bolhas quando o navio afunda."""
+    im = np.asarray(Image.open(os.path.join(SP, "mar_navio.png")).convert("RGBA")).astype(np.float32) / 255
+    a = im[..., 3]
+    borda = (a > 0.55) & (np.roll(a, 4, axis=0) < 0.25)
+    ys, xs = np.nonzero(borda)
+    ordem = rng_agua.permutation(len(xs))[:48]
+    pts = sorted(zip(xs[ordem], ys[ordem]))
+    print("   pontos do navio: " + ", ".join("Vector2(%d, %d)" % (x, y) for x, y in pts))
+
+
 def main():
     orig_bgr = cv2.imread(os.path.join(SP, "atlantis.png"))
     bg_bgr = tirar_peixes(fundo_sem_navio(orig_bgr))
@@ -328,6 +398,10 @@ def main():
     mascara_pedra(orig, PEDRA_ESQ, "mar_pedra_esq_mascara.png")
     mascara_pedra(orig, PEDRA_DIR, "mar_pedra_dir_mascara.png")
     peixe()
+    bolha()
+    lodo()
+    farpa()
+    pontos_navio()
     gravar_wav(som_baleia(), "baleia.wav", 0.7)
     gravar_wav(som_navio_desce(), "navio_desce.wav", 0.7)
     gravar_wav(som_navio_impacto(), "navio_impacto.wav", 0.85)

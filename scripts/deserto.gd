@@ -28,6 +28,7 @@ class TargetData:
 	var ja_trocou: bool = false
 	var flash_troca_t: float = 0.0
 	var tempo_sem_se_mover: float = 0.0
+	var guinada_t: float = 1.0          # até a próxima guinada (muda de rumo de repente)
 	var swap_idade: float = -1.0       # idade no momento da troca (-1 = nunca trocou)
 	var swap_escala_inicio: float = 1.0  # escala no momento da troca
 
@@ -87,14 +88,14 @@ var fim_tempo_voltar: float = 17.0
 @export_file("*.tscn") var cena_main_menu: String = "res://scenes/main.tscn"
 
 
-# Ritmo pensado para arma de luz numa TV: poucos alvos na tela, velocidade
-# que dá para acompanhar com a mira e troca de brasão que dá para perceber.
-@export var chance_troca_brasao_base: float = 0.15
-@export var chance_troca_brasao_max: float = 0.45
-@export var velocidade_minima_alvo: float = 70.0
+# Ritmo: sol e lua rápidos e com guinadas de rumo (fazer pontos exige mira),
+# brasão que troca mais vezes e dificuldade que sobe cedo.
+@export var chance_troca_brasao_base: float = 0.25
+@export var chance_troca_brasao_max: float = 0.55
+@export var velocidade_minima_alvo: float = 140.0
 @export var intervalo_spawn_continuo_min: float = 0.45
-@export var velocidade_alvo_min: float = 120.0
-@export var velocidade_alvo_max: float = 185.0
+@export var velocidade_alvo_min: float = 215.0
+@export var velocidade_alvo_max: float = 330.0
 
 @export var tempo_partida: float = 120.0
 @export var tempo_troca_modo: float = 30.0
@@ -407,10 +408,10 @@ func _process(delta: float) -> void:
 		tempo_fase += delta
 		tempo_total_partida += delta
 
-		if pontuacao_total < 1500:
+		if pontuacao_total < 800:
 			nivel_dificuldade = 1.0
 		else:
-			nivel_dificuldade = 1.0 + floor((pontuacao_total - 1500) / 600.0) * 0.55
+			nivel_dificuldade = 1.0 + floor((pontuacao_total - 800) / 450.0) * 0.55
 			nivel_dificuldade = min(nivel_dificuldade, 5.2)
 
 		if tempo_fase >= tempo_troca_modo:
@@ -1975,6 +1976,11 @@ func _atualizar_alvos(delta: float) -> void:
 			continue
 		var pos: Vector2 = alvo.pos
 		var vel: Vector2 = alvo.vel
+		# guinada: de tempos em tempos o alvo muda de rumo de repente
+		alvo.guinada_t -= delta
+		if alvo.guinada_t <= 0.0:
+			alvo.guinada_t = randf_range(0.55, 1.3) / sqrt(nivel_dificuldade)
+			vel = vel.rotated(deg_to_rad(randf_range(35.0, 85.0)) * (1.0 if randf() < 0.5 else -1.0))
 		var raio_col: float = _raio_colisao_alvo(alvo)
 		# BORDAS: invertem com pequena guinada aleatória pra não cair em loop
 		if pos.x < raio_col:
@@ -2271,8 +2277,8 @@ func _spawn_alvo_interno(tipo: String) -> void:
 
 	# só a direção vem do lado de entrada; a rapidez é a do ritmo atual
 	var rapidez: float = randf_range(velocidade_alvo_min, velocidade_alvo_max)
-	rapidez *= 1.0 + (nivel_dificuldade - 1.0) * 0.12
-	if pontuacao_total >= 1500:
+	rapidez *= 1.0 + (nivel_dificuldade - 1.0) * 0.15
+	if pontuacao_total >= 800:
 		rapidez *= 1.10
 	vel = vel.normalized() * rapidez
 
@@ -2285,18 +2291,19 @@ func _spawn_alvo_interno(tipo: String) -> void:
 	alvo.idade = 0.0
 
 	# tempo de tela suficiente para mirar; encurta um pouco com o nível
-	alvo.vida = max(2.4, randf_range(3.6, 4.6) - (nivel_dificuldade - 1.0) * 0.2)
+	alvo.vida = max(2.0, randf_range(2.8, 3.6) - (nivel_dificuldade - 1.0) * 0.2)
+	alvo.guinada_t = randf_range(0.5, 1.1)
 
 	alvo.raio_inicial = randf_range(42.0, 52.0)
 	alvo.raio_final = max(24.0, alvo.raio_inicial - randf_range(8.0, 12.0))
 	alvo.raio = alvo.raio_inicial
 
 	if tipo == MODO_SOL:
-		alvo.raio_colisao_base = 46.0
-		alvo.raio_miolo_base = 26.0
-	else:
-		alvo.raio_colisao_base = 44.0
+		alvo.raio_colisao_base = 42.0
 		alvo.raio_miolo_base = 24.0
+	else:
+		alvo.raio_colisao_base = 40.0
+		alvo.raio_miolo_base = 22.0
 
 	alvo.seed = randf_range(0.0, 1000.0)
 	alvo.movimento = randi() % 5
@@ -2440,7 +2447,7 @@ func _trocar_tipo_alvo(alvo: TargetData) -> void:
 	alvo.flash_troca_t = 0.45
 
 	if novo_tipo == MODO_SOL:
-		alvo.raio_colisao_base = 46.0
+		alvo.raio_colisao_base = 42.0
 		alvo.raio_miolo_base = 26.0
 		alvo.halo = _criar_halo_sol()
 		target_root.add_child(alvo.halo)
@@ -2454,7 +2461,7 @@ func _trocar_tipo_alvo(alvo: TargetData) -> void:
 		alvo.brilho_frente.global_position = pos_atual
 		alvo.brilho_frente.z_index = z_atual + 2
 	else:
-		alvo.raio_colisao_base = 44.0
+		alvo.raio_colisao_base = 40.0
 		alvo.raio_miolo_base = 24.0
 		alvo.brilho = _criar_brilho_lua()
 		target_root.add_child(alvo.brilho)

@@ -31,23 +31,38 @@ void fragment() {
 	if (r < 1.0) {
 		float queda = smoothstep(1.0, rd, r);
 		queda *= queda;
+		// ondas de luz correndo para fora pelos raios
+		float corre = 0.6 + 0.4 * sin(fora * 26.0 - t * 4.2);
 		if (!lua) {
-			float r1 = 0.5 + 0.5 * sin(a * 9.0 + t * 0.32 + 1.3 * sin(a * 3.0 - t * 0.21));
-			float r2 = 0.5 + 0.5 * sin(a * 15.0 - t * 0.24 + 1.7);
+			// dois leques girando em sentidos opostos (bem visível: ~14 e ~9 graus/s)
+			float a1 = a + t * 0.24;
+			float a2 = a - t * 0.16;
+			float r1 = 0.5 + 0.5 * sin(a1 * 9.0 + 1.3 * sin(a1 * 3.0 + t * 0.7));
+			float r2 = 0.5 + 0.5 * sin(a2 * 14.0 + 1.7);
 			r1 = r1 * r1 * r1; r1 *= r1;
 			r2 = r2 * r2 * r2; r2 *= r2; r2 *= r2;
-			float raios = (r1 * 0.75 + r2 * 0.55) * queda * (0.75 + 0.5 * grave);
-			float coroa = exp(-fora * 7.5) * (0.55 + 0.18 * sin(t * 1.4) + 0.45 * grave + 0.35 * batida);
-			float chama = exp(-fora * 22.0) * (0.5 + 0.5 * sin(a * 23.0 + t * 2.1 + sin(a * 7.0 - t * 1.3) * 2.0));
-			luz = raios * 0.65 + coroa * 0.55 + chama * 0.35;
+			// raios que crescem e encolhem
+			float alcance = 0.82 + 0.18 * sin(t * 1.9 + a1 * 5.0);
+			float q = smoothstep(alcance, rd, r);
+			q *= q;
+			float raios = (r1 * 0.8 + r2 * 0.55) * q * corre * (0.8 + 0.5 * grave);
+			float coroa = exp(-fora * 7.0) * (0.55 + 0.2 * sin(t * 2.3) + 0.45 * grave + 0.35 * batida);
+			float chama = exp(-fora * 20.0) * (0.5 + 0.5 * sin(a * 23.0 + t * 3.4 + sin(a * 7.0 - t * 2.2) * 2.0));
+			// anel de luz que sai do sol de tempos em tempos
+			float anel_r = rd + fract(t * 0.35) * (1.0 - rd);
+			float anel = exp(-pow((r - anel_r) / 0.025, 2.0)) * (1.0 - fract(t * 0.35)) * 0.35;
+			luz = raios * 0.7 + coroa * 0.55 + chama * 0.35 + anel;
 		} else {
-			float halo = exp(-fora * 6.0) * (0.42 + 0.10 * sin(t * 0.9) + 0.25 * grave);
+			float halo = exp(-fora * 6.0) * (0.42 + 0.12 * sin(t * 1.3) + 0.25 * grave);
 			float d_anel = (r - rd * 1.62) / 0.045;
-			float anel = exp(-d_anel * d_anel) * (0.16 + 0.10 * sin(a * 3.0 + t * 0.35));
-			float f = 0.5 + 0.5 * sin(a * 6.0 + t * 0.10 + sin(a * 2.0 + t * 0.07) * 1.4);
+			float anel = exp(-d_anel * d_anel) * (0.16 + 0.12 * sin(a * 3.0 + t * 1.1));
+			float a1 = a - t * 0.15;
+			float f = 0.5 + 0.5 * sin(a1 * 6.0 + sin(a1 * 2.0 + t * 0.5) * 1.4);
 			f = f * f * f; f *= f; f *= f;
-			float feixes = f * queda * 0.45;
-			luz = halo * 0.55 + anel + feixes;
+			float feixes = f * queda * corre * 0.55;
+			float anel_r = rd + fract(t * 0.22) * (1.0 - rd);
+			float onda = exp(-pow((r - anel_r) / 0.03, 2.0)) * (1.0 - fract(t * 0.22)) * 0.22;
+			luz = halo * 0.55 + anel + feixes + onda;
 		}
 		luz += pisco * exp(-fora * 3.0) * 1.4;
 		luz *= smoothstep(1.0, 0.85, r);

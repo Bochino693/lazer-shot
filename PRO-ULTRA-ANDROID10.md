@@ -388,7 +388,7 @@ fundo na placa de vídeo, e os vídeos `back_sun`/`back_moon` saíram do jogo:
   de noite, faixa de luz subindo e facetas acendendo uma de cada vez; estrelas
   de brilho piscando nas pontas do diamante, nas pirâmides e no disco.
 - De noite: estrelas piscando no céu e estrela cadente de vez em quando.
-- Câmera "respirando" (zoom lento) ancorada no alto: o sol nunca entra
+- Câmera "respirando" (zoom lento; tirado na Rodada 9) ancorada no alto: o sol nunca entra
   embaixo do placar.
 - Artes geradas por `tools/gerar_egito.py` (a partir das fotos originais).
 
@@ -420,6 +420,62 @@ fundo na placa de vídeo, e os vídeos `back_sun`/`back_moon` saíram do jogo:
 até 9,0 ms no Bar, 8,4 ms no Mar e 7,4 ms no Egito; nós da tela estáveis.
 No Egito as camadas cobrem só partes da tela (disco, raios, pontas, diamante)
 em vez de vídeo.
+
+## Rodada 9: abertura Lazer & Sport Games, ícone oficial, olhos vivos no Egito
+
+**Abertura Lazer & Sport Games** (`scenes/abertura_ls.tscn`, agora a primeira
+tela do jogo). Estande de tiro no escuro, uns 6 s: três placas-alvo sobem na
+parede, a mira entra e o laser derruba uma a uma (a placa gira e cai,
+faíscas, furo em brasa esfriando); a mira trava no centro, carrega e o tiro
+final acerta o alvo do logo: clarão, onda de choque, tela tremendo, o logo da
+Lazer & Sport entra com mola, "GAMES" bate embaixo e "apresenta" aparece.
+Depois segue para o menu de sempre. Tiro, START ou clique pulam (depois de
+0,6 s). Tudo desenhado na hora; a única imagem é o logo
+(`sprites/logo_lazer_sport.png`).
+
+**Nome e ícone oficiais: Lazer Shot, sem nada do Godot.** Nome do projeto,
+do app no Android e do .exe: "Lazer Shot" (empresa "Lazer & Sport"). Ícone
+novo (mira vermelha neon com o feixe e LAZER SHOT) em todos os formatos:
+comum, adaptativo (frente na área segura + fundo), monocromático (temas do
+Android 13+; antes caía no robô do Godot) e o .ico do Windows. O `icon.svg`
+do Godot saiu e a tela de splash do Godot continua desligada. Tudo gerado por
+`tools/gerar_icone.py`.
+
+**Egito.**
+- **Sem zoom:** a câmera não "respira" mais; o fundo fica parado, ancorado no
+  alto.
+- **Luz em volta se movendo de verdade:** os dois leques de raios do sol giram
+  em sentidos contrários, o comprimento dos raios respira, ondas de luz correm
+  para fora e um anel se abre de tempos em tempos; na lua, feixes girando e
+  anéis de luar.
+- **Olhos vivos, desenhados de novo** (nem o Rá nem o Hórus de antes): o
+  **sol tem um olhar masculino** (sobrancelha grossa e reta, pálpebra pesada,
+  olho estreito, íris dourada, rabo em cunha e espiral fechada) e a **lua um
+  olhar feminino** (sobrancelha fina em arco, delineado de gatinho, cílios,
+  íris branca, lágrima fina com uma gota e espiral elegante). Os dois são
+  maiores, com relevo (sombra e luz gravadas no disco, parecendo uma coisa só
+  com o sol/a lua) e vivos: **piscam** (às vezes duas vezes seguidas) e a
+  **pupila passeia** pelo olho com movimentos rápidos de olhar. O olho é
+  desenhado no shader (`shaders/egito_disco.gdshader`) a partir de um mapa
+  (`sprites/egito_olho_*.png`).
+- **Mais difícil:** sol e lua mais rápidos (mínimo 215, máximo 330), mudam de
+  direção de repente (guinadas a cada ~0,5 a 1,3 s, mais frequentes com o
+  nível), duram menos na tela, área de acerto menor e a dificuldade sobe a
+  partir de 800 pontos.
+
+**Mar: navio caindo de forma natural.**
+- Desce como um navio de verdade na água: acelera e chega na velocidade de
+  afundar (4,2 s até o fundo), balança cada vez menos e assenta com um
+  pequeno quique.
+- Rastro de bolhas saindo do casco, mastros e vergas enquanto desce (bolhas
+  que sobem rebolando e crescem).
+- Na batida: nuvem de lodo empurrada rente ao chão, jatos de areia, tábuas
+  recortadas do próprio navio voando e girando, farpas de madeira molhada
+  (tingidas pela água e sumindo na névoa) e bolhas escapando do casco.
+
+**Custo.** Rajada no Mar medida lado a lado com a Rodada 8, nas mesmas
+condições: igual (os efeitos do navio só existem na queda). A abertura usa
+desenho simples e partículas curtas.
 
 ## Para testar no PC como se fosse a TV Box
 

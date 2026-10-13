@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://cg2wqssykkl0h"
-path="res://.godot/imported/egito_disco_mascara_lua.png-ebb5bf167c0df092d36f23a434ca8906.ctex"
+uid="uid://bj3ij0rrl77n1"
+path="res://.godot/imported/mar_lodo.png-5a968d3a2286b414698fdc7e53ac6678.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://sprites/egito_disco_mascara_lua.png"
-dest_files=["res://.godot/imported/egito_disco_mascara_lua.png-ebb5bf167c0df092d36f23a434ca8906.ctex"]
+source_file="res://sprites/mar_lodo.png"
+dest_files=["res://.godot/imported/mar_lodo.png-5a968d3a2286b414698fdc7e53ac6678.ctex"]
 
 [params]
 
