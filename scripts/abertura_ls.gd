@@ -63,6 +63,11 @@ var _roteiro: Array = []           # [tempo, Callable], em ordem
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if not Tela.contorna("abertura"):
+		Tela.risco("abertura")   # se o app morrer aqui, a caixa-preta sabe
+	# todos os shaders do jogo ficam prontos agora, debaixo do preto inicial
+	# (scripts/aquecedor.gd), e não na primeira vez que cada fase aparece
+	Aquecedor.tudo(self)
 	_tela = get_viewport_rect().size
 	_montar()
 	_ajustar()
@@ -295,6 +300,7 @@ func _sair() -> void:
 	if _saindo:
 		return
 	_saindo = true
+	Tela.risco("")
 	TransicaoGlobal.trocar_cena(PROXIMA, 0.45)
 
 
@@ -311,6 +317,8 @@ func _input(event: InputEvent) -> void:
 
 # ───────────────────────────────────────────── quadro a quadro
 func _process(delta: float) -> void:
+	# o primeiro quadro pode demorar (pré-aquecimento): o roteiro não pula
+	delta = minf(delta, 0.05)
 	_t += delta
 	while not _roteiro.is_empty() and _t >= _roteiro[0][0]:
 		var passo: Array = _roteiro.pop_front()

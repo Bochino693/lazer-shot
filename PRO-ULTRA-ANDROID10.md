@@ -29,30 +29,33 @@ A janela fica aberta e o histórico completo vai para
 
 O jogo não mostra nada técnico na tela. Por trás, ele tem duas proteções:
 
-- **Caixa-preta** (`scripts/caixa_preta.gd`): grava em silêncio, na memória
-  interna da TV Box, o aparelho, a placa de vídeo, a memória, cada troca de
-  tela, cada erro e um pulso a cada 30 s. Cada linha vai para o disco na hora.
-  Na abertura seguinte a um fechamento, as últimas linhas saem no registro do
-  Android.
-- **Modo de segurança** (só na TV Box): se o jogo fechou sozinho com menos de
-  90 s, as próximas aberturas desta versão pulam a abertura Lazer & Sport e
-  não tocam vídeo nenhum (os menus ficam com o fundo animado). Assim o jogo
-  roda mesmo que o problema esteja num desses dois. Instalar uma versão nova
-  volta ao normal.
+- **Caixa-preta** (`scripts/caixa_preta.gd`): grava em silêncio o aparelho,
+  a placa de vídeo, a memória, cada troca de tela, cada erro e um pulso a
+  cada 30 s. Cada linha vai para o disco na hora. A última sessão que parou
+  sozinha em menos de 10 min fica guardada como `queda.txt`.
+- **Contorno pontual** (só na TV Box): o jogo avisa quando entra num trecho
+  que depende do aparelho (a apresentação Lazer & Sport, um vídeo começando
+  pelo decodificador da TV Box). Se o app morrer **dentro** desse trecho, só
+  ele é contornado nas próximas aberturas desta versão: a apresentação é
+  pulada, ou os vídeos passam a tocar pelo player do Godot. Todo o resto do
+  jogo continua igual. Instalar uma versão nova zera tudo.
 
-Para ver o motivo de um fechamento, puxe o registro do Android pelo adb (TV
-Box com a depuração ligada, no cabo ou na rede com
+Para ver o que aconteceu, sem cabo: no gerenciador de arquivos da TV Box,
+abra `Android/data/com.lazersport.lazershot/files/caixa_preta` e copie
+`queda.txt`, `anterior.txt` e `sessao.txt` para o pendrive.
+
+Com adb (TV Box com a depuração ligada, no cabo ou com
 `adb connect IP-DA-TVBOX`):
 
 ```
 GERAR_APK_PRO_ULTRA.bat -Registro
 ```
 
-Ele abre o jogo, espera 40 s e salva `build/android/LOGCAT-TVBOX.txt` (com as
-linhas da caixa-preta da sessão que fechou). Com `-Instalar`, o mesmo
-acontece logo depois de instalar o APK novo.
+Ele abre o jogo, espera 40 s e salva `build/android/LOGCAT-TVBOX.txt` e a
+pasta `build/android/caixa_preta`. Com `-Instalar`, o mesmo acontece logo
+depois de instalar o APK novo.
 
-A versão do APK aparece em Configurações > Apps da TV Box (1.11.2, código 13).
+A versão do APK aparece em Configurações > Apps da TV Box (1.12.0, código 14).
 
 ## Tela em pé na TV Box
 
@@ -701,6 +704,50 @@ quando vai tocar.
 - Os vídeos pelo hardware marcam cada passo na caixa-preta (preparando,
   tocando, falhou e por quê).
 - APK 1.11.2 (código 13).
+
+## Rodada 12: apresentação e vídeos de volta, sem travadas de primeira vez
+
+**O que tinha acontecido.** A 1.11.2 abriu, mas sem a apresentação e sem o
+vídeo do menu: o "modo de segurança" daquela versão leu os fechamentos da
+1.11.1 (que fechava sozinha) e ligou sem a nova ter fechado. Ele saiu. No
+lugar, o contorno pontual (veja "Se o jogo não abrir...") só mexe no trecho
+que de fato derrubou o app, nesta mesma versão.
+
+**Travadas de primeira vez** (`scripts/aquecedor.gd`). Na TV Box, a primeira
+vez que um shader é usado a placa compila o programa (centenas de
+milissegundos num shader grande como o do Egito), a primeira vez que uma
+imagem aparece ela sobe para a placa e a primeira vez que uma letra aparece
+num tamanho a fonte é desenhada. Isso acontecia no meio do jogo:
+- na partida do app, debaixo do preto inicial da apresentação, todos os
+  shaders do jogo são montados nos três jeitos em que são desenhados
+  (retângulo, polígono, partículas), mais a mistura somada;
+- em cada troca de tela, debaixo do cartão de carregamento, as imagens, os
+  materiais, as partículas e os textos da tela nova (inclusive o que ainda
+  está escondido: instruções, contagem, fim de jogo, com os números) ficam
+  prontos. A tela nova fica parada nesses quadros para o relógio dela não dar
+  um salto.
+Com o cache de shaders do Godot, da segunda vez em diante a placa só lê o
+programa já pronto.
+
+**Ritmo estável** (`scripts/MiraGlobal.gd`, só na TV Box). Uma tela que não
+segura 60 quadros por segundo alterna quadros de 16 e 33 ms, e isso aparece
+como tranco. Se em 2 s mais de um quarto dos quadros passou de 20 ms, aquela
+tela fica em 30 por segundo cravados; a próxima volta a tentar 60.
+
+**Medições** (PC de teste, renderizador por software, 1920×1080 girado). A
+Rodada 6, a última que rodou na TV Box antes, já custava o mesmo para a placa
+de vídeo que a atual (Egito 26 × 29 ms, Arena 24 × 24 ms, Bar 34 × 30 ms). O
+peso maior de cada fase é o fundo em tela cheia (~10 ms só a imagem); o
+shader do fundo soma ~3–5 ms e os raios do sol do Egito ~4 ms. Os scripts do
+jogo gastam menos de 1 ms por quadro; os picos vinham do motor preparando
+coisas na primeira vez, que agora acontece debaixo do carregamento.
+
+**Também nesta rodada**
+- Shaders do Egito sem `pow()` de base negativa (NaN nas placas Mali).
+- Sem a cópia de vídeos ao abrir o jogo (só rodava no Android).
+- Caixa-preta: cópia na pasta do app visível no gerenciador de arquivos e
+  `queda.txt`; `-Registro` também puxa essa pasta.
+- APK 1.12.0 (código 14).
 
 ## Para testar no PC como se fosse a TV Box
 
