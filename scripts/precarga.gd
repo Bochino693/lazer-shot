@@ -18,7 +18,6 @@ const LISTA := {
 		"res://songs/bip.wav",
 		"res://songs/bip-error.wav",
 		"res://fonts/Exo2-ExtraBold.ttf",
-		"res://info_scenes/info_arena.png",
 	],
 	"res://scenes/bar.tscn": [
 		"res://fonts/Exo2-Bold.ttf",
@@ -30,7 +29,6 @@ const LISTA := {
 		"res://songs/fail.wav",
 		"res://songs/smash.wav",
 		"res://songs/tiro-de-pistola.wav",
-		"res://info_scenes/bar_info.png",
 	],
 	"res://scenes/cenarios.tscn": [
 		"res://songs/tiro-de-pistola.wav",
@@ -63,7 +61,6 @@ const LISTA := {
 		"res://songs/egito.mp3",
 		"res://songs/hit-sun.wav",
 		"res://songs/hit-moon.wav",
-		"res://info_scenes/desert_info.png",
 	],
 	"res://scenes/main.tscn": [
 		"res://background_video/teaser_arena.ogv",
@@ -82,7 +79,6 @@ const LISTA := {
 		"res://songs/xploit.wav",
 		"res://songs/recharge.wav",
 		"res://songs/bullet_no.wav",
-		"res://info_scenes/mar_info.png",
 		"res://fonts/Exo2-Bold.ttf",
 		"res://fonts/Exo2-ExtraBold.ttf",
 		"res://songs/end_game.mp3",

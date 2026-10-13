@@ -103,7 +103,6 @@ func _criar_interface() -> void:
 	# PARTIDA
 	_secao(coluna, "PARTIDA")
 	_passos(coluna, "Tempo de partida", "", "jogo/tempo_partida", 30, 600, 10, func(v): return "%d:%02d" % [int(v) / 60, int(v) % 60])
-	_opcoes(coluna, "Dificuldade", "difícil: sem mira na tela", "jogo/dificuldade_padrao", [["facil", "FÁCIL"], ["dificil", "DIFÍCIL"]])
 	_passos(coluna, "Tela de resultado", "volta sozinha depois de", "jogo/tempo_modal_final", 5, 120, 1, func(v): return "%d s" % v)
 	_passos(coluna, "Nome no ranking", "tempo para digitar", "ranking/tempo_nome", 10, 120, 5, func(v): return "%d s" % v)
 

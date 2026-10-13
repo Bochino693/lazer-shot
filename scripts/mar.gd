@@ -1,6 +1,9 @@
 extends Node2D
 
 const Pincel := preload("res://scripts/pincel.gd")
+# preload: o script do fundo vivo vem junto com a cena, na thread do
+# carregamento (com load() ele era compilado na hora, ~250 ms parados na TV Box)
+const MarVida := preload("res://scripts/mar_vida.gd")
 const RankingManagerScript := preload("res://scripts/RankingManager.gd")
 var ranking_manager := RankingManagerScript.new()
 
@@ -50,7 +53,6 @@ var som_bullet_no_stream: AudioStream = null
 @export var tempo_auto_retorno_menu_seg: float = 17.0
 
 
-@export var caminho_info_inicio: String = "res://info_scenes/mar_info.png"
 
 var info_inicio_layer: CanvasLayer = null
 var info_inicio_root: Control = null
@@ -3260,7 +3262,7 @@ func _ajustar_background_fullscreen() -> void:
 	if vida == null:
 		vida = Node2D.new()
 		vida.name = "Vida"
-		vida.set_script(load("res://scripts/mar_vida.gd"))
+		vida.set_script(MarVida)
 		background.add_child(vida)
 		vida.navio_pousou.connect(_ao_navio_pousar)
 	vida.position = -tex_size * 0.5
@@ -5508,10 +5510,6 @@ func _criar_tela_info_inicio() -> void:
 	info_inicio_image.modulate = Color(0.92, 0.98, 1.0, 1.0)
 	info_inicio_root.add_child(info_inicio_image)
 
-	if ResourceLoader.exists(caminho_info_inicio):
-		info_inicio_image.texture = load(caminho_info_inicio)
-	else:
-		push_error("Imagem de início não encontrada: " + caminho_info_inicio)
 
 	info_inicio_label = Label.new()
 	info_inicio_label.name = "InfoInicioLabel"
@@ -5531,6 +5529,18 @@ func _criar_tela_info_inicio() -> void:
 		Leve.font(info_inicio_label, "font", load(FONTE_LUCKIEST))
 
 	info_inicio_root.add_child(info_inicio_label)
+
+	# COMO JOGAR grande (scripts/como_jogar.gd) no lugar da imagem antiga:
+	# a moldura, a imagem e o rodapé antigos ficam escondidos.
+	for n in [info_inicio_bg, glow_img, borda_img, fundo_img, info_inicio_image, info_inicio_label]:
+		(n as CanvasItem).visible = false
+	info_inicio_image.texture = null
+	info_inicio_root.add_child(ComoJogar.criar("mar", {
+		"agua": ComoJogar.textura_de(aguaviva_modelo),
+		"pote": ComoJogar.textura_de(vaso_modelo),
+		"bau": ComoJogar.textura_de(bau_modelo),
+		"bomba": ComoJogar.textura_de(bomba_modelo),
+	}))
 	info_inicio_root.visible = true
 
 
@@ -5573,9 +5583,9 @@ func _forcar_mira_sobre_modal_ranking() -> void:
 
 
 
+## Só existe o jogo com a mira na tela (o "difícil sem mira" saiu).
 func _modo_dificil_sem_mira() -> bool:
-	var dificuldade: String = get_tree().get_meta("modo_dificuldade", "facil")
-	return dificuldade == "dificil" and not ranking_nome_ativo
+	return false
 
 
 const BOTAO_GATILHO_1: int = MOUSE_BUTTON_RIGHT

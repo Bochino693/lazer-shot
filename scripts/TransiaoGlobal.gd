@@ -8,8 +8,11 @@ extends CanvasLayer
 ##    um cartão com a capa, o nome, uma dica e a barra de progresso real; nas
 ##    outras telas, um anel girando se demorar;
 ## 3. troca a cena, espera ela montar e desenhar os primeiros quadros
-##    escondida (é aí que o Godot prepara shaders e texturas);
-## 4. clareia.
+##    escondida e PARADA (é aí que o Godot prepara shaders e texturas); o
+##    cartão fica imóvel nesses quadros pesados (nada gira, nada corre), então
+##    a demora não aparece como tranco;
+## 4. clareia. Os sons da tela nova só começam aqui: ela monta muda e com os
+##    sons pausados, e eles saem do começo quando a imagem aparece.
 ## A cor de fundo padrão vira preta, então nem no boot nem entre cenas
 ## aparece o cinza do Godot.
 ##
@@ -77,12 +80,14 @@ var _mostrado := 0.0    # progresso desenhado (corre atrás do real)
 var _alvo := 0.0        # progresso real
 
 var _segurar: Array = []   # mantém a pré-carga viva até a cena nova montar
+var _sons_pausados: Array = []   # sons da tela nova esperando ela aparecer
 
 
 func _ready() -> void:
 	layer = 9999
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	RenderingServer.set_default_clear_color(Color.BLACK)
+	_mudo(false)
 
 	fade = ColorRect.new()
 	fade.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -172,8 +177,28 @@ func trocar_cena(caminho: String, tempo_saida: float = TEMPO_SAIDA, tempo_entrad
 		cena = load(caminho) as PackedScene
 	Tela.marca("carregou %s em %d ms (%s)" % [caminho.get_file(), Time.get_ticks_msec() - inicio, "ok" if cena != null else "FALHOU"])
 
-	if cena == null or get_tree().change_scene_to_packed(cena) != OK:
+	# Daqui até clarear vêm os quadros pesados (montar a cena, preparar a
+	# placa): o anel some e o cartão para de se mexer, para a demora ser só
+	# uma imagem parada e não um tranco.
+	_mostrar_anel(false)
+	_congelar_cartao()
+
+	# A cena nova entra na árvore já PARADA e MUDA: o _ready dela roda, mas
+	# nada anda e nenhum som sai até a imagem aparecer.
+	var nova: Node = cena.instantiate() if cena != null else null
+	var modo_antes := Node.PROCESS_MODE_INHERIT
+	if nova != null:
+		modo_antes = nova.process_mode
+		nova.process_mode = Node.PROCESS_MODE_DISABLED
+		nova.ready.connect(_pausar_sons.bind(nova), CONNECT_ONE_SHOT)
+	_mudo(true)
+
+	if nova == null or get_tree().change_scene_to_node(nova) != OK:
 		push_error("Não foi possível abrir a cena: " + caminho)
+		if nova != null:
+			nova.free()
+		_sons_pausados.clear()
+		_mudo(false)
 		# fica na tela de antes, que volta a rodar
 		if is_instance_valid(velha):
 			velha.process_mode = Node.PROCESS_MODE_INHERIT
@@ -187,22 +212,22 @@ func trocar_cena(caminho: String, tempo_saida: float = TEMPO_SAIDA, tempo_entrad
 		# Ela só volta a andar depois que esses quadros (que podem demorar
 		# na primeira vez) passaram, para o relógio dela não dar um salto.
 		await get_tree().process_frame
-		var nova := get_tree().current_scene
-		var modo_antes := Node.PROCESS_MODE_INHERIT
-		if nova != null:
-			modo_antes = nova.process_mode
-			nova.process_mode = Node.PROCESS_MODE_DISABLED
+		if is_instance_valid(nova):
 			Aquecedor.cena(nova, self)
 		for i in range(QUADROS_ESCONDIDOS + 2):
+			_pausar_sons(nova)   # o que começou a tocar depois do _ready
 			await get_tree().process_frame
-		if nova != null and is_instance_valid(nova):
+		_pausar_sons(nova)
+		# volta a andar e os sons saem do começo, junto com a imagem
+		if is_instance_valid(nova):
 			nova.process_mode = modo_antes
+		_soltar_sons()
+		_mudo(false)
 		await get_tree().process_frame
 		Tela.marca("tela pronta: " + caminho.get_file())
 		cena_trocada.emit(caminho)
 	_segurar.clear()
 
-	_mostrar_anel(false)
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 
 	var tw_in := create_tween().set_parallel(true)
@@ -223,6 +248,32 @@ func escurecer(tempo: float = TEMPO_SAIDA) -> void:
 	var tw := create_tween()
 	tw.tween_property(fade, "color:a", 1.0, tempo)
 	await tw.finished
+
+
+## Saída geral de som (barramento Master) muda ou não. Na troca de tela só
+## a tela nova pode tocar, e só quando aparece.
+func _mudo(sim: bool) -> void:
+	AudioServer.set_bus_mute(0, sim)
+
+
+## Logo depois do _ready da tela nova (ainda no mesmo quadro, antes de
+## qualquer som ser misturado) e em cada quadro escondido: o que ela mandou
+## tocar fica pausado no começo. Quando a imagem aparece, todos saem juntos.
+func _pausar_sons(raiz: Node) -> void:
+	if not is_instance_valid(raiz):
+		return
+	for n in raiz.find_children("*", "", true, false):
+		if (n is AudioStreamPlayer or n is AudioStreamPlayer2D or n is AudioStreamPlayer3D) \
+				and n.playing and not n.stream_paused:
+			n.stream_paused = true
+			_sons_pausados.append(n)
+
+
+func _soltar_sons() -> void:
+	for n in _sons_pausados:
+		if is_instance_valid(n) and n.is_inside_tree():
+			n.stream_paused = false
+	_sons_pausados.clear()
 
 
 ## 0..1: a cena pesa metade, os arquivos extras a outra metade.
@@ -415,10 +466,24 @@ func _mostrar_cartao(fase: Dictionary) -> void:
 	_mostrado = 0.0
 	_alvo = 0.0
 	_cartao_t = 0.0
+	_brilho.visible = true
+	_giro.visible = true
 	_cartao.modulate.a = 0.0
 	_cartao.visible = true
 	set_process(true)
 	create_tween().tween_property(_cartao, "modulate:a", 1.0, 0.18)
+
+
+## O cartão para de se mexer: brilho e giro somem, a capa fica onde está.
+func _congelar_cartao() -> void:
+	if not _cartao.visible:
+		return
+	_mostrado = 1.0
+	_barra.size.x = _barra_fundo.size.x
+	_pct.text = "PRONTO"
+	_brilho.visible = false
+	_giro.visible = false
+	set_process(false)
 
 
 func _animar_cartao(delta: float) -> void:

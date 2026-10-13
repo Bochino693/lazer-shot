@@ -55,7 +55,7 @@ Ele abre o jogo, espera 40 s e salva `build/android/LOGCAT-TVBOX.txt` e a
 pasta `build/android/caixa_preta`. Com `-Instalar`, o mesmo acontece logo
 depois de instalar o APK novo.
 
-A versão do APK aparece em Configurações > Apps da TV Box (1.12.0, código 14).
+A versão do APK aparece em Configurações > Apps da TV Box (1.13.0, código 15).
 
 ## Tela em pé na TV Box
 
@@ -609,8 +609,8 @@ nítida em 1080p e 4K e ainda sem shader:
   (letreiro nas 5 cores, furos em neon frio, giroflex roxo), uma linha de
   varredura colorida desce a parede e o letreiro "SEQUÊNCIA FIXA" cruza a
   tela. Na memória volta à arte normal.
-- A arte de instruções da Arena (`info_scenes/info_arena.png`,
-  `tools/gerar_info_arena.py`) mostra as cores, as duas rodadas e os pontos.
+- As instruções da Arena são o COMO JOGAR da Rodada 13 (`scripts/como_jogar.gd`):
+  as cores, os pontos e as duas rodadas.
 
 **Arena viva** (`scripts/arena_vivo.gd`), tudo com o Pincel:
 - O fundo usa o mesmo shader dos fundos do menu: luzes piscando com a
@@ -748,6 +748,63 @@ coisas na primeira vez, que agora acontece debaixo do carregamento.
 - Caixa-preta: cópia na pasta do app visível no gerenciador de arquivos e
   `queda.txt`; `-Registro` também puxa essa pasta.
 - APK 1.12.0 (código 14).
+
+## Rodada 13: modais novos, letras de longe e trocas de tela sem tranco
+
+**A TV Box.** A Proeletronic SmartPro (PROSB-3000) é Allwinner H313: quatro
+Cortex-A53 e uma Mali-G31 MP2, a placa de vídeo OpenGL ES 3 mais fraca que
+existe, com memória de banda estreita. Os 181 MB do jogo não pesam: o que
+pesa é o que a placa desenha e prepara a cada quadro. Tudo abaixo foi feito
+para essa placa.
+
+**Som saindo antes da tela, parando e voltando** (`scripts/TransiaoGlobal.gd`).
+A tela nova começava a música no `_ready`, ainda debaixo do preto; aí a
+troca de tela a parava (para os quadros escondidos) e soltava de novo. Agora
+a tela nova entra na árvore já parada e muda: o que ela manda tocar fica
+pausado no começo e sai junto com a imagem, do zero.
+
+**Carregamentos.**
+- Nos quadros pesados da troca (montar a tela, preparar a placa) o cartão de
+  carregamento fica parado em "PRONTO" (sem brilho correndo nem giro) e o
+  anel das outras telas some: a demora vira imagem parada, não tranco.
+- O fundo vivo do Mar (`mar_vida.gd`) e o sol do Bar (`bar_sol.gd`) eram
+  compilados na hora em que a tela montava (~250 ms parados na TV Box); agora
+  vêm junto com a cena, na thread do carregamento.
+- Telas que não seguram 60 quadros ficam em 30 cravados e a TV Box lembra
+  delas (`user://ritmo.cfg`, por versão): da próxima vez já abrem em 30, sem
+  os primeiros segundos alternando.
+
+**Sem fácil/difícil.** Só existe o jogo com a mira na tela (saiu também da
+configuração). No lugar da escolha de dificuldade, ao escolher o cenário
+aparece a **missão** (`scripts/missao.gd`): capa do cenário, objetivo em
+letras grandes, o **recorde daquele cenário** (nome e pontos), um alvo
+grande **JOGAR** com o anel do tempo (começa sozinho em 9 s) e **TROCAR
+CENÁRIO** para voltar à grade.
+
+**COMO JOGAR** (`scripts/como_jogar.gd`) no lugar das imagens antigas
+(`info_scenes/` saiu): cada alvo com a figura do próprio jogo e os pontos
+que o código dá de verdade, em letras grandes que ocupam a tela:
+- Egito: sol de dia, lua de noite +20 a +100; astro errado -20 a -100; dia
+  e noite trocam a cada 30 s; 3 acertos seguidos dão combo.
+- Mar: água-viva +20, pote +80, baú +100; 3 bombas encerram a partida.
+- Bar: gin +20, rum +50, vodka +80, whisky +100, garrafa verde -500.
+- Arena: as 5 cores na ordem (+20 a +100), ordem errada -100, fixa completa
+  +50, acerto rápido +10.
+Embaixo: tempo da partida (da configuração), 30 tiros e recarga no botão.
+
+**Modais decorados por cenário** (`scripts/moldura_tema.gd`, desenhados na
+hora, sem imagens novas): Egito com raios de sol girando, asas douradas,
+faixas de hieróglifos e brilhos; Mar com feixes de luz, bolhas, peixes,
+ondas, algas e corais; Bar com tábuas, pregos, corda, estrelas de xerife,
+furos de bala e a luz do lampião; Arena com grade, cantos de mira em neon,
+LEDs, laser varrendo e faixa de perigo. Vale para a missão e o COMO JOGAR.
+
+**Maior para ver de longe.** Placar das fases ~30% mais alto (letras junto),
+mira de todas as telas 1,7× o desenho original (antes 1,3×) e ranking
+refeito: linhas de 116 px, nome e pontos em 52–56 px, pódio em ouro, prata
+e bronze, sem a coluna de modo; rola pelos botões ▲▼.
+
+APK 1.13.0 (código 15).
 
 ## Para testar no PC como se fosse a TV Box
 

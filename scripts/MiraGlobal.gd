@@ -45,10 +45,15 @@ var _recapturar_em := 0.0
 # RITMO (TV Box): uma tela que não segura 60 quadros por segundo alterna
 # quadros de 16 e de 33 ms, e isso aparece como tranco. Se em 2 s mais de um
 # quarto dos quadros passou de 20 ms, a tela fica em 30 por segundo cravados
-# (liso); a próxima tela volta a tentar 60.
+# (liso). A TV Box LEMBRA dessas telas (user://ritmo.cfg, por versão do
+# jogo): da próxima vez a tela já abre em 30, sem os primeiros segundos de
+# tranco enquanto media. As outras telas continuam tentando 60.
 const RITMO_JANELA := 2.0
 const RITMO_LENTO_MS := 20.0
 const RITMO_FRACAO := 0.25
+const RITMO_ARQUIVO := "user://ritmo.cfg"
+const VERSAO_JOGO := preload("res://scripts/caixa_preta.gd").VERSAO
+var _ritmo_lento: Dictionary = {}   # cena -> true (abre direto em 30)
 var _ritmo_ativo := false
 var _ritmo_cena := 0
 var _ritmo_t := 0.0
@@ -78,6 +83,7 @@ func _forcar_120_fps() -> void:
 		Engine.max_fps = 0
 		DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_ENABLED)
 		_ritmo_ativo = true
+		_ritmo_carregar()
 		print("MiraGlobal: TV Box -> vsync (sem limitador)")
 		return
 
@@ -100,9 +106,10 @@ func _ritmo() -> void:
 	var cena := get_tree().current_scene
 	var id := cena.get_instance_id() if cena != null else 0
 	if id != _ritmo_cena:
-		# tela nova: volta a tentar 60 e espera ela assentar antes de medir
+		# tela nova: abre em 30 se ela já não segurou 60 antes; senão tenta
+		# 60 e espera ela assentar antes de medir
 		_ritmo_cena = id
-		Engine.max_fps = 0
+		Engine.max_fps = 30 if cena != null and _ritmo_lento.has(cena.scene_file_path) else 0
 		_ritmo_t = -1.5
 		_ritmo_quadros = 0
 		_ritmo_lentos = 0
@@ -122,9 +129,27 @@ func _ritmo() -> void:
 		if _ritmo_quadros > 20 and float(_ritmo_lentos) / _ritmo_quadros > RITMO_FRACAO:
 			Engine.max_fps = 30
 			Tela.marca("ritmo: 30 quadros/s cravados em %s (%d de %d quadros passavam de %d ms)" % [cena.name, _ritmo_lentos, _ritmo_quadros, int(RITMO_LENTO_MS)])
+			if cena.scene_file_path != "":
+				_ritmo_lento[cena.scene_file_path] = true
+				_ritmo_salvar()
 		_ritmo_t = 0.0
 		_ritmo_quadros = 0
 		_ritmo_lentos = 0
+
+
+func _ritmo_carregar() -> void:
+	var cfg := ConfigFile.new()
+	if cfg.load(RITMO_ARQUIVO) != OK or str(cfg.get_value("ritmo", "versao", "")) != VERSAO_JOGO:
+		return   # outra versão do jogo: mede de novo
+	for c in cfg.get_value("ritmo", "telas_30", []):
+		_ritmo_lento[str(c)] = true
+
+
+func _ritmo_salvar() -> void:
+	var cfg := ConfigFile.new()
+	cfg.set_value("ritmo", "versao", VERSAO_JOGO)
+	cfg.set_value("ritmo", "telas_30", _ritmo_lento.keys())
+	cfg.save(RITMO_ARQUIVO)
 
 
 ## Seta do sistema transparente: refazer a captura não pisca cursor na tela.

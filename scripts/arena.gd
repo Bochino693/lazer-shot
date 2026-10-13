@@ -497,8 +497,6 @@ func _process(delta: float) -> void:
 	if Input.get_mouse_mode() != Input.MOUSE_MODE_CAPTURED:
 		Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 
-	var dificuldade: String = get_tree().get_meta("modo_dificuldade", "facil")
-
 	if mira_root != null:
 		if ranking_nome_ativo:
 			if mira_layer != null:
@@ -510,10 +508,8 @@ func _process(delta: float) -> void:
 			if mira_layer != null:
 				mira_layer.layer = 100
 
-			mira_root.visible = dificuldade != "dificil"
-
-			if mira_root.visible:
-				mira_root.queue_redraw()
+			mira_root.visible = true
+			mira_root.queue_redraw()
 
 	if fim_ativo:
 		if ranking_nome_ativo:
@@ -1801,21 +1797,19 @@ func _mostrar_modal_fim() -> void:
 
 	if fim_stats_label != null:
 		if entrou_ranking:
-			fim_stats_label.text = "VOCÊ ENTROU NO RANKING!\n\nTIROS: %d     ACERTOS: %d     ERROS: %d\nMODO: %s     PRECISÃO: %d%%\nNÍVEL ALCANÇADO: %d\nDESEMPENHO: %s" % [
+			fim_stats_label.text = "VOCÊ ENTROU NO RANKING!\n\nTIROS: %d     ACERTOS: %d     ERROS: %d\nPRECISÃO: %d%%\nNÍVEL ALCANÇADO: %d\nDESEMPENHO: %s" % [
 				tiros,
 				acertos,
 				erros,
-				modo_atual_ranking,
 				precisao,
 				nivel_sequencia,
 				desempenho
 			]
 		else:
-			fim_stats_label.text = "RESULTADO DA PARTIDA\n\nTIROS: %d     ACERTOS: %d     ERROS: %d\nMODO: %s     PRECISÃO: %d%%\nNÍVEL ALCANÇADO: %d\nDESEMPENHO: %s" % [
+			fim_stats_label.text = "RESULTADO DA PARTIDA\n\nTIROS: %d     ACERTOS: %d     ERROS: %d\nPRECISÃO: %d%%\nNÍVEL ALCANÇADO: %d\nDESEMPENHO: %s" % [
 				tiros,
 				acertos,
 				erros,
-				modo_atual_ranking,
 				precisao,
 				nivel_sequencia,
 				desempenho
@@ -2346,12 +2340,6 @@ func _configurar_mira() -> void:
  
  
 func _desenhar_mira() -> void:
-	var dificuldade: String = get_tree().get_meta("modo_dificuldade", "facil")
-
-	# No difícil, a mira só aparece no modal de nome do ranking
-	if dificuldade == "dificil" and not ranking_nome_ativo:
-		return
-
 	if mira_root == null:
 		return
 
@@ -3065,7 +3053,6 @@ func _criar_modal_inicio() -> void:
 
 	info_inicio_texture = TextureRect.new()
 	info_inicio_texture.name = "InfoArena"
-	info_inicio_texture.texture = load("res://info_scenes/info_arena.png")
 	info_inicio_texture.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	info_inicio_texture.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	info_inicio_texture.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -3091,6 +3078,12 @@ func _criar_modal_inicio() -> void:
 
 	modal_atire_label.modulate.a = 0.78
 	modal_root.add_child(modal_atire_label)
+
+	# COMO JOGAR grande (scripts/como_jogar.gd) no lugar da imagem antiga:
+	# a moldura, a imagem e o rodapé antigos ficam escondidos.
+	for n in [bg_escuro, glow_img, borda_img, fundo_img, modal_atire_label]:
+		(n as CanvasItem).visible = false
+	modal_root.add_child(ComoJogar.criar("arena"))
 
 	var tween_atire := create_tween()
 	tween_atire.set_loops()
@@ -3470,10 +3463,9 @@ func _confirmar_nome_ranking(usar_anonimo: bool = false) -> void:
 		fim_score_label.text = "PONTUAÇÃO\n%d" % ranking_pontos_pendentes
 
 	if fim_stats_label != null:
-		fim_stats_label.text = "RECORDE SALVO COMO:\n%s\n\nPONTUAÇÃO: %d\nMODO: %s\nPRECISÃO: %d%%\nCENÁRIO: %s" % [
+		fim_stats_label.text = "RECORDE SALVO COMO:\n%s\n\nPONTUAÇÃO: %d\nPRECISÃO: %d%%\nCENÁRIO: %s" % [
 			nome_final,
 			ranking_pontos_pendentes,
-			modo_atual_ranking,
 			ranking_precisao_pendente,
 			ranking_cenario_pendente
 		]
@@ -3628,8 +3620,7 @@ func _aplicar_config_admin_na_cena() -> void:
 		fim_tempo_voltar = Maquina.tempo_volta_menu()
 		ranking_nome_tempo = float(cfg.get_value("ranking", "tempo_nome", ranking_nome_tempo))
 
-		var dificuldade := str(cfg.get_value("jogo", "dificuldade_padrao", get_tree().get_meta("modo_dificuldade", "facil")))
-		get_tree().set_meta("modo_dificuldade", dificuldade)
+		get_tree().set_meta("modo_dificuldade", "facil")
 
 	get_tree().set_meta("admin_tempo_partida", tempo_total)
 	get_tree().set_meta("admin_tempo_modal_final", fim_tempo_voltar)

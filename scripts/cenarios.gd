@@ -13,7 +13,6 @@ const CAMINHO_SOM_CHOICE: String = "res://songs/choice.wav"
 const ACAO_TIRO_MENU: String = "input_shot"
 
 const TEMPO_AUTO_ALEATORIO: float = 10.0
-const TEMPO_ESCOLHA_DIFICULDADE: float = 8.0
 
 const CAMINHO_IMG_1: String = "res://sprites/cene_desert.png"
 const CAMINHO_IMG_2: String = "res://sprites/cene_mar.png"
@@ -141,18 +140,12 @@ var ranking_hover_ativo: bool = false
 var sens_hover_ativo: bool = false
 const MARGEM_HOVER_BOTAO: float = 10.0
 
-# ── Modal de dificuldade ──────────────────────────────────────────────────────
+# ── Modal da missão (scripts/missao.gd) ──────────────────────────────────────
+# Não há mais fácil/difícil: o jogo é sempre com a mira. Ao escolher o cenário
+# aparece a missão: objetivo, recorde e o alvo JOGAR (ou TROCAR CENÁRIO).
 var modal_layer: CanvasLayer = null
-var modal_root: Control = null
-var modal_panel: Panel = null
-var modal_titulo_label: Label = null
-var modal_subtitulo: Label = null
-var modal_contador: Label = null
-var modal_botao_facil: Button = null
-var modal_botao_dificil: Button = null
-var modal_barra_progresso: ColorRect = null
+var missao: Missao = null
 var modal_ativo: bool = false
-var modal_tempo_restante: float = TEMPO_ESCOLHA_DIFICULDADE
 var modal_cena_destino: String = ""
 
 # ── Modal de sensibilidade ────────────────────────────────────────────────────
@@ -211,6 +204,7 @@ func _ready() -> void:
 
 	_configurar_contador()
 	_configurar_alvo_overlay()
+	_preparar_missao()
 	_configurar_fade()
 	_preparar_abertura_suave()
 
@@ -376,7 +370,8 @@ func _process(delta: float) -> void:
 	alvo_anim_t += delta
  
 	if modal_ativo:
-		_atualizar_hover_modal_dificuldade()
+		if missao != null:
+			missao.mira(alvo_pos)
 	else:
 		_atualizar_hover_cards_por_alvo()
 		_atualizar_hover_botoes()
@@ -395,45 +390,6 @@ func _process(delta: float) -> void:
 			auto_timer_ativo = false
 			_iniciar_modo_aleatorio()
  
-	if modal_ativo:
-		modal_tempo_restante = max(0.0, modal_tempo_restante - delta)
-		_atualizar_modal_contador()
-		if modal_tempo_restante <= 0.0:
-			modal_ativo = false
-			# ninguém escolheu: vale a dificuldade padrão da configuração
-			get_tree().set_meta("modo_dificuldade", str(Maquina.valor("jogo/dificuldade_padrao")))
-			_fechar_modal_e_ir()
-
-
-func _atualizar_hover_modal_dificuldade() -> void:
-	if not modal_ativo:
-		return
-
-	if modal_botao_facil != null:
-		var r_facil := Rect2(
-			modal_botao_facil.global_position,
-			modal_botao_facil.size
-		)
-
-		if r_facil.has_point(alvo_pos):
-			modal_botao_facil.scale = Vector2(1.06, 1.06)
-			modal_botao_facil.modulate = Color(1.12, 1.12, 1.12, 1.0)
-		else:
-			modal_botao_facil.scale = Vector2.ONE
-			modal_botao_facil.modulate = Color.WHITE
-
-	if modal_botao_dificil != null:
-		var r_dificil := Rect2(
-			modal_botao_dificil.global_position,
-			modal_botao_dificil.size
-		)
-
-		if r_dificil.has_point(alvo_pos):
-			modal_botao_dificil.scale = Vector2(1.06, 1.06)
-			modal_botao_dificil.modulate = Color(1.12, 1.12, 1.12, 1.0)
-		else:
-			modal_botao_dificil.scale = Vector2.ONE
-			modal_botao_dificil.modulate = Color.WHITE
 
 
 func _atualizar_mira_menu(_delta: float) -> void:
@@ -815,7 +771,7 @@ func _configurar_cards() -> void:
 func _atualizar_hover_cards_por_alvo() -> void:
 	if aleatorio_em_andamento or entrada_bloqueada or modal_ativo or modal_sens_ativo:
 		_resetar_hover_cards()
-		# roleta e escolha de dificuldade mostram o cenário delas
+		# roleta e missão mostram o cenário delas
 		if modal_sens_ativo:
 			_mostrar_fundo("init", true)
 		return
@@ -1636,31 +1592,6 @@ func _input(event: InputEvent) -> void:
 		_executar_tiro_menu()
 
 
-func _tentar_escolher_dificuldade_por_mira() -> void:
-	if not modal_ativo:
-		return
-
-	if modal_botao_facil != null:
-		var r_facil := Rect2(
-			modal_botao_facil.global_position,
-			modal_botao_facil.size
-		)
-
-		if r_facil.has_point(alvo_pos):
-			_on_modal_escolheu_facil()
-			return
-
-	if modal_botao_dificil != null:
-		var r_dificil := Rect2(
-			modal_botao_dificil.global_position,
-			modal_botao_dificil.size
-		)
-
-		if r_dificil.has_point(alvo_pos):
-			_on_modal_escolheu_dificil()
-			return
-
-
 # ─────────────────────────────────────────────────────────────────────────────
 # SELEÇÃO POR TIRO
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1784,16 +1715,16 @@ func _modo_aleatorio_async() -> void:
 
 	aleatorio_em_andamento = false
 	entrada_bloqueada = false
-	_abrir_modal_dificuldade(cenas[indice_final])
+	_abrir_missao(cenas[indice_final])
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # NAVEGAÇÃO DE CENAS
 # ─────────────────────────────────────────────────────────────────────────────
-func _ir_para_cenario_1() -> void: _abrir_modal_dificuldade(CENA_CENARIO_1)
-func _ir_para_cenario_2() -> void: _abrir_modal_dificuldade(CENA_CENARIO_2)
-func _ir_para_cenario_3() -> void: _abrir_modal_dificuldade(CENA_CENARIO_3)
-func _ir_para_cenario_4() -> void: _abrir_modal_dificuldade(CENA_CENARIO_4)
+func _ir_para_cenario_1() -> void: _abrir_missao(CENA_CENARIO_1)
+func _ir_para_cenario_2() -> void: _abrir_missao(CENA_CENARIO_2)
+func _ir_para_cenario_3() -> void: _abrir_missao(CENA_CENARIO_3)
+func _ir_para_cenario_4() -> void: _abrir_missao(CENA_CENARIO_4)
 
 
 func _ir_para_ranking() -> void:
@@ -1802,9 +1733,23 @@ func _ir_para_ranking() -> void:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# MODAL DE DIFICULDADE
+# MISSÃO (modal ao escolher o cenário)
 # ─────────────────────────────────────────────────────────────────────────────
-func _abrir_modal_dificuldade(cena_destino: String) -> void:
+func _preparar_missao() -> void:
+	if modal_layer == null:
+		modal_layer = CanvasLayer.new()
+		modal_layer.name = "ModalMissaoLayer"
+		modal_layer.layer = 80
+		add_child(modal_layer)
+	if missao == null:
+		missao = Missao.new()
+		missao.name = "Missao"
+		modal_layer.add_child(missao)
+		missao.escolheu.connect(_ao_escolher_missao)
+		missao.aquecer()
+
+
+func _abrir_missao(cena_destino: String) -> void:
 	if modal_ativo:
 		return
 	modal_cena_destino = cena_destino
@@ -1812,276 +1757,31 @@ func _abrir_modal_dificuldade(cena_destino: String) -> void:
 	var i_cena: int = [CENA_CENARIO_1, CENA_CENARIO_2, CENA_CENARIO_3, CENA_CENARIO_4].find(cena_destino)
 	if i_cena >= 0:
 		_mostrar_fundo(FUNDO_CARDS[i_cena], true)
-	modal_tempo_restante = TEMPO_ESCOLHA_DIFICULDADE
 	auto_timer_ativo = false
 	entrada_bloqueada = true
-	_criar_modal()
-	_animar_entrada_modal()
+	_preparar_missao()
+	missao.abrir(cena_destino)
+	# a contagem do sorteio some: quem conta agora é o alvo da missão
+	if contador_layer != null:
+		contador_layer.visible = false
 
 
-func _criar_modal() -> void:
-	if modal_layer == null:
-		modal_layer = CanvasLayer.new()
-		modal_layer.name = "ModalDificuldadeLayer"
-		modal_layer.layer = 80
-		add_child(modal_layer)
-
-	if modal_root != null:
-		modal_root.queue_free()
-		modal_root = null
-		modal_panel = null
-		modal_titulo_label = null
-		modal_subtitulo = null
-		modal_contador = null
-		modal_botao_facil = null
-		modal_botao_dificil = null
-		modal_barra_progresso = null
-
-	modal_root = Control.new()
-	modal_root.name = "ModalRoot"
-	modal_root.set_anchors_preset(Control.PRESET_FULL_RECT)
-	modal_root.mouse_filter = Control.MOUSE_FILTER_STOP
-	modal_layer.add_child(modal_root)
-
-	var overlay := ColorRect.new()
-	overlay.name = "ModalOverlay"
-	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
-	overlay.color = Color(0.0, 0.0, 0.0, 0.72)
-	overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	modal_root.add_child(overlay)
-
-	var vp_size := get_viewport_rect().size
-	var painel_w := 560.0
-	var painel_h := 340.0
-
-	var estilo_painel := StyleBoxFlat.new()
-	estilo_painel.bg_color = Color(0.04, 0.03, 0.03, 0.97)
-	estilo_painel.border_width_left = 3
-	estilo_painel.border_width_top = 3
-	estilo_painel.border_width_right = 3
-	estilo_painel.border_width_bottom = 3
-	estilo_painel.border_color = Color(0.9, 0.02, 0.02, 1.0)
-	estilo_painel.corner_radius_top_left = 32
-	estilo_painel.corner_radius_top_right = 32
-	estilo_painel.corner_radius_bottom_left = 32
-	estilo_painel.corner_radius_bottom_right = 32
-	estilo_painel.shadow_color = Color(1.0, 0.0, 0.0, 0.25)
-	estilo_painel.shadow_size = 28
-	estilo_painel.shadow_offset = Vector2(0, 10)
-
-	modal_panel = Panel.new()
-	modal_panel.name = "ModalPanel"
-	modal_panel.mouse_filter = Control.MOUSE_FILTER_STOP
-	Leve.stylebox(modal_panel, "panel", estilo_painel)
-	modal_panel.position = Vector2(floor((vp_size.x - painel_w) * 0.5), floor((vp_size.y - painel_h) * 0.5))
-	modal_panel.size = Vector2(painel_w, painel_h)
-	modal_panel.pivot_offset = Vector2(painel_w * 0.5, painel_h * 0.5)
-	modal_root.add_child(modal_panel)
-
-	modal_titulo_label = Label.new()
-	modal_titulo_label.text = "ESCOLHA A DIFICULDADE"
-	modal_titulo_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	modal_titulo_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	modal_titulo_label.position = Vector2(0.0, 26.0)
-	modal_titulo_label.size = Vector2(painel_w, 50.0)
-	Leve.font_size(modal_titulo_label, "font_size", 36)
-	Leve.color(modal_titulo_label, "font_color", Color(1.0, 0.94, 0.74))
-	Leve.color(modal_titulo_label, "font_outline_color", Color.BLACK)
-	Leve.constant(modal_titulo_label, "outline_size", 8)
-	Leve.color(modal_titulo_label, "font_shadow_color", Color(0.0, 0.0, 0.0, 0.9))
-	Leve.constant(modal_titulo_label, "shadow_offset_x", 3)
-	Leve.constant(modal_titulo_label, "shadow_offset_y", 3)
-	modal_panel.add_child(modal_titulo_label)
-
-	modal_subtitulo = Label.new()
-	modal_subtitulo.text = "No modo DIFÍCIL a mira fica oculta!"
-	modal_subtitulo.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	modal_subtitulo.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	modal_subtitulo.position = Vector2(0.0, 76.0)
-	modal_subtitulo.size = Vector2(painel_w, 34.0)
-	Leve.font_size(modal_subtitulo, "font_size", 19)
-	Leve.color(modal_subtitulo, "font_color", Color(0.78, 0.78, 0.78, 1.0))
-	Leve.color(modal_subtitulo, "font_outline_color", Color.BLACK)
-	Leve.constant(modal_subtitulo, "outline_size", 5)
-	modal_panel.add_child(modal_subtitulo)
-
-	var estilo_facil_normal := StyleBoxFlat.new()
-	estilo_facil_normal.bg_color = Color(0.03, 0.22, 0.06, 0.96)
-	estilo_facil_normal.border_width_left = 2
-	estilo_facil_normal.border_width_top = 2
-	estilo_facil_normal.border_width_right = 2
-	estilo_facil_normal.border_width_bottom = 2
-	estilo_facil_normal.border_color = Color(0.18, 0.9, 0.22, 0.9)
-	estilo_facil_normal.corner_radius_top_left = 22
-	estilo_facil_normal.corner_radius_top_right = 22
-	estilo_facil_normal.corner_radius_bottom_left = 22
-	estilo_facil_normal.corner_radius_bottom_right = 22
-	estilo_facil_normal.shadow_color = Color(0.0, 0.9, 0.1, 0.22)
-	estilo_facil_normal.shadow_size = 14
-	estilo_facil_normal.shadow_offset = Vector2(0, 5)
-	var estilo_facil_hover := estilo_facil_normal.duplicate() as StyleBoxFlat
-	estilo_facil_hover.bg_color = Color(0.04, 0.30, 0.08, 1.0)
-	estilo_facil_hover.border_color = Color(0.3, 1.0, 0.35, 1.0)
-	estilo_facil_hover.shadow_color = Color(0.0, 1.0, 0.1, 0.36)
-	estilo_facil_hover.shadow_size = 22
-
-	modal_botao_facil = Button.new()
-	modal_botao_facil.text = "FACIL\n(mira visivel)"
-	modal_botao_facil.focus_mode = Control.FOCUS_NONE
-	modal_botao_facil.position = Vector2(40.0, 130.0)
-	modal_botao_facil.size = Vector2(220.0, 90.0)
-	modal_botao_facil.pivot_offset = Vector2(110.0, 45.0)
-	Leve.font_size(modal_botao_facil, "font_size", 22)
-	Leve.color(modal_botao_facil, "font_color", Color(0.8, 1.0, 0.82))
-	Leve.color(modal_botao_facil, "font_hover_color", Color(1.0, 1.0, 1.0))
-	Leve.color(modal_botao_facil, "font_pressed_color", Color(1.0, 1.0, 1.0))
-	Leve.color(modal_botao_facil, "font_outline_color", Color.BLACK)
-	Leve.constant(modal_botao_facil, "outline_size", 4)
-	Leve.stylebox(modal_botao_facil, "normal", estilo_facil_normal)
-	Leve.stylebox(modal_botao_facil, "hover", estilo_facil_hover)
-	Leve.stylebox(modal_botao_facil, "pressed", estilo_facil_hover)
-	modal_botao_facil.pressed.connect(_on_modal_escolheu_facil)
-	modal_panel.add_child(modal_botao_facil)
-
-	var estilo_dificil_normal := StyleBoxFlat.new()
-	estilo_dificil_normal.bg_color = Color(0.22, 0.02, 0.02, 0.96)
-	estilo_dificil_normal.border_width_left = 2
-	estilo_dificil_normal.border_width_top = 2
-	estilo_dificil_normal.border_width_right = 2
-	estilo_dificil_normal.border_width_bottom = 2
-	estilo_dificil_normal.border_color = Color(1.0, 0.08, 0.08, 0.9)
-	estilo_dificil_normal.corner_radius_top_left = 22
-	estilo_dificil_normal.corner_radius_top_right = 22
-	estilo_dificil_normal.corner_radius_bottom_left = 22
-	estilo_dificil_normal.corner_radius_bottom_right = 22
-	estilo_dificil_normal.shadow_color = Color(1.0, 0.0, 0.0, 0.22)
-	estilo_dificil_normal.shadow_size = 14
-	estilo_dificil_normal.shadow_offset = Vector2(0, 5)
-	var estilo_dificil_hover := estilo_dificil_normal.duplicate() as StyleBoxFlat
-	estilo_dificil_hover.bg_color = Color(0.32, 0.02, 0.02, 1.0)
-	estilo_dificil_hover.border_color = Color(1.0, 0.3, 0.3, 1.0)
-	estilo_dificil_hover.shadow_color = Color(1.0, 0.0, 0.0, 0.36)
-	estilo_dificil_hover.shadow_size = 22
-
-	modal_botao_dificil = Button.new()
-	modal_botao_dificil.text = "DIFICIL\n(sem mira)"
-	modal_botao_dificil.focus_mode = Control.FOCUS_NONE
-	modal_botao_dificil.position = Vector2(300.0, 130.0)
-	modal_botao_dificil.size = Vector2(220.0, 90.0)
-	modal_botao_dificil.pivot_offset = Vector2(110.0, 45.0)
-	Leve.font_size(modal_botao_dificil, "font_size", 22)
-	Leve.color(modal_botao_dificil, "font_color", Color(1.0, 0.78, 0.78))
-	Leve.color(modal_botao_dificil, "font_hover_color", Color(1.0, 1.0, 1.0))
-	Leve.color(modal_botao_dificil, "font_pressed_color", Color(1.0, 1.0, 1.0))
-	Leve.color(modal_botao_dificil, "font_outline_color", Color.BLACK)
-	Leve.constant(modal_botao_dificil, "outline_size", 4)
-	Leve.stylebox(modal_botao_dificil, "normal", estilo_dificil_normal)
-	Leve.stylebox(modal_botao_dificil, "hover", estilo_dificil_hover)
-	Leve.stylebox(modal_botao_dificil, "pressed", estilo_dificil_hover)
-	modal_botao_dificil.pressed.connect(_on_modal_escolheu_dificil)
-	modal_panel.add_child(modal_botao_dificil)
-
-	var estilo_fundo_barra := StyleBoxFlat.new()
-	estilo_fundo_barra.bg_color = Color(0.12, 0.12, 0.12, 0.8)
-	estilo_fundo_barra.corner_radius_top_left = 8
-	estilo_fundo_barra.corner_radius_top_right = 8
-	estilo_fundo_barra.corner_radius_bottom_left = 8
-	estilo_fundo_barra.corner_radius_bottom_right = 8
-	var fundo_barra := Panel.new()
-	fundo_barra.name = "FundoBarra"
-	fundo_barra.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	fundo_barra.position = Vector2(40.0, 248.0)
-	fundo_barra.size = Vector2(480.0, 12.0)
-	Leve.stylebox(fundo_barra, "panel", estilo_fundo_barra)
-	modal_panel.add_child(fundo_barra)
-
-	modal_barra_progresso = ColorRect.new()
-	modal_barra_progresso.name = "BarraProgresso"
-	modal_barra_progresso.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	modal_barra_progresso.color = Color(0.95, 0.06, 0.06, 1.0)
-	modal_barra_progresso.position = Vector2(40.0, 248.0)
-	modal_barra_progresso.size = Vector2(480.0, 12.0)
-	modal_panel.add_child(modal_barra_progresso)
-
-	modal_contador = Label.new()
-	modal_contador.name = "ModalContador"
-	modal_contador.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	modal_contador.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	modal_contador.position = Vector2(0.0, 268.0)
-	modal_contador.size = Vector2(painel_w, 44.0)
-	Leve.font_size(modal_contador, "font_size", 18)
-	Leve.color(modal_contador, "font_color", Color(0.72, 0.72, 0.72, 1.0))
-	Leve.color(modal_contador, "font_outline_color", Color.BLACK)
-	Leve.constant(modal_contador, "outline_size", 5)
-	modal_panel.add_child(modal_contador)
-
-	_atualizar_modal_contador()
-
-
-func _animar_entrada_modal() -> void:
-	if modal_panel == null:
-		return
-	modal_panel.scale = Vector2(0.88, 0.88)
-	modal_panel.modulate.a = 0.0
-	var tw := create_tween()
-	tw.set_parallel(true)
-	tw.tween_property(modal_panel, "scale", Vector2.ONE, 0.22).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	tw.tween_property(modal_panel, "modulate:a", 1.0, 0.18)
-
-
-func _atualizar_modal_contador() -> void:
-	if modal_contador == null or modal_barra_progresso == null:
-		return
-	var segundos: int = max(0, int(ceil(modal_tempo_restante)))
-	var plural := "s" if segundos != 1 else ""
-	modal_contador.text = "Sem escolha, inicia em FÁCIL em %d segundo%s" % [segundos, plural]
-	var progresso := modal_tempo_restante / TEMPO_ESCOLHA_DIFICULDADE
-	modal_barra_progresso.size.x = 480.0 * clamp(progresso, 0.0, 1.0)
-	if segundos <= 5:
-		modal_barra_progresso.color = Color(1.0, 0.3, 0.05, 1.0)
-		Leve.color(modal_contador, "font_color", Color(1.0, 0.4, 0.4, 1.0))
-	else:
-		modal_barra_progresso.color = Color(0.95, 0.06, 0.06, 1.0)
-		Leve.color(modal_contador, "font_color", Color(0.72, 0.72, 0.72, 1.0))
-
-
-func _fechar_modal_e_ir() -> void:
+func _ao_escolher_missao(acao: String) -> void:
 	modal_ativo = false
-	if modal_panel != null:
-		var tw := create_tween()
-		tw.tween_property(modal_panel, "modulate:a", 0.0, 0.14)
-		await tw.finished
-
-	if modal_root != null:
-		modal_root.queue_free()
-		modal_root = null
-		modal_panel = null
-		modal_titulo_label = null
-		modal_subtitulo = null
-		modal_contador = null
-		modal_botao_facil = null
-		modal_botao_dificil = null
-		modal_barra_progresso = null
-
-	_abrir_cena_suave_com_tiro(modal_cena_destino)
-
-
-func _on_modal_escolheu_facil() -> void:
-	if not modal_ativo:
+	if acao == "jogar":
+		get_tree().set_meta("modo_dificuldade", "facil")
+		missao.fechar()
+		_abrir_cena_suave_com_tiro(modal_cena_destino)
 		return
-	_tocar_tiro()
-	get_tree().set_meta("modo_dificuldade", "facil")
-	modal_ativo = false
-	_fechar_modal_e_ir()
-
-
-func _on_modal_escolheu_dificil() -> void:
-	if not modal_ativo:
-		return
-	_tocar_tiro()
-	get_tree().set_meta("modo_dificuldade", "dificil")
-	modal_ativo = false
-	_fechar_modal_e_ir()
+	# trocar: volta para a grade, com a contagem do sorteio reiniciada
+	await missao.fechar()
+	entrada_bloqueada = false
+	tempo_restante_auto = TEMPO_AUTO_ALEATORIO
+	auto_timer_ativo = true
+	if contador_layer != null:
+		contador_layer.visible = true
+	_atualizar_contador()
+	_resetar_hover_cards()
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -2563,8 +2263,13 @@ func _executar_tiro_menu() -> void:
 	tempo_trava_input_menu = 0.10
 
 	if modal_ativo:
-		_tentar_escolher_dificuldade_por_mira()
+		_tocar_tiro()
+		if missao != null:
+			missao.tiro(alvo_pos)
 		return
 
 	_tocar_tiro()
+	# saindo para o jogo (ou fechando a missão): nenhum cartão reabre
+	if entrada_bloqueada:
+		return
 	_tentar_selecao_por_tiro(alvo_pos)
