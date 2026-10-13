@@ -22,9 +22,11 @@ var ranking_ja_salvo: bool = false
 @export var quantidade_alvos_simultaneos: int = 9
 @export var escala_alvo_jogo: float = 0.66
  
-@export var cena_lanterna_vermelha: PackedScene = preload("res://entities/LanternaVermelha.tscn")
-@export var cena_lanterna_verde: PackedScene   = preload("res://entities/LanternaVerde.tscn")
-@export var cena_lanterna_azul: PackedScene    = preload("res://entities/LanternaAzul.tscn")
+# load() e não preload(): o Godot 4.6 nunca descarrega um script já carregado,
+# e o que ele pré-carrega ficava na memória depois da primeira partida.
+@export var cena_lanterna_vermelha: PackedScene = load("res://entities/LanternaVermelha.tscn")
+@export var cena_lanterna_verde: PackedScene   = load("res://entities/LanternaVerde.tscn")
+@export var cena_lanterna_azul: PackedScene    = load("res://entities/LanternaAzul.tscn")
  
 @export var pontos_base_sequencia: int = 20
 @export var penalidade_erro_sequencia: int = 100
@@ -86,7 +88,9 @@ var ranking_ja_salvo: bool = false
 @export var xbox_botao_recarga_extra: int = JOY_BUTTON_LEFT_SHOULDER
 
 const Pincel := preload("res://scripts/pincel.gd")
-const FOLHA_LANTERNAS := preload("res://sprites/arena_lanternas.png")
+# load() e não preload(): o Godot 4.6 nunca descarrega um script já carregado,
+# e o que ele pré-carrega ficava na memória depois da primeira partida.
+var FOLHA_LANTERNAS: Texture2D = load("res://sprites/arena_lanternas.png")
 
 # ordem dos tiros pelas cores: azul 1º, verde 2º, amarelo 3º, vermelho 4º, roxo 5º
 const CORES_SEQ: Array[String] = ["azul", "verde", "amarelo", "vermelho", "roxo"]
@@ -106,7 +110,7 @@ const SOM_LASER_PAREDE := preload("res://songs/laser_parede.wav")
 # tom do bip sobe com a ordem (1º grave ... 5º agudo)
 const TONS_BIP: Array[float] = [0.84, 0.94, 1.06, 1.19, 1.34]
 
-static var _quadros_lanterna: SpriteFrames = null
+var _quadros_lanterna: SpriteFrames = null
 const META_SENS_XBOX: String = "sensibilidade_xbox"
 const META_SENS_MOUSE: String = "sensibilidade_mouse"
 
@@ -432,6 +436,7 @@ func _ready() -> void:
 	_instalar_placar()
 	_criar_vivo()
 	_configurar_modal_fim()
+	FimPartida.instalar(self, COR_NEON_ARENA, func() -> bool: return fim_ativo and not ranking_nome_ativo, 150)
 
 	call_deferred("_reposicionar_modal")
 	call_deferred("_atualizar_hud")
@@ -498,9 +503,11 @@ func _process(delta: float) -> void:
 		Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 
 	if mira_root != null:
-		if ranking_nome_ativo:
+		# no resultado a mira fica por cima do modal (botão VOLTAR AOS CENÁRIOS)
+		if ranking_nome_ativo or fim_ativo:
 			if mira_layer != null:
 				mira_layer.layer = 200
+				mira_layer.visible = true
 
 			mira_root.visible = true
 			mira_root.queue_redraw()
@@ -523,10 +530,10 @@ func _process(delta: float) -> void:
 		fim_tempo_voltar -= delta
 
 		if fim_contagem_label != null:
-			fim_contagem_label.text = "VOLTANDO AO MENU EM %02d" % int(ceil(fim_tempo_voltar))
+			fim_contagem_label.text = "VOLTANDO AO INÍCIO EM %02d" % int(ceil(fim_tempo_voltar))
 
 		if fim_tempo_voltar <= 0.0:
-			TransicaoGlobal.trocar_cena("res://scenes/main.tscn")
+			FimPartida.voltar_a_abertura()
 
 
 func _atualizar_mira_hibrida(_delta: float) -> void:
@@ -737,75 +744,9 @@ func _input(event: InputEvent) -> void:
 
  
 func _reiniciar_partida_modal_final() -> void:
-	# Modo crédito: só recomeça se houver crédito (desconta aqui).
-	if not Maquina.cobrar():
-		return
-	_aplicar_config_admin_na_cena()
-	fim_ativo = false
-	fim_tempo_voltar = Maquina.tempo_volta_menu()
-
-	ranking_nome_ativo = false
-	ranking_ja_salvo = false
-	ranking_nome_digitado = ""
-
-	if fim_root != null:
-		fim_root.visible = false
-		fim_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
-
-	if fim_layer != null:
-		fim_layer.visible = false
-
-	if ranking_nome_layer != null:
-		ranking_nome_layer.visible = false
-
-	if mira_layer != null:
-		mira_layer.visible = true
-		mira_layer.layer = 100
-
-	if mira_root != null:
-		mira_root.visible = true
-		mira_root.queue_redraw()
-
-	if hud_layer_codigo != null:
-		hud_layer_codigo.visible = true
-
-	if modal_layer != null:
-		modal_layer.visible = true
-
-	if info_inicio_texture != null:
-		info_inicio_texture.visible = true
-
-	jogo_ativo = false
-	jogo_iniciado = false
-	intro_comeco_ativa = false
-	recarregando = false
-	reload_tempo_restante = 0.0
-	mostrando_sequencia = false
-	bloqueia_tiro_sequencia = false
-
-	tempo_restante = tempo_total
-	pontuacao = 0
-	tiros = 0
-	acertos = 0
-	municao_atual = capacidade_cartucho
-	nivel_sequencia = 1
-	indice_sequencia = 0
-	sequencia_atual.clear()
-
-	_limpar_alvos()
-	fx_colisao.clear()
-	marcas_laser_parede.clear()
-	status_msgs.clear()
-
-	timer_jogo.stop()
-	timer_spawn.stop()
-
-	_tocar_musica_arena()
-	_atualizar_hud()
-	_reposicionar_modal()
-
-	if fx_layer_jogo != null:
-		fx_layer_jogo.queue_redraw()
+	# Jogar de novo = recarregar a fase do zero (scripts/fim_partida.gd): nada
+	# da partida anterior fica rodando por baixo, mesmo com START repetido.
+	FimPartida.jogar_de_novo(self)
 
 
 func _estilizar_botao_modal_final(btn: Label, texto: String, destaque: bool = false) -> void:
@@ -1825,7 +1766,7 @@ func _mostrar_modal_fim() -> void:
 		if entrou_ranking:
 			fim_contagem_label.text = "ABRINDO REGISTRO DO RECORDE..."
 		else:
-			fim_contagem_label.text = "VOLTANDO AO MENU EM %02d" % int(ceil(fim_tempo_voltar))
+			fim_contagem_label.text = "VOLTANDO AO INÍCIO EM %02d" % int(ceil(fim_tempo_voltar))
 
 	_ajustar_layout_modal_final()
 
@@ -3475,7 +3416,7 @@ func _confirmar_nome_ranking(usar_anonimo: bool = false) -> void:
 		_estilizar_botao_modal_final(fim_footer, Maquina.texto_jogar_novamente(), false)
 
 	if fim_contagem_label != null:
-		fim_contagem_label.text = "VOLTANDO AO MENU EM %02d" % int(ceil(fim_tempo_voltar))
+		fim_contagem_label.text = "VOLTANDO AO INÍCIO EM %02d" % int(ceil(fim_tempo_voltar))
 
 	_ajustar_layout_modal_final()
 

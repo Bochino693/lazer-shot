@@ -136,9 +136,12 @@ func _unhandled_input(event: InputEvent) -> void:
 				return
 
 	if _evento_start(event):
-		# Modo crédito: só começa se houver crédito (desconta aqui).
+		get_viewport().set_input_as_handled()
+		# Modo crédito: só começa se houver crédito (desconta aqui). Trava na
+		# hora: START apertado várias vezes não cobra nem começa duas vezes.
 		if Maquina.cobrar():
-			_iniciar_com_confirmacao()
+			transicionando = true
+			_iniciar_com_confirmacao_async.call_deferred()
 
 
 func _abrir_tela_admin() -> void:

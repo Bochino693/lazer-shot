@@ -24,12 +24,13 @@ const FORMAS := {
 	"bau": {"centro": Vector2(0.5, 0.52), "raio": Vector2(0.42, 0.32), "caixa": true, "setores": 6, "anel": 0.5},
 }
 
-static var _brilho: Texture2D = null
+var _brilho: Texture2D = null
 
 var _tipo := ""
-# no máximo 4 efeitos ao mesmo tempo (rajada não pesa na TV Box)
+# no máximo 4 efeitos ao mesmo tempo (rajada não pesa na TV Box); a contagem é
+# pelo grupo (static var prenderia o script na memória até o jogo fechar)
 const MAX_VIVOS := 4
-static var _vivos := 0
+const GRUPO := "fx_mar_acerto"
 
 var _tex: Texture2D
 var _t := 0.0
@@ -54,9 +55,9 @@ var _grav := 0.0
 ## Cria o efeito para `alvo` (Area2D com AnimatedSprite2D) atingido em
 ## `impacto` (coordenadas globais). Chamar antes de trocar a animação.
 static func criar(pai: Node, alvo: Node2D, impacto: Vector2, tipo: String) -> void:
-	if _vivos >= MAX_VIVOS:
+	if not FORMAS.has(tipo) or pai == null or alvo == null or not pai.is_inside_tree():
 		return
-	if not FORMAS.has(tipo) or pai == null or alvo == null:
+	if pai.get_tree().get_node_count_in_group(GRUPO) >= MAX_VIVOS:
 		return
 	var anim := alvo.get_node_or_null("AnimatedSprite2D") as AnimatedSprite2D
 	if anim == null or anim.sprite_frames == null or not anim.sprite_frames.has_animation(anim.animation):
@@ -64,12 +65,11 @@ static func criar(pai: Node, alvo: Node2D, impacto: Vector2, tipo: String) -> vo
 	var quadro := anim.sprite_frames.get_frame_texture(anim.animation, anim.frame)
 	if quadro == null:
 		return
-	if _brilho == null:
-		_brilho = FundoVivo.brilho_redondo()
 	var fx := MarAcerto.new()
+	fx._brilho = FundoVivo.brilho_redondo()
+	fx.add_to_group(GRUPO)
 	fx.top_level = true
 	fx.z_index = 5
-	_vivos += 1
 	pai.add_child(fx)
 	fx._montar(anim, quadro, impacto, tipo)
 
@@ -396,5 +396,3 @@ func _desenhar_luz() -> void:
 			_luz.draw_line(f["pos"] - Vector2(0, b), f["pos"] + Vector2(0, b), cor, 1.5 * _k, true)
 
 
-func _exit_tree() -> void:
-	_vivos -= 1

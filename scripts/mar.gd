@@ -94,7 +94,7 @@ var fim_cutscene_barra_fill: ColorRect
 
 @export var pontos_por_nivel_dificuldade: int = 3000
 @export var bonus_chance_bomba_por_nivel: float = 0.06
-@export var bonus_velocidade_por_nivel: float = 0.12
+@export var bonus_velocidade_por_nivel: float = 0.07
 @export var bonus_escala_bomba_por_nivel: float = 0.07
 @export var bonus_margem_spawn_por_nivel: float = 18.0
 
@@ -145,10 +145,11 @@ var som_recharge_stream: AudioStream = null
 @export var aguaviva_balanço_y: float = 10.0
 @export var aguaviva_rotacao_idle: float = 8.0
 @export var aguaviva_pulso_escala: float = 0.05
-@export var aguaviva_freq_x: float = 1.8
-@export var aguaviva_freq_y: float = 2.6
-@export var aguaviva_freq_rot: float = 1.5
-@export var aguaviva_freq_pulso: float = 3.0
+# Rodada 14: balanço das águas-vivas mais lento (acompanha a queda mais lenta)
+@export var aguaviva_freq_x: float = 1.2
+@export var aguaviva_freq_y: float = 1.8
+@export var aguaviva_freq_rot: float = 1.0
+@export var aguaviva_freq_pulso: float = 2.2
 @export var aguaviva_bolha_intervalo_min: float = 0.12
 @export var aguaviva_bolha_intervalo_max: float = 0.26
 @export var aguaviva_bolhas_por_onda_min: int = 1
@@ -173,9 +174,10 @@ var mira_desvio_bomba: Vector2 = Vector2.ZERO
 @export var pontos_vaso: int = 80
 @export var pontos_bau: int = 100
 
-@export var tempo_queda_aguaviva: float = 3.8
-@export var tempo_queda_vaso: float = 4.5
-@export var tempo_queda_bau: float = 3.0
+# Rodada 14: tudo ~50% mais devagar (mais tempo para mirar)
+@export var tempo_queda_aguaviva: float = 5.7
+@export var tempo_queda_vaso: float = 6.6
+@export var tempo_queda_bau: float = 4.6
 
 @export var chance_aguaviva: float = 0.81
 @export var chance_vaso: float = 0.42
@@ -204,7 +206,7 @@ var ultimo_hit_ms: int = -1000
 @export var atraso_bau_hit_seg: float = 0.000
 @export var pontos_bomba_min: int = 40
 @export var pontos_bomba_max: int = 120
-@export var tempo_queda_bomba: float = 3.4
+@export var tempo_queda_bomba: float = 5.0
 @export var chance_bomba: float = 0.39
 @export var max_bombas_ativas: int = 6
 
@@ -500,6 +502,8 @@ func _ready() -> void:
 	_configurar_intro_comeco()
 	_criar_tela_info_inicio()
 	_criar_modal_fim()
+	# entre o resultado (70) e a mira (100)
+	FimPartida.instalar(self, COR_NEON_MAR, func() -> bool: return encerrado and not fim_cutscene_ativa and not ranking_nome_ativo and fim_root != null and fim_root.is_visible_in_tree(), 90)
 	_criar_overlay_alerta_bombas()
 	_criar_nome_ranking()
 	_criar_mira_overlay()
@@ -1756,10 +1760,8 @@ func _voltar_para_main_menu() -> void:
 	_parar_musica_fim()
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 
-	if cena_main_menu_path != "" and ResourceLoader.exists(cena_main_menu_path):
-		TransicaoGlobal.trocar_cena(cena_main_menu_path)
-	else:
-		push_warning("Cena de menu principal não encontrada: " + cena_main_menu_path)
+	# a contagem do resultado acabou: volta para a abertura
+	FimPartida.voltar_a_abertura()
 
 
 func _atualizar_texto_countdown_fim() -> void:
@@ -1771,7 +1773,7 @@ func _atualizar_texto_countdown_fim() -> void:
 		return
 
 	var tempo_int: int = int(ceil(clamp(fim_retorno_timer, 0.0, tempo_auto_retorno_menu_seg)))
-	fim_countdown_label.text = "VOLTANDO AO MENU EM %02d" % tempo_int
+	fim_countdown_label.text = "VOLTANDO AO INÍCIO EM %02d" % tempo_int
 
 
 
@@ -3342,7 +3344,7 @@ func _encerrar_partida() -> void:
 		if entrou_ranking:
 			fim_countdown_label.text = "DIGITE SEU NOME PARA SALVAR O RECORDE"
 		else:
-			fim_countdown_label.text = "VOLTANDO AO MENU EM %02d" % int(ceil(tempo_auto_retorno_menu_seg))
+			fim_countdown_label.text = "VOLTANDO AO INÍCIO EM %02d" % int(ceil(tempo_auto_retorno_menu_seg))
 
 	# NÃO PARA E NÃO REINICIA A MÚSICA AQUI.
 	# A pirate.mp3 continua tocando do mesmo ponto.
@@ -3692,117 +3694,9 @@ func _posicionar_modal_final_mar() -> void:
 
 
 func _reiniciar_partida() -> void:
-	# Modo crédito: só recomeça se houver crédito (desconta aqui).
-	if not Maquina.cobrar():
-		return
-	_aplicar_config_admin_na_cena()
-	_parar_musica_fim()
-	_iniciar_musica_pirate_em_loop()
-
-	for alvo in alvos_ativos:
-		if is_instance_valid(alvo):
-			alvo.queue_free()
-	alvos_ativos.clear()
-
-	tempo_restante = tempo_partida
-	total_tiros = 0
-	total_acertos = 0
-	pontuacao_total = 0
-
-	bombas_erros_atual = 0
-	combo_bombas_acertadas = 0
-
-	recoil_intensidade = 0.0
-	recoil_tempo = 0.0
-	aviso_sem_municao_t = 0.0
-
-	balas_no_cartucho = capacidade_cartucho
-	recarregando = false
-	reload_tempo_restante = 0.0
-
-	contagem_inicio_ativa = false
-	contagem_inicio_t = 0.0
-	contagem_inicio_etapa = 3
-
-	penalidade_bomba_t = 0.0
-	mira_desvio_bomba = Vector2.ZERO
-	fim_retorno_timer = 0.0
-
-	nivel_dificuldade_atual = 0
-	combo_hits_seguidos = 0
-	combo_timer_restante = 0.0
-
-	if combo_label != null:
-		combo_label.visible = false
-		combo_label.text = ""
-
-	marcas_agua.clear()
-	fx_agua.clear()
-	fx_estilhacos.clear()
-	fx_moedas.clear()
-	fx_explosao_bomba.clear()
-	
-	if fx_back_overlay != null:
-		fx_back_overlay.queue_redraw()
-
-	if fx_front_overlay != null:
-		fx_front_overlay.queue_redraw()
-
-	if flash_overlay != null:
-		flash_overlay.color = Color(1, 1, 1, 0.0)
-		flash_overlay.modulate.a = 0.0
-
-	if dano_overlay != null:
-		dano_overlay.color = Color(0.85, 0.05, 0.03, 0.0)
-		dano_overlay.modulate.a = 0.0
-
-	if dano_vinheta_overlay != null:
-		dano_vinheta_overlay.color = Color(0.20, 0.0, 0.0, 0.0)
-		dano_vinheta_overlay.modulate.a = 0.0
-
-	dano_nevoa_ativo = false
-	dano_nevoa_t = 0.0
-
-	jogo_ativo = true
-	partida_iniciada = false
-	tela_inicio_ativa = true
-	encerrado = false
-	intro_comeco_ativa = false
-	intro_comeco_t = 0.0
-	intro_contagem_valor = 3
-
-	if fim_root != null:
-		fim_root.visible = false
-		
-	_esconder_alerta_3_bombas()
-
-	if info_inicio_root != null:
-		info_inicio_root.visible = true
-		info_inicio_root.modulate.a = 1.0
-
-	if comeco_root != null:
-		comeco_root.visible = false
-
-	if comeco_titulo != null:
-		comeco_titulo.visible = false
-		comeco_titulo.scale = Vector2.ONE
-		comeco_titulo.modulate = Color(1, 1, 1, 1)
-
-	if comeco_subtitulo != null:
-		comeco_subtitulo.visible = false
-		comeco_subtitulo.scale = Vector2.ONE
-		comeco_subtitulo.modulate = Color(1, 1, 1, 1)
-
-	if fim_countdown_label != null:
-		fim_countdown_label.visible = false
-		fim_countdown_label.text = ""
-
-	_resetar_spawn_timer()
-	_atualizar_bombas_hud()
-	_atualizar_hud()
-	_set_status("")
-	_ajustar_layout()
-	queue_redraw()
+	# Jogar de novo = recarregar a fase do zero (scripts/fim_partida.gd): nada
+	# da partida anterior fica rodando por baixo, mesmo com START repetido.
+	FimPartida.jogar_de_novo(self)
 
 
 func _atualizar_textos_painel_inicio_mar() -> void:

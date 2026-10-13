@@ -292,6 +292,7 @@ func _ready() -> void:
 	_configurar_modal_inicio()
 	_configurar_countdown()
 	_configurar_modal_fim()
+	FimPartida.instalar(self, COR_SOL, func() -> bool: return fim_ativo and not ranking_nome_ativo, 150)
 
 	balas_no_cartucho = capacidade_cartucho
 	tempo_restante = tempo_partida
@@ -344,16 +345,17 @@ func _process(delta: float) -> void:
 				fim_contagem_label.text = "DIGITE SEU NOME PARA SALVAR O RECORDE"
 				fim_contagem_label.modulate.a = 1.0
 			else:
-				fim_contagem_label.text = "VOLTANDO AO MENU EM %02d" % int(ceil(fim_tempo_voltar))
+				fim_contagem_label.text = "VOLTANDO AO INÍCIO EM %02d" % int(ceil(fim_tempo_voltar))
 				var pulso: float = 0.72 + abs(sin(fim_pulso_t * 4.0)) * 0.28
 				fim_contagem_label.modulate.a = pulso
 
 		if fim_tempo_voltar <= 0.0 and not ranking_nome_ativo:
-			TransicaoGlobal.trocar_cena(cena_main_menu)
+			FimPartida.voltar_a_abertura()
 			return
 
 	if crosshair_overlay != null:
-		if ranking_nome_ativo:
+		# no resultado a mira fica por cima do modal (botão VOLTAR AOS CENÁRIOS)
+		if ranking_nome_ativo or fim_ativo:
 			if overlay_layer != null:
 				overlay_layer.layer = 220
 
@@ -363,7 +365,7 @@ func _process(delta: float) -> void:
 			if overlay_layer != null:
 				overlay_layer.layer = 90
 
-			crosshair_overlay.visible = intro_ativa or ranking_nome_ativo or not modal_aberto
+			crosshair_overlay.visible = intro_ativa or ranking_nome_ativo or fim_ativo or not modal_aberto
 			if crosshair_overlay.visible:
 				crosshair_overlay.queue_redraw()
 
@@ -1188,7 +1190,7 @@ func _configurar_modal_fim() -> void:
 	fim_root.add_child(fim_footer)
 
 	fim_contagem_label = Label.new()
-	fim_contagem_label.text = "VOLTANDO AO MENU EM 21"
+	fim_contagem_label.text = "VOLTANDO AO INÍCIO EM 21"
 	fim_contagem_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	fim_contagem_label.vertical_alignment   = VERTICAL_ALIGNMENT_CENTER
 	Leve.font_size(fim_contagem_label, "font_size", 28)
@@ -2754,87 +2756,9 @@ func _encerrar_jogo() -> void:
 
 
 func _reiniciar_jogo() -> void:
-	# Modo crédito: só recomeça se houver crédito (desconta aqui).
-	if not Maquina.cobrar():
-		return
-
-	fim_ativo = false
-	jogo_ativo = true
-	partida_iniciada = false
-	intro_ativa = true
-	countdown_ativo = false
-
-	balas_no_cartucho = capacidade_cartucho
-	recarregando = false
-	reload_tempo_restante = 0.0
-
-	pontuacao_total = 0
-	total_tiros = 0
-	total_acertos = 0
-	total_erros = 0
-
-	combo_tipo = ""
-	combo_qtd = 0
-	combo_timer = 0.0
-	melhor_combo = 0
-
-	status_timer = 0.0
-	status_cor_base = Color.WHITE
-
-	tempo_restante = tempo_partida
-	tempo_fase = 0.0
-	tempo_total_partida = 0.0
-	nivel_dificuldade = 1.0
-	modo_atual = MODO_SOL if randi() % 2 == 0 else MODO_LUA
-
-	_aplicar_background_modo()
-	_limpar_alvos()
-	
-	
-	if target_root != null:
-		target_root.visible = false
-		target_root.process_mode = Node.PROCESS_MODE_INHERIT
-
-	if sun_modelo != null:
-		sun_modelo.visible = false
-		sun_modelo.process_mode = Node.PROCESS_MODE_DISABLED
-
-	if lua_modelo != null:
-		lua_modelo.visible = false
-		lua_modelo.process_mode = Node.PROCESS_MODE_DISABLED
-
-	if fim_root != null:
-		fim_root.visible = false
-
-	if modal_inicio_subtitulo != null:
-		modal_inicio_subtitulo.visible = true
-
-	if modal_card_correto != null:
-		modal_card_correto.visible = true
-	if modal_card_errado != null:
-		modal_card_errado.visible = true
-	if modal_card_vazio != null:
-		modal_card_vazio.visible = true
-
-	if modal_inicio_titulo != null:
-		modal_inicio_titulo.visible = true
-	if modal_inicio_texto != null:
-		modal_inicio_texto.visible = true
-	# o aviso de novo: o COMO JOGAR (a imagem antiga e a moldura não voltam)
-	if modal_como_jogar != null:
-		modal_como_jogar.visible = true
-
-	if preview_sol != null and is_instance_valid(preview_sol):
-		preview_sol.visible = true
-	if preview_lua != null and is_instance_valid(preview_lua):
-		preview_lua.visible = true
-
-	if countdown_label != null:
-		countdown_label.visible = false
-
-	_tocar_musica_bg()
-	_set_status("", Color.WHITE, 0.0)
-	_atualizar_hud()
+	# Jogar de novo = recarregar a fase do zero (scripts/fim_partida.gd): nada
+	# da partida anterior fica rodando por baixo, mesmo com START repetido.
+	FimPartida.jogar_de_novo(self)
 
 
 func _set_status(texto: String, cor: Color, duracao: float = 1.5) -> void:

@@ -22,9 +22,10 @@ const CARTAZ := [Vector2(797, 1022), Vector2(992, 1027), Vector2(1002, 1360), Ve
 const BARRIL := [Vector2(800, 995), Vector2(1024, 995), Vector2(1024, 1435), Vector2(810, 1425),
 	Vector2(785, 1300), Vector2(776, 1160), Vector2(785, 1060)]
 
-# no máximo 5 efeitos ao mesmo tempo (rajada não pesa na TV Box)
+# no máximo 5 efeitos ao mesmo tempo (rajada não pesa na TV Box); a contagem é
+# pelo grupo (static var prenderia o script na memória até o jogo fechar)
 const MAX_VIVOS := 5
-static var _vivos := 0
+const GRUPO := "fx_bar_tiro"
 
 var _tex: Texture2D
 var _tipo := ""
@@ -56,14 +57,14 @@ static func material_em(fundo: Sprite2D, pos_global: Vector2) -> String:
 
 static func criar(pai: Node, fundo: Sprite2D, pos_global: Vector2, tipo: String) -> void:
 	Maquina.efeito(SOM_PAPEL if tipo == "papel" else SOM_MADEIRA, -5.0, randf_range(0.9, 1.1))
-	if _vivos >= MAX_VIVOS:
+	if pai == null or fundo == null or fundo.texture == null or not pai.is_inside_tree():
 		return
-	if pai == null or fundo == null or fundo.texture == null:
+	if pai.get_tree().get_node_count_in_group(GRUPO) >= MAX_VIVOS:
 		return
 	var fx := BarTiro.new()
 	fx.top_level = true
 	fx.z_index = 4
-	_vivos += 1
+	fx.add_to_group(GRUPO)
 	pai.add_child(fx)
 	fx._montar(fundo, pos_global, tipo)
 
@@ -234,5 +235,3 @@ func _draw() -> void:
 	draw_set_transform(Vector2.ZERO)
 
 
-func _exit_tree() -> void:
-	_vivos -= 1

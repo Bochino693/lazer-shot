@@ -126,6 +126,8 @@ func _criar_faiscas() -> void:
 
 ## Pontinho de luz redondo (32 px) para as faíscas.
 static func brilho_redondo() -> Texture2D:
+	if Engine.has_meta("brilho_redondo"):
+		return Engine.get_meta("brilho_redondo")
 	var g := Gradient.new()
 	g.offsets = PackedFloat32Array([0.0, 0.25, 1.0])
 	g.colors = PackedColorArray([Color(1, 1, 1, 1), Color(1, 1, 1, 0.45), Color(1, 1, 1, 0)])
@@ -136,6 +138,7 @@ static func brilho_redondo() -> Texture2D:
 	t.fill = GradientTexture2D.FILL_RADIAL
 	t.fill_from = Vector2(0.5, 0.5)
 	t.fill_to = Vector2(0.5, 0.0)
+	Engine.set_meta("brilho_redondo", t)
 	return t
 
 

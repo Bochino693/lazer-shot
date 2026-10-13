@@ -2,6 +2,8 @@ extends Node
 
 const SAVE_PATH: String = "user://ranking_lazer_shot.json"
 const MAX_RANKING: int = 20
+## Só entra no ranking quem fizer MAIS que isto numa partida.
+const PONTOS_MINIMOS: int = 4000
 
 var ranking: Array[Dictionary] = []
 
@@ -45,6 +47,9 @@ func carregar() -> void:
 		for item in json.data:
 			if typeof(item) == TYPE_DICTIONARY:
 				var entrada: Dictionary = item
+				# recordes antigos de 4.000 pontos ou menos não aparecem mais
+				if int(entrada.get("pontos", 0)) <= PONTOS_MINIMOS:
+					continue
 
 				if not entrada.has("modo"):
 					entrada["modo"] = "FACIL"
@@ -67,7 +72,7 @@ func salvar() -> void:
 
 
 func adicionar_resultado(nome: String, pontos: int, cenario: String, precisao: int = 0, modo: String = "FACIL") -> bool:
-	if pontos <= 0:
+	if pontos <= PONTOS_MINIMOS:
 		return false
 
 	carregar()
@@ -99,7 +104,7 @@ func obter_ranking() -> Array[Dictionary]:
 
 
 func deve_entrar_no_ranking(pontos: int, precisao: int = 0, modo: String = "FACIL") -> bool:
-	if pontos <= 0:
+	if pontos <= PONTOS_MINIMOS:
 		return false
 
 	carregar()
