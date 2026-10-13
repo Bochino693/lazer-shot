@@ -285,6 +285,7 @@ func _ready() -> void:
 	_preparar_modelos()
 	_configurar_background()
 	_configurar_hud()
+	_instalar_placar()
 	_configurar_overlay()
 	_configurar_fx_frontal()
 	_configurar_modal_inicio()
@@ -786,6 +787,30 @@ func _configurar_hud() -> void:
 	hud_root.add_child(label_combo)
 
 	_criar_blocos_municao(card_municao)
+
+
+## Placar compacto (scripts/placar.gd) no lugar dos cartões altos.
+func _instalar_placar() -> void:
+	var velhos: Array = [label_recarga]
+	for nome in ["TopBar", "TopGlow", "TopLine", "CardTempo", "CardScore", "CardModo", "CardMunicao", "CardTiros", "CardAcertos"]:
+		var n := hud_root.get_node_or_null(nome)
+		if n != null:
+			velhos.append(n)
+	Placar.instalar(self, hud_root, velhos, _dados_placar, hud_layer.layer)
+
+
+func _dados_placar() -> Dictionary:
+	var sol: bool = modo_atual == MODO_SOL
+	return {
+		"tempo": tempo_restante, "pontos": pontuacao_total,
+		"municao": balas_no_cartucho, "municao_max": capacidade_cartucho,
+		"recarregando": recarregando,
+		"recarga": 1.0 - reload_tempo_restante / maxf(tempo_recarga_seg, 0.01),
+		"acertos": total_acertos, "tiros": total_tiros,
+		"extra_titulo": "MODO", "extra": "SOL" if sol else "LUA",
+		"extra_cor": Color(1.0, 0.80, 0.30) if sol else Color(0.75, 0.88, 1.0),
+		"cor": Color(1.0, 0.70, 0.22) if sol else Color(0.62, 0.80, 1.0),
+	}
 
 
 func _criar_card_hud(titulo: String) -> Panel:
@@ -1547,7 +1572,7 @@ func _atualizar_barra_municao() -> void:
 	if municao_blocos.is_empty():
 		return
 
-	var card_municao: Panel = hud_root.get_node("CardMunicao") as Panel
+	var card_municao: Panel = hud_root.find_child("CardMunicao", true, false) as Panel
 	if card_municao == null:
 		return
 	if not recarregando and balas_no_cartucho == _barra_balas and card_municao.size == _barra_tam:
@@ -1655,6 +1680,8 @@ func _processar_tiro(pos_global: Vector2) -> void:
 	balas_no_cartucho -= 1
 	total_tiros += 1
 	_tocar_som(som_tiro)
+	# raio de sol de dia, raio de luar de noite (da arma até a mira)
+	Trajetoria.disparar(self, get_viewport().get_canvas_transform() * pos_global, "sol" if modo_atual == MODO_SOL else "lua")
 
 	var idx: int = _achar_alvo_no_ponto(pos_global)
 	if idx >= 0:
@@ -1662,7 +1689,11 @@ func _processar_tiro(pos_global: Vector2) -> void:
 	else:
 		total_erros += 1
 		_quebrar_combo()
-		_registrar_marca_tiro_errado(pos_global)
+		# cada lugar responde: o cristal trinca (e quebra), o ouro toca,
+		# pedra lasca, areia levanta; marca de bala só na pedra e na areia
+		var mat: String = _vivo.impacto(pos_global) if _vivo != null else "areia"
+		if mat == "pedra" or mat == "areia":
+			_registrar_marca_tiro_errado(pos_global)
 		_set_status("ERRO!", Color(1.0, 0.28, 0.22, 1.0), 1.2)
 
 

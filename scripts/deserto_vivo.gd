@@ -13,8 +13,8 @@ extends Node2D
 ##                       como joia egípcia: esmalte azul-lápis com borda de
 ##                       ouro (sol) ou prata (lua) em relevo, olho grande e
 ##                       realista (íris amarelo-castanha no sol, branco-
-##                       azulada na lua), aro gravado com símbolos; pintados
-##                       em 3x (nítidos em 4K), em camadas comuns sem shader:
+##                       azulada na lua) ocupando o astro inteiro; pintados
+##                       em 4x (nítidos em 4K), em camadas comuns sem shader:
 ##                       esclera, íris que passeia, pálpebra-joia que desce ao
 ##                       piscar e o disco com a joia por cima
 ##                       (tools/gerar_astros.py)
@@ -37,12 +37,14 @@ const FUNDO_SOL := preload("res://sprites/deserto_sol.png")
 const FUNDO_LUA := preload("res://sprites/deserto_lua.png")
 const MASCARA_SOL := preload("res://sprites/deserto_sol_mascara.png")
 const MASCARA_LUA := preload("res://sprites/deserto_lua_mascara.png")
-# Sol e lua em 3x (tools/gerar_astros.py), camadas comuns sem shader:
-# esclera, íris (anda), pálpebra (desce ao piscar) e o disco por cima.
+# Sol e lua em 4x (tools/gerar_astros.py), camadas comuns sem shader:
+# halo (1x, ampliado), esclera, íris (anda), pálpebra (desce ao piscar) e o disco por cima.
 const TEX_SOL := [preload("res://sprites/egito_sol_disco.png"), preload("res://sprites/egito_sol_esclera.png"),
-	preload("res://sprites/egito_sol_iris.png"), preload("res://sprites/egito_sol_palpebra.png")]
+	preload("res://sprites/egito_sol_iris.png"), preload("res://sprites/egito_sol_palpebra.png"),
+	preload("res://sprites/egito_sol_halo.png")]
 const TEX_LUA := [preload("res://sprites/egito_lua_disco.png"), preload("res://sprites/egito_lua_esclera.png"),
-	preload("res://sprites/egito_lua_iris.png"), preload("res://sprites/egito_lua_palpebra.png")]
+	preload("res://sprites/egito_lua_iris.png"), preload("res://sprites/egito_lua_palpebra.png"),
+	preload("res://sprites/egito_lua_halo.png")]
 const AGUIA := preload("res://sprites/egito_aguia.png")
 const SOM_AGUIA := preload("res://songs/aguia.wav")
 const SOM_AGUIA_NOITE := preload("res://songs/aguia_noite.wav")
@@ -65,9 +67,36 @@ const PONTAS_CAIXA := Rect2(180, 438, 644, 148)
 # tools/gerar_astros.py: centro do olho, 1 unidade (meia largura da abertura),
 # lugar da íris, topo da pálpebra e quanto ela desce para fechar.
 # Sol: Olho de Rá (espelho do de Hórus); lua: Olho de Hórus.
-const ASTRO_SOL := {"olho": Vector2(47.5, 0.0), "u": 250.0, "iris": Vector2(0.0, -10.0), "palpebra_y": -297.6, "abre": 210.1}
-const ASTRO_LUA := {"olho": Vector2(-47.5, 0.0), "u": 250.0, "iris": Vector2(0.0, -10.0), "palpebra_y": -297.6, "abre": 210.1}
+const ASTRO_SOL := {"olho": Vector2(70.7, -13.0), "u": 372.0, "iris": Vector2(0.0, -14.9), "palpebra_y": -442.8, "abre": 312.6}
+const ASTRO_LUA := {"olho": Vector2(-70.7, -13.0), "u": 372.0, "iris": Vector2(0.0, -14.9), "palpebra_y": -442.8, "abre": 312.6}
+const ASTRO_X := 4.0          # as texturas do astro são 4x a imagem do fundo (o halo é 1x)
 const CRISTAL_CAIXA := Rect2(440, 620, 136, 340)
+
+# Tiros no fundo (px da imagem): o cristal trinca e, depois de TIROS_CRISTAL
+# tiros, quebra: a energia (feixes, brilho, faíscas) apaga e ele fica escuro
+# e rachado (sprites/egito_cristal_morto_*.png, tools/gerar_cristal_morto.py)
+# por CRISTAL_VOLTA s, até se refazer. As pontas de ouro tocam (clarão e
+# anel no metal, faíscas e lasquinhas de ouro), pedra lasca e areia levanta.
+const TIROS_CRISTAL := 9
+const CRISTAL_VOLTA := 30.0
+const CAIXA_MORTO := Rect2(428, 608, 160, 376)
+const CRISTAL_MORTO_SOL := preload("res://sprites/egito_cristal_morto_sol.png")
+const CRISTAL_MORTO_LUA := preload("res://sprites/egito_cristal_morto_lua.png")
+const SOM_TRINCA := preload("res://songs/cristal_trinca.wav")
+const SOM_QUEBRA := preload("res://songs/cristal_quebra.wav")
+const SOM_VOLTA := preload("res://songs/cristal_volta.wav")
+const SOM_OURO := preload("res://songs/ouro_ping.wav")
+const SOM_PEDRA := preload("res://songs/pedra_lasca.wav")
+const SOM_AREIA := preload("res://songs/areia_tiro.wav")
+const Pincel := preload("res://scripts/pincel.gd")
+static var POLI_CRISTAL := PackedVector2Array([Vector2(506, 626), Vector2(546, 668), Vector2(560, 720), Vector2(558, 900),
+	Vector2(536, 968), Vector2(478, 968), Vector2(454, 900), Vector2(452, 720), Vector2(466, 668)])
+static var OURO: Array[PackedVector2Array] = [PackedVector2Array([Vector2(508, 444), Vector2(450, 522), Vector2(566, 522)]),
+	PackedVector2Array([Vector2(229, 514), Vector2(190, 580), Vector2(268, 580)]),
+	PackedVector2Array([Vector2(776, 514), Vector2(736, 580), Vector2(814, 580)])]
+static var PIRAMIDES: Array[PackedVector2Array] = [PackedVector2Array([Vector2(508, 444), Vector2(298, 742), Vector2(718, 742)]),
+	PackedVector2Array([Vector2(229, 514), Vector2(88, 706), Vector2(362, 706)]),
+	PackedVector2Array([Vector2(776, 514), Vector2(640, 706), Vector2(916, 706)])]
 
 const COR_SOL := Color(1.0, 0.78, 0.36)
 const COR_LUA := Color(0.62, 0.80, 1.0)
@@ -117,6 +146,25 @@ var _cadente_para := Vector2.ZERO
 var _aguias: Array = []
 var _grito_espera := 4.0
 
+var _morto: Node2D
+var _fx_n: Node2D
+var _fx_s: Node2D
+var _fx_sujo := false
+var _energia := 1.0
+var _cristal_danos := 0
+var _cristal_tremor := 0.0
+var _cristal_quebrado := false
+var _cristal_volta := 0.0
+var _cristal_morte := 0.0          # 0 inteiro .. 1 apagado (sprite por cima)
+var _cristal_refaz := -1.0         # 0..1 enquanto se refaz
+var _onda_quebra := -1.0
+var _trincas: Array = []           # PackedVector2Array em px da imagem
+var _cacos: Array = []
+var _faiscas_ouro: Array = []
+var _poeiras: Array = []
+var _claroes: Array = []
+var _toque_ouro := Vector3(0, 0, -1)
+
 
 func _init() -> void:
 	name = "DesertoVivo"
@@ -130,6 +178,7 @@ func _init() -> void:
 
 	_pontas = _sprite_2x(PONTAS, PONTAS_CAIXA.position, SHADER_PONTAS)
 	_cristal = _sprite_2x(CRISTAL, CRISTAL_CAIXA.position, SHADER_CRISTAL)
+	_criar_cristal_vivo()
 
 	_criar_particulas()
 
@@ -211,10 +260,15 @@ func _criar_raios(c: Vector2, r: float, alcance: float, lua: bool, cor: Color) -
 func _criar_astro(tex: Array, dados: Dictionary, c: Vector2) -> Node2D:
 	var astro := Node2D.new()
 	astro.position = c
-	astro.scale = Vector2.ONE / 3.0    # texturas em 3x
+	astro.scale = Vector2.ONE / ASTRO_X    # texturas em 4x
 	astro.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS   # reduzida sem serrilhar
 	add_child(astro)
 	var olho: Vector2 = dados["olho"]
+	# halo (brilho em volta) por trás de tudo, numa textura pequena ampliada
+	var halo := Sprite2D.new()
+	halo.texture = tex[4]
+	halo.scale = Vector2.ONE * ASTRO_X
+	astro.add_child(halo)
 	var esclera := Sprite2D.new()
 	esclera.texture = tex[1]
 	esclera.position = olho
@@ -230,7 +284,7 @@ func _criar_astro(tex: Array, dados: Dictionary, c: Vector2) -> Node2D:
 	var disco := Sprite2D.new()
 	disco.texture = tex[0]
 	astro.add_child(disco)
-	_olhos.append({"disco": disco, "iris": iris, "palpebra": palpebra, "iris_0": iris.position,
+	_olhos.append({"disco": disco, "halo": halo, "iris": iris, "palpebra": palpebra, "iris_0": iris.position,
 		"palpebra_0": palpebra.position, "u": dados["u"], "abre": dados["abre"],
 		"olhar": Vector2.ZERO, "alvo": Vector2.ZERO, "prox_olhar": randf_range(0.6, 1.5),
 		"piscar": 0.0, "prox_piscar": randf_range(1.5, 3.5), "fase": -1.0, "dupla": false})
@@ -541,6 +595,7 @@ func _process(delta: float) -> void:
 	var luz := 1.0 + 0.30 * _pisco + 0.06 * som.y
 	for o in _olhos:
 		(o["disco"] as Sprite2D).self_modulate = Color(luz, luz, luz, 1.0)
+		(o["halo"] as Sprite2D).self_modulate = Color(luz, luz, luz, 1.0)
 	for no: CanvasItem in [_pontas, _cristal]:
 		var m2 := no.material as ShaderMaterial
 		m2.set_shader_parameter("grave", som.x)
@@ -550,6 +605,7 @@ func _process(delta: float) -> void:
 	_animar_olhos(delta)
 	_animar_aguias(delta)
 	_animar_brilhos(delta)
+	_atualizar_tiros_fundo(delta)
 	if _noite > 0.01:
 		_animar_ceu(delta)
 
@@ -608,7 +664,9 @@ func _animar_brilhos(delta: float) -> void:
 		var s: Sprite2D = b["no"]
 		if b["espera"] > 0.0:
 			b["espera"] -= delta
-			if b["espera"] <= 0.0:
+			if b["espera"] <= 0.0 and b["tipo"] == "cristal" and _energia < 0.6:
+				b["espera"] = randf_range(0.5, 1.5)
+			elif b["espera"] <= 0.0:
 				b["t"] = 0.0
 				b["dur"] = randf_range(0.55, 0.95)
 				s.rotation = randf_range(-0.3, 0.3)
@@ -664,3 +722,273 @@ func _animar_ceu(delta: float) -> void:
 	_cadente.position = _cadente_de.lerp(_cadente_para, k)
 	_cadente.scale = Vector2(1.6 + 1.2 * sin(PI * k), 0.10)
 	_cadente.modulate = Color(0.85, 0.93, 1.0, _noite * sin(PI * k))
+
+
+# ───────────────────────────────────────────── tiros no fundo
+## O que há no ponto (px da imagem do fundo): "cristal", "ouro", "pedra",
+## "areia" ou "ceu".
+static func material_em(p: Vector2) -> String:
+	if Geometry2D.is_point_in_polygon(p, POLI_CRISTAL):
+		return "cristal"
+	for tri: PackedVector2Array in OURO:
+		if Geometry2D.is_point_in_polygon(p, tri):
+			return "ouro"
+	for tri2: PackedVector2Array in PIRAMIDES:
+		if Geometry2D.is_point_in_polygon(p, tri2):
+			return "pedra"
+	if p.y > 700.0:
+		if Rect2(388, 958, 248, 170).has_point(p) or Rect2(170, 770, 95, 300).has_point(p) or Rect2(785, 770, 95, 300).has_point(p) \
+				or p.x < 150.0 or p.x > 874.0 or (p - Vector2(510, 1180)).length() < 300.0:
+			return "pedra"
+		return "areia"
+	return "ceu"
+
+
+## Tiro que não pegou alvo: cada lugar responde do seu jeito. Devolve o
+## material (a fase decide se ainda deixa a marca de tiro).
+func impacto(pos_global: Vector2) -> String:
+	var p: Vector2 = get_global_transform().affine_inverse() * pos_global
+	var mat := material_em(p)
+	match mat:
+		"cristal":
+			_ferir_cristal(p)
+		"ouro":
+			_tocar_ouro(p)
+		"pedra":
+			_estilhacar(p, Color(0.78, 0.62, 0.42).lerp(Color(0.42, 0.40, 0.48), _noite), 7, 5)
+			Maquina.efeito(SOM_PEDRA, -7.0, randf_range(0.9, 1.15))
+		"areia":
+			_estilhacar(p, Color(0.92, 0.72, 0.42).lerp(Color(0.50, 0.48, 0.56), _noite), 0, 9)
+			Maquina.efeito(SOM_AREIA, -6.0, randf_range(0.9, 1.1))
+	return mat
+
+
+func _criar_cristal_vivo() -> void:
+	_morto = Node2D.new()
+	_morto.name = "CristalQuebrado"
+	_morto.position = CAIXA_MORTO.position
+	_morto.scale = Vector2.ONE * 0.5          # texturas em 2x
+	_morto.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	_morto.visible = false
+	add_child(_morto)
+	for tex: Texture2D in [CRISTAL_MORTO_SOL, CRISTAL_MORTO_LUA]:
+		var s := Sprite2D.new()
+		s.texture = tex
+		s.centered = false
+		_morto.add_child(s)
+
+	_fx_n = Node2D.new()
+	_fx_n.name = "FxTirosFundo"
+	_fx_n.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	_fx_n.draw.connect(_desenhar_fx_n)
+	add_child(_fx_n)
+	_fx_s = Node2D.new()
+	_fx_s.name = "LuzTirosFundo"
+	_fx_s.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	var soma := CanvasItemMaterial.new()
+	soma.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
+	_fx_s.material = soma
+	_fx_s.draw.connect(_desenhar_fx_s)
+	add_child(_fx_s)
+
+
+func _ferir_cristal(p: Vector2) -> void:
+	if _cristal_quebrado:
+		# já quebrado: só umas lasquinhas do vidro escuro
+		_soltar_cacos(p, 4, Color(0.35, 0.35, 0.45), 160.0)
+		return
+	_cristal_danos += 1
+	_cristal_tremor = 1.0
+	# trinca: 2 a 3 galhos saindo do ponto, presos dentro do cristal
+	for g in randi_range(2, 3):
+		var linha := PackedVector2Array([p])
+		var ang := randf() * TAU
+		for k in randi_range(4, 7):
+			ang += randf_range(-0.6, 0.6)
+			var q: Vector2 = linha[linha.size() - 1] + Vector2.RIGHT.rotated(ang) * randf_range(8.0, 18.0)
+			if not Geometry2D.is_point_in_polygon(q, POLI_CRISTAL):
+				break
+			linha.append(q)
+		if linha.size() > 1:
+			_trincas.append(linha)
+	while _trincas.size() > 40:
+		_trincas.pop_front()
+	var cor := Color(1.0, 0.55, 0.9).lerp(Color(1.0, 0.25, 0.35), _noite)
+	_soltar_cacos(p, 9, cor, 260.0)
+	_claroes.append({"pos": p, "t": 0.0, "vida": 0.35, "raio": 70.0, "cor": cor})
+	if _cristal_danos >= TIROS_CRISTAL:
+		_quebrar_cristal()
+	else:
+		Maquina.efeito(SOM_TRINCA, -4.0, randf_range(0.92, 1.12))
+
+
+func _quebrar_cristal() -> void:
+	_cristal_quebrado = true
+	_cristal_volta = CRISTAL_VOLTA
+	_cristal_morte = 0.0
+	var centro := Vector2(508, 790)
+	var cor := Color(1.0, 0.6, 0.95).lerp(Color(1.0, 0.3, 0.4), _noite)
+	for i in 34:
+		var q := centro + Vector2(randf_range(-50, 50), randf_range(-150, 160))
+		_soltar_cacos(q, 1, cor if i % 3 else Color(0.4, 0.4, 0.5), 520.0)
+	_claroes.append({"pos": centro, "t": 0.0, "vida": 0.6, "raio": 420.0, "cor": cor})
+	_claroes.append({"pos": centro, "t": 0.0, "vida": 0.9, "raio": 220.0, "cor": Color.WHITE})
+	_onda_quebra = 0.0
+	Maquina.efeito(SOM_QUEBRA, -1.0)
+
+
+func _tocar_ouro(p: Vector2) -> void:
+	_toque_ouro = Vector3((p.x - PONTAS_CAIXA.position.x) / PONTAS_CAIXA.size.x, (p.y - PONTAS_CAIXA.position.y) / PONTAS_CAIXA.size.y, 0.0)
+	var ouro := Color(1.0, 0.82, 0.35).lerp(Color(0.85, 0.9, 1.0), _noite)
+	for i in 16:
+		_faiscas_ouro.append({"pos": p, "vel": Vector2.RIGHT.rotated(randf_range(-PI, 0.2)) * randf_range(120.0, 340.0), "t": 0.0, "vida": randf_range(0.35, 0.7)})
+	for i in 10:
+		_cacos.append({"pos": p + Vector2(randf_range(-6, 6), randf_range(-4, 4)), "vel": Vector2(randf_range(-60, 60), randf_range(-140, -20)), "t": 0.0,
+			"vida": randf_range(0.9, 1.6), "tam": randf_range(1.5, 3.0), "rot": randf() * TAU, "giro": randf_range(-14, 14), "cor": ouro, "ouro": true})
+	_claroes.append({"pos": p, "t": 0.0, "vida": 0.4, "raio": 60.0, "cor": ouro})
+	Maquina.efeito(SOM_OURO, -5.0, randf_range(0.94, 1.08))
+
+
+## Pedra (lascas + pó) ou areia (só o pó e os grãos).
+func _estilhacar(p: Vector2, cor: Color, lascas: int, po: int) -> void:
+	_soltar_cacos(p, lascas, cor, 220.0)
+	for i in po:
+		_poeiras.append({"pos": p + Vector2(randf_range(-4, 4), randf_range(-3, 3)), "vel": Vector2(randf_range(-50, 50), randf_range(-70, -15)),
+			"t": 0.0, "vida": randf_range(0.7, 1.2), "tam": randf_range(8.0, 16.0), "cor": cor})
+	while _poeiras.size() > 60:
+		_poeiras.pop_front()
+
+
+func _soltar_cacos(p: Vector2, n: int, cor: Color, forca: float) -> void:
+	for i in n:
+		_cacos.append({"pos": p, "vel": Vector2.RIGHT.rotated(randf_range(-PI * 0.95, -PI * 0.05)) * randf_range(forca * 0.35, forca), "t": 0.0,
+			"vida": randf_range(0.6, 1.1), "tam": randf_range(2.0, 5.0), "rot": randf() * TAU, "giro": randf_range(-12, 12), "cor": cor, "ouro": false})
+	while _cacos.size() > 90:
+		_cacos.pop_front()
+
+
+func _atualizar_tiros_fundo(delta: float) -> void:
+	# energia do cristal: cai com as trincas, treme depois de cada tiro, some
+	# quebrado e volta aos poucos quando ele se refaz
+	_cristal_tremor = maxf(0.0, _cristal_tremor - delta * 1.8)
+	var alvo := 1.0 - 0.45 * float(_cristal_danos) / TIROS_CRISTAL
+	if _cristal_quebrado:
+		_cristal_volta -= delta
+		_cristal_morte = minf(1.0, _cristal_morte + delta * 3.0)
+		alvo = 0.0
+		if _cristal_volta <= 0.0:
+			_cristal_quebrado = false
+			_cristal_danos = 0
+			_cristal_refaz = 0.0
+			Maquina.efeito(SOM_VOLTA, -3.0)
+	if _cristal_refaz >= 0.0:
+		_cristal_refaz += delta / 2.2
+		_cristal_morte = 1.0 - _cristal_refaz
+		alvo = _cristal_refaz
+		if _cristal_refaz >= 1.0:
+			_cristal_refaz = -1.0
+			_cristal_morte = 0.0
+			_trincas.clear()
+	var piscar := 0.0
+	if _cristal_danos > 0 and not _cristal_quebrado:
+		piscar = (0.25 * float(_cristal_danos) / TIROS_CRISTAL + 0.6 * _cristal_tremor) * randf()
+	_energia = clampf(alvo * (1.0 - piscar), 0.0, 1.0)
+	for fundo: Sprite2D in [_fundo_sol, _fundo_lua]:
+		(fundo.material as ShaderMaterial).set_shader_parameter("energia", _energia)
+	_cristal.modulate.a = _energia
+	_faiscas.emitting = _energia > 0.35
+	_morto.visible = _cristal_morte > 0.001
+	if _morto.visible:
+		(_morto.get_child(0) as Sprite2D).modulate.a = _cristal_morte * (1.0 - _noite)
+		(_morto.get_child(1) as Sprite2D).modulate.a = _cristal_morte * _noite
+	if _onda_quebra >= 0.0:
+		_onda_quebra += delta
+		if _onda_quebra > 0.8:
+			_onda_quebra = -1.0
+
+	# toque no ouro (shader das pontas)
+	if _toque_ouro.z >= 0.0:
+		_toque_ouro.z += delta
+		if _toque_ouro.z > 0.7:
+			_toque_ouro.z = -1.0
+		(_pontas.material as ShaderMaterial).set_shader_parameter("toque", _toque_ouro)
+
+	for c in _cacos:
+		c["t"] += delta
+		c["vel"] = c["vel"] * pow(0.7, delta) + Vector2(0, 620.0 if not c["ouro"] else 160.0) * delta
+		c["pos"] += c["vel"] * delta
+		c["rot"] += c["giro"] * delta
+	while not _cacos.is_empty() and _cacos[0]["t"] > _cacos[0]["vida"]:
+		_cacos.pop_front()
+	for f in _faiscas_ouro:
+		f["t"] += delta
+		f["vel"] = f["vel"] * pow(0.2, delta) + Vector2(0, 260.0) * delta
+		f["pos"] += f["vel"] * delta
+	while not _faiscas_ouro.is_empty() and _faiscas_ouro[0]["t"] > _faiscas_ouro[0]["vida"]:
+		_faiscas_ouro.pop_front()
+	for p in _poeiras:
+		p["t"] += delta
+		p["vel"] = p["vel"] * pow(0.25, delta)
+		p["pos"] += p["vel"] * delta
+	while not _poeiras.is_empty() and _poeiras[0]["t"] > _poeiras[0]["vida"]:
+		_poeiras.pop_front()
+	for c2 in _claroes:
+		c2["t"] += delta
+	while not _claroes.is_empty() and _claroes[0]["t"] > _claroes[0]["vida"]:
+		_claroes.pop_front()
+
+	var ativo := not (_cacos.is_empty() and _faiscas_ouro.is_empty() and _poeiras.is_empty() and _claroes.is_empty()) \
+		or not _trincas.is_empty() or _onda_quebra >= 0.0
+	if ativo or _fx_sujo:
+		_fx_n.queue_redraw()
+		_fx_s.queue_redraw()
+	_fx_sujo = ativo
+
+
+func _desenhar_fx_n() -> void:
+	for p in _poeiras:
+		var k: float = p["t"] / p["vida"]
+		Pincel.forma(_fx_n, Pincel.FUMACA, p["pos"], p["tam"] * (0.5 + 1.4 * k), Color(p["cor"], 0.5 * (1.0 - k)), k)
+	# trincas: risco escuro (some quando o cristal se refaz)
+	var a_tr := 1.0 if _cristal_refaz < 0.0 else 1.0 - _cristal_refaz
+	if not _trincas.is_empty() and a_tr > 0.0:
+		for linha: PackedVector2Array in _trincas:
+			for i in range(linha.size() - 1):
+				Pincel.linha(_fx_n, linha[i], linha[i + 1], Color(0.06, 0.02, 0.08, 0.85 * a_tr), 1.4)
+	for c in _cacos:
+		if c["ouro"]:
+			continue
+		var k2: float = c["t"] / c["vida"]
+		Pincel.caco(_fx_n, c["pos"], c["tam"], c["rot"], Color(c["cor"], 1.0 - k2 * k2))
+
+
+func _desenhar_fx_s() -> void:
+	# a energia vaza pelas trincas (some com o cristal apagado)
+	var cor_e := Color(1.0, 0.55, 0.9).lerp(Color(1.0, 0.25, 0.35), _noite)
+	if not _trincas.is_empty() and _energia > 0.05:
+		var brilho := (0.35 + 0.4 * _cristal_tremor) * _energia
+		for linha: PackedVector2Array in _trincas:
+			for i in range(linha.size() - 1):
+				Pincel.laser(_fx_s, linha[i], linha[i + 1], Color(cor_e, brilho), 4.0)
+	if _cristal_refaz >= 0.0:
+		# faixa de luz subindo pelo cristal enquanto ele se refaz
+		var y := lerpf(970.0, 620.0, _cristal_refaz)
+		Pincel.laser(_fx_s, Vector2(450, y), Vector2(566, y), Color(cor_e, 0.8 * sin(_cristal_refaz * PI)), 14.0)
+		Pincel.brilho(_fx_s, Vector2(508, y), 90.0, Color(cor_e, 0.4 * sin(_cristal_refaz * PI)))
+	if _onda_quebra >= 0.0:
+		var k0 := _onda_quebra / 0.8
+		Pincel.anel(_fx_s, Vector2(508, 790), 40.0 + 420.0 * k0, 10.0 * (1.0 - k0) + 2.0, Color(cor_e, 0.7 * (1.0 - k0)))
+	for c2 in _claroes:
+		var k: float = c2["t"] / c2["vida"]
+		Pincel.brilho(_fx_s, c2["pos"], c2["raio"] * (0.6 + 0.6 * k), Color(c2["cor"], 0.55 * (1.0 - k)))
+	for c in _cacos:
+		var k3: float = c["t"] / c["vida"]
+		if c["ouro"]:
+			var pisca := 0.5 + 0.5 * sin(c["t"] * 30.0 + c["rot"] * 5.0)
+			Pincel.caco(_fx_s, c["pos"], c["tam"], c["rot"], Color(c["cor"], (1.0 - k3) * (0.4 + 0.6 * pisca)))
+		elif randf() < 0.3:
+			Pincel.circulo(_fx_s, c["pos"], c["tam"] * 0.6, Color(1, 1, 1, 0.5 * (1.0 - k3)))
+	for f in _faiscas_ouro:
+		var k4: float = f["t"] / f["vida"]
+		var pf: Vector2 = f["pos"]
+		Pincel.linha(_fx_s, pf, pf - (f["vel"] as Vector2) * 0.03, Color(1.0, 0.85, 0.45, 1.0 - k4), 1.6)

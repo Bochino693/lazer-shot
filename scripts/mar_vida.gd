@@ -16,8 +16,13 @@ extends Node2D
 #                cenário volta a ser exatamente a foto
 #   pedras       as escritas acendem de cima para baixo; tiro na pedra solta
 #                lascas e deixa o buraco com rachaduras no lugar
+#   templo       ruína de Atlântida ao fundo (pintada no fundo pelo
+#                tools/gerar_mar.py): a luz de cristal da porta respira com a
+#                música e solta pontinhos de luz que sobem
 
 signal navio_pousou
+
+const TEMPLO_PORTA := Vector2(439, 724)
 
 const TEXTURA_MASCARA := "res://sprites/mar_cascatas_mascara.png"
 const SHADER_CASCATA := "res://shaders/mar_cascata.gdshader"
@@ -108,9 +113,66 @@ func _ready() -> void:
 	_criar_cascatas()
 	_criar_cardumes()
 	_criar_baleias()
+	_criar_templo()
 	_criar_navio()
 	_criar_pedras()
 	_criar_efeitos()
+
+
+var _templo_luz: Sprite2D = null
+var _templo_miolo: Sprite2D = null
+var _templo_t := 0.0
+
+
+## Luz de cristal na porta do templo (atrás do navio): halo que respira com
+## a música e pontinhos de luz subindo devagar.
+func _criar_templo() -> void:
+	var soma := CanvasItemMaterial.new()
+	soma.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
+	var ponto := FundoVivo.brilho_redondo()
+	_templo_luz = Sprite2D.new()
+	_templo_luz.texture = ponto
+	_templo_luz.material = soma
+	_templo_luz.position = TEMPLO_PORTA
+	_templo_luz.scale = Vector2(2.6, 3.4)
+	_templo_luz.modulate = Color(0.35, 0.9, 1.0, 0.5)
+	add_child(_templo_luz)
+	_templo_miolo = Sprite2D.new()
+	_templo_miolo.texture = ponto
+	_templo_miolo.material = soma
+	_templo_miolo.position = TEMPLO_PORTA + Vector2(0, 4)
+	_templo_miolo.scale = Vector2(0.7, 1.4)
+	_templo_miolo.modulate = Color(0.8, 1.0, 1.0, 0.6)
+	add_child(_templo_miolo)
+	var p := CPUParticles2D.new()
+	p.amount = 8
+	p.lifetime = 4.0
+	p.preprocess = 4.0
+	p.position = TEMPLO_PORTA + Vector2(0, 14)
+	p.emission_shape = CPUParticles2D.EMISSION_SHAPE_RECTANGLE
+	p.emission_rect_extents = Vector2(9, 16)
+	p.direction = Vector2(0, -1)
+	p.spread = 25.0
+	p.gravity = Vector2(0, -4)
+	p.initial_velocity_min = 6.0
+	p.initial_velocity_max = 16.0
+	p.scale_amount_min = 0.08
+	p.scale_amount_max = 0.18
+	p.texture = ponto
+	p.color = Color(0.6, 1.0, 1.0, 0.8)
+	p.color_ramp = _rampa(Color(0.6, 1.0, 1.0), 0.8)
+	p.material = soma
+	add_child(p)
+
+
+func _animar_templo(delta: float) -> void:
+	if _templo_luz == null:
+		return
+	_templo_t += delta
+	var som := Maquina.pulso_vivo()
+	var resp := 0.5 + 0.5 * sin(_templo_t * 1.3)
+	_templo_luz.modulate.a = 0.30 + 0.22 * resp + 0.25 * som.x
+	_templo_miolo.modulate.a = 0.45 + 0.25 * resp + 0.3 * som.y
 
 
 func _criar_cascatas() -> void:
@@ -782,6 +844,7 @@ func _curva(ini: float, fim: float) -> Curve:
 
 # ───────────────────────────────────────────── quadro a quadro
 func _process(delta: float) -> void:
+	_animar_templo(delta)
 	for b in _baleias:
 		var no: Sprite2D = b["no"]
 		if b["espera"] > 0.0:

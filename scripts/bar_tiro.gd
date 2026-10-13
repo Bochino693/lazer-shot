@@ -14,6 +14,8 @@ extends Node2D
 ## Um nó por tiro, desenho em poucas chamadas; some sozinho em ~2 s.
 
 const LODO := preload("res://sprites/mar_lodo.png")
+const SOM_MADEIRA := preload("res://songs/madeira_tiro.wav")
+const SOM_PAPEL := preload("res://songs/papel_tiro.wav")
 
 # Contornos em px de back_new.png (fundo do bar).
 const CARTAZ := [Vector2(797, 1022), Vector2(992, 1027), Vector2(1002, 1360), Vector2(800, 1335)]
@@ -53,6 +55,7 @@ static func material_em(fundo: Sprite2D, pos_global: Vector2) -> String:
 
 
 static func criar(pai: Node, fundo: Sprite2D, pos_global: Vector2, tipo: String) -> void:
+	Maquina.efeito(SOM_PAPEL if tipo == "papel" else SOM_MADEIRA, -5.0, randf_range(0.9, 1.1))
 	if _vivos >= MAX_VIVOS:
 		return
 	if pai == null or fundo == null or fundo.texture == null:

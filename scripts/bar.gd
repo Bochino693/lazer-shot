@@ -413,6 +413,7 @@ func _ready() -> void:
 	_criar_fundo_preenchimento()
 	_coletar_spawn_points()
 	_configurar_hud()
+	_instalar_placar()
 	_criar_nome_ranking()
 	_configurar_alvo_overlay()
 	_configurar_aviso_inicio()
@@ -825,6 +826,8 @@ func _processar_tiro_global(pos_global: Vector2) -> void:
 	_marcar_hud_sujo()
 
 	_tocar_som_tiro()
+	# traçante até a mira e um fio de fumaça que fica no ar
+	Trajetoria.disparar(self, get_viewport().get_canvas_transform() * pos_global, "bar")
 
 	var garrafa_acertada: Area2D = _detectar_garrafa_no_ponto(pos_global)
 
@@ -4806,6 +4809,36 @@ func _registrar_combo_acerto() -> void:
 		_ativar_combo_fx("SUPER COMBO")
 
 
+
+
+## Placar compacto (scripts/placar.gd) no lugar dos painéis altos.
+func _instalar_placar() -> void:
+	var velhos: Array = [top_bar, top_bar_sombra, top_bar_glow, top_bar_linha, score_panel, timer_panel,
+		municao_panel, stats_hud_panel, score_title_label, score_label, timer_title_label, timer_label,
+		municao_title_label, municao_label, recarga_label, tiros_title_label, tiros_label,
+		acertos_title_label, acertos_label]
+	Placar.instalar(self, hud_root, velhos, _dados_placar, hud_layer.layer)
+
+
+func _dados_placar() -> Dictionary:
+	var agora: float = Time.get_ticks_msec() / 1000.0
+	var seq: int = sequencia_acertos if agora - tempo_ultimo_acerto <= JANELA_COMBO else 0
+	var cor_combo := Color(0.80, 0.80, 0.80)
+	if seq >= 5:
+		cor_combo = Color(1.0, 0.35, 0.9)
+	elif seq >= 3:
+		cor_combo = Color(1.0, 0.75, 0.2)
+	elif seq >= 2:
+		cor_combo = Color(0.5, 1.0, 0.55)
+	return {
+		"tempo": tempo_restante, "pontos": pontuacao_total,
+		"municao": balas_no_cartucho, "municao_max": capacidade_cartucho,
+		"recarregando": recarregando,
+		"recarga": 1.0 - reload_tempo_restante / maxf(tempo_recarga_seg, 0.01),
+		"acertos": total_acertos, "tiros": total_tiros,
+		"extra_titulo": "COMBO", "extra": "x%d" % maxi(seq, 1) if seq >= 2 else "-", "extra_cor": cor_combo,
+		"cor": Color(0.30, 1.0, 0.45),
+	}
 
 
 func _resetar_combo() -> void:
