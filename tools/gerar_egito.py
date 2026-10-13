@@ -5,13 +5,7 @@ Parte das imagens originais (pasta passada em --originais, com sol.png e
 lua.png de 1024x1536) e gera:
 
   sprites/deserto_sol.png, deserto_lua.png   fundo com o olho antigo apagado e
-                                             o olho novo (1x, para o menu)
-  sprites/egito_disco_sol.png, _lua.png      sol/lua em 2x sem o olho (nítido
-                                             em 4K), alfa na borda
-  sprites/egito_olho_sol.png, _lua          mapa do olho (o shader desenha
-                                             o olho, que pisca e olha em volta):
-                                             R=traços G=altura na abertura
-                                             B=abertura A=relevo
+                                             o sol/a lua novos (1x, para o menu)
   sprites/egito_pontas.png                   pontas de ouro das 3 pirâmides
                                              em 2x: R=detalhe G=face B=quina
                                              A=cobertura
@@ -20,13 +14,11 @@ lua.png de 1024x1536) e gera:
   sprites/egito_estrela.png                  brilho em estrela (diamante e
                                              pontas)
 
-Olho de Rá no sol (olho direito: olha para a direita, rabo para a
-esquerda) e Olho de Hórus na lua (olho esquerdo: olha para a esquerda,
-rabo para a direita), os dois completos no traçado do hieróglifo D10
-(U+13080): sobrancelha, pálpebras, pupila, rabo, lágrima e espiral.
+O sol e a lua (com os olhos) saem de tools/gerar_astros.py: rodar ele antes.
 
     git show 89ed8d3:sprites/deserto_sol.png > /tmp/orig/sol.png
     git show 89ed8d3:sprites/deserto_lua.png > /tmp/orig/lua.png
+    python3 tools/gerar_astros.py
     python3 tools/gerar_egito.py --originais /tmp/orig
 """
 import argparse
@@ -35,19 +27,16 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFilter
 from scipy import ndimage as ndi
 from skimage.restoration import inpaint_biharmonic
+from gerar_astros import colar_astro
 
 RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SP = os.path.join(RAIZ, "sprites")
 rng = np.random.default_rng(7)
 
-# disco (centro, raio) em px da imagem 1024x1536
+# disco das fotos originais (centro, raio) em px da imagem 1024x1536: é
+# onde o olho antigo é apagado (o sol e a lua novos vêm de gerar_astros.py)
 SOL = ((512, 290), 124)
 LUA = ((510, 282), 130)
-# janela do disco em 2x: quadrado de lado 2*JANELA px da imagem
-JANELA = 172
-# tamanho do olho: px por unidade do olho = TAMANHO_OLHO * raio do disco
-# (grande como o olho do vídeo antigo, ocupando o disco)
-TAMANHO_OLHO = 0.74
 # pontas de ouro: ápice, base esquerda, base da quina da frente, base direita
 PONTAS = [((229, 519), (189, 569), (230, 575), (269, 566)),
           ((509, 447), (454, 521), (510, 528), (563, 511)),
@@ -68,213 +57,6 @@ def gravar(arr, nome, modo=None):
     print("%-34s %dx%d" % (nome, img.width, img.height))
 
 
-def bezier(p, n=60):
-    P = np.asarray(p, float)
-    pts = []
-    for t in np.linspace(0, 1, n):
-        q = P.copy()
-        while len(q) > 1:
-            q = (1 - t) * q[:-1] + t * q[1:]
-        pts.append(q[0])
-    return np.array(pts)
-
-
-def corrente(*curvas):
-    return np.vstack([curvas[0]] + [c[1:] for c in curvas[1:]])
-
-
-def tira(linha, perfil):
-    L = np.asarray(linha, float)
-    seg = np.diff(L, axis=0)
-    comp = np.r_[0, np.cumsum(np.hypot(seg[:, 0], seg[:, 1]))]
-    t = comp / comp[-1]
-    tang = np.gradient(L, axis=0)
-    tang /= np.hypot(tang[:, 0], tang[:, 1])[:, None] + 1e-9
-    nor = np.stack([-tang[:, 1], tang[:, 0]], 1)
-    w = np.asarray(perfil(t), float)
-    return np.vstack([L + nor * (w[:, None] / 2), (L - nor * (w[:, None] / 2))[::-1]])
-
-
-def suave(a, b, t):
-    return a + (b - a) * (3 * t * t - 2 * t * t * t)
-
-
-# ───────────────────────────────────────────── os olhos
-# Dois olhos egípcios com personalidade própria (não um espelho do outro):
-#   masculino (sol, Rá): olhar intenso, pálpebra pesada e abertura estreita,
-#     sobrancelha grossa e reta descendo para o nariz, delineado reto e firme,
-#     marcas de falcão fortes;
-#   feminino (lua, Hórus): olho amendoado grande, sobrancelha fina e arqueada,
-#     cílios longos, delineado "gatinho" e marcas finas com uma gota.
-# Unidades: canto interno em x=-1, canto externo/rabo em x>0.8, y para baixo
-# (o do sol é espelhado: olha para a direita).
-
-def _cilios(cima, n, comp0, comp1):
-    """Cílios ao longo da pálpebra de cima, maiores para o canto de fora."""
-    linha = bezier(cima, 200)
-    out = []
-    for i in range(n):
-        t = 0.28 + 0.68 * i / (n - 1)
-        k = int(t * 199)
-        base = linha[k]
-        tang = linha[min(k + 3, 199)] - linha[max(k - 3, 0)]
-        tang /= np.hypot(*tang) + 1e-9
-        nor = np.array([tang[1], -tang[0]])            # para fora (para cima)
-        comp = comp0 + (comp1 - comp0) * (i / (n - 1)) ** 1.3
-        dirc = (nor * 0.75 + tang * 0.65)
-        dirc /= np.hypot(*dirc)
-        ponta = base + dirc * comp
-        meio = base + nor * comp * 0.55 + tang * comp * 0.1
-        cil = bezier([base, meio, ponta], 24)
-        out.append(tira(cil, lambda tt: 0.042 * (1 - tt) ** 1.2 + 0.004))
-    return out
-
-
-def _gota(c, r):
-    t = np.linspace(0, 2 * np.pi, 60)
-    x = r * np.sin(t)
-    y = -r * (np.cos(t) - 0.6 * np.sin(t / 2) ** 6)    # ponta em cima
-    return np.stack([c[0] + x * 0.8, c[1] + y * 1.2], 1)
-
-
-def forma_olho(estilo):
-    """{tracos, cima, baixo, pupila, caixa} do olho no estilo pedido."""
-    tr = []
-    if estilo == "masculino":
-        cima = [(-0.92, 0.06), (-0.55, -0.22), (0.30, -0.30), (0.84, -0.02)]
-        baixo = [(-0.92, 0.06), (-0.48, 0.20), (0.36, 0.22), (0.84, -0.02)]
-        pupila = ((-0.04, 0.0), 0.22)
-        # sobrancelha grossa, reta e baixa no canto de dentro (cenho fechado)
-        sob = bezier([(-0.98, -0.22), (-0.55, -0.44), (0.35, -0.54), (1.10, -0.42)], 160)
-        tr.append(tira(sob, lambda t: 0.13 + 0.05 * np.sin(np.pi * np.clip(t * 1.2, 0, 1))))
-        # pálpebra de cima pesada + traço reto comprido
-        linha = corrente(bezier([(-1.03, 0.10), (-0.99, 0.085), (-0.95, 0.07), (-0.92, 0.06)], 10),
-                         bezier(cima, 160), np.linspace((0.84, -0.02), (1.16, -0.02), 20))
-        tr.append(tira(linha, lambda t: np.where(t < 0.06, suave(0.05, 0.12, t / 0.06), 0.12)))
-        tr.append(tira(bezier(baixo, 160), lambda t: 0.055 + 0.025 * np.sin(np.pi * t)))
-        # marca de falcão: cunha reta e forte sob a pupila
-        tr.append(np.array([(-0.13, 0.20), (0.03, 0.20), (-0.02, 1.12), (-0.10, 1.12)]))
-        # espiral firme e fechada
-        esp = corrente(np.linspace((0.06, 0.21), (0.60, 0.98), 40),
-                       bezier([(0.60, 0.98), (0.66, 1.08), (0.80, 1.10), (0.86, 1.00)], 30),
-                       bezier([(0.86, 1.00), (0.91, 0.90), (0.80, 0.83), (0.73, 0.89)], 30))
-        tr.append(tira(esp, lambda t: np.where(t < 0.8, 0.095, 0.095 - 0.04 * (t - 0.8) / 0.2)))
-    else:
-        cima = [(-0.90, 0.10), (-0.52, -0.38), (0.30, -0.44), (0.86, -0.16)]
-        baixo = [(-0.90, 0.10), (-0.42, 0.30), (0.40, 0.27), (0.86, -0.16)]
-        pupila = ((0.0, -0.06), 0.25)
-        # sobrancelha fina e bem arqueada
-        sob = bezier([(-0.86, -0.52), (-0.40, -0.94), (0.45, -0.94), (1.02, -0.60)], 160)
-        tr.append(tira(sob, lambda t: 0.012 + 0.05 * np.sin(np.pi * t) ** 0.8))
-        # pálpebra de cima com delineado gatinho subindo no canto
-        linha = corrente(bezier(cima, 160), bezier([(0.86, -0.16), (0.98, -0.24), (1.10, -0.34), (1.20, -0.46)], 40))
-        tr.append(tira(linha, lambda t: np.where(t < 0.8, 0.065, 0.065 * (1 - (t - 0.8) / 0.2) + 0.004)))
-        tr.append(tira(bezier(baixo, 160), lambda t: 0.03 + 0.015 * np.sin(np.pi * t)))
-        # traço de baixo paralelo ao gatinho (estilo das rainhas)
-        tr.append(tira(bezier([(0.62, 0.12), (0.80, 0.05), (0.95, -0.06), (1.08, -0.18)], 40), lambda t: 0.035 * (1 - t) + 0.004))
-        tr.extend(_cilios(cima, 10, 0.15, 0.36))
-        # lágrima fina terminando numa gota
-        tr.append(tira(bezier([(-0.03, 0.28), (-0.05, 0.50), (-0.04, 0.72), (-0.06, 0.88)], 40), lambda t: 0.045 - 0.02 * t))
-        tr.append(_gota((-0.06, 1.0), 0.085))
-        # espiral fina e elegante, com mais voltas
-        c = np.array([0.74, 0.98]); r0 = 0.17
-        a_ent = np.deg2rad(200)
-        p_ent = c + r0 * np.array([np.cos(a_ent), np.sin(a_ent)])
-        volta = np.stack([c[0] + np.linspace(r0, 0.03, 120) * np.cos(a_ent - np.linspace(0, 1.6 * 2 * np.pi, 120)),
-                          c[1] + np.linspace(r0, 0.03, 120) * np.sin(a_ent - np.linspace(0, 1.6 * 2 * np.pi, 120))], 1)
-        esp = corrente(bezier([(0.06, 0.30), (0.20, 0.55), (0.40, 0.80), p_ent], 50), volta)
-        tr.append(tira(esp, lambda t: 0.05 * (1 - 0.6 * t) + 0.006))
-    todos = np.vstack(tr)
-    caixa = (min(todos[:, 0].min(), -1.0), min(todos[:, 1].min(), pupila[0][1] - pupila[1]),
-             todos[:, 0].max(), todos[:, 1].max())
-    return {"tracos": tr, "cima": cima, "baixo": baixo, "pupila": pupila, "caixa": caixa}
-
-
-def mascaras_olho(tam, centro, escala, espelhar, estilo, ss=4):
-    """Máscaras 0..1 (traco, pupila, brilho, branco) do olho inteiro
-    centrado em `centro` (px), `escala` px por unidade."""
-    W, H = tam
-    f = forma_olho(estilo)
-    caixa = f["caixa"]
-    cx = (caixa[0] + caixa[2]) / 2
-    cy = (caixa[1] + caixa[3]) / 2
-
-    def p(x, y):
-        x -= cx
-        y -= cy
-        if espelhar:
-            x = -x
-        return ((centro[0] + x * escala) * ss, (centro[1] + y * escala) * ss)
-
-    img = {k: Image.new("L", (W * ss, H * ss), 0) for k in ("traco", "pupila", "brilho", "branco")}
-    d = ImageDraw.Draw(img["traco"])
-    for poli in f["tracos"]:
-        d.polygon([p(*q) for q in poli], fill=255)
-    olho = np.vstack([bezier(f["cima"], 160), bezier(f["baixo"], 160)[::-1]])
-    ImageDraw.Draw(img["branco"]).polygon([p(*q) for q in olho], fill=255)
-
-    def circ(c, r):
-        x, y = p(*c)
-        rr = r * escala * ss
-        return [x - rr, y - rr, x + rr, y + rr]
-
-    pc, pr = f["pupila"]
-    ImageDraw.Draw(img["pupila"]).ellipse(circ(pc, pr), fill=255)
-    ImageDraw.Draw(img["brilho"]).ellipse(circ((pc[0] - 0.075, pc[1] - 0.085), 0.06), fill=255)
-    out = {k: np.asarray(v.resize((W, H), Image.LANCZOS)).astype(np.float32) / 255 for k, v in img.items()}
-    out["pupila"] = np.minimum(out["pupila"], out["branco"])
-    out["brilho"] = np.minimum(out["brilho"], out["pupila"])
-    # onde fica a pupila (px) para o shader
-    pxp = (pc[0] - cx) * (-1 if espelhar else 1)
-    out["pupila_px"] = (centro[0] + pxp * escala, centro[1] + (pc[1] - cy) * escala)
-    out["pupila_r"] = pr * escala
-    return out
-
-
-def relevo(m, raio, luz=(-0.55, -0.83)):
-    h = ndi.gaussian_filter(m, raio)
-    gy, gx = np.gradient(h)
-    return np.clip(-(gx * luz[0] + gy * luz[1]) * 2.4 / max(raio, 0.5) * 2.5, -1, 1)
-
-
-ESTILO_RA = dict(halo=(1.0, 0.93, 0.62), halo_forca=0.55, branco=(1.0, 0.97, 0.86), branco_a=0.6,
-                 pupila=(0.40, 0.17, 0.02), pupila_luz=(0.60, 0.45, 0.20),
-                 cima=(0.86, 0.56, 0.10), baixo=(0.64, 0.33, 0.03),
-                 luz=(0.45, 0.42, 0.25), sombra=(0.34, 0.20, 0.03), reflexo=(1.0, 0.98, 0.86))
-ESTILO_HORUS = dict(halo=(0.70, 0.86, 1.0), halo_forca=0.45, branco=(0.88, 0.93, 1.0), branco_a=0.5,
-                    pupila=(0.05, 0.07, 0.13), pupila_luz=(0.40, 0.52, 0.72),
-                    cima=(0.18, 0.23, 0.36), baixo=(0.10, 0.13, 0.22),
-                    luz=(0.60, 0.72, 0.92), sombra=(0.06, 0.07, 0.10), reflexo=(0.93, 0.97, 1.0))
-
-
-def pintar_olho(im, centro, R, espelhar, est, px_por_img, estilo):
-    """Pinta o olho em `im` (float RGB). px_por_img = 1 (fundo) ou 2 (disco 2x)."""
-    H, W = im.shape[:2]
-    S = TAMANHO_OLHO * R * px_por_img
-    m = mascaras_olho((W, H), centro, S, espelhar, estilo)
-    tr, pu, br, bi = m["traco"], m["pupila"], m["branco"], m["brilho"]
-    todo = np.clip(tr + pu, 0, 1)
-    halo = ndi.gaussian_filter(todo, 3.5 * px_por_img)
-    im = 1 - (1 - im) * (1 - np.clip(halo * est["halo_forca"], 0, 1)[..., None] * np.array(est["halo"]))
-    a = (br * (1 - tr))[..., None] * est["branco_a"]
-    im = im * (1 - a) + np.array(est["branco"]) * a
-    rel = relevo(pu, 1.2 * px_por_img)
-    cor = np.array(est["pupila"]) + np.clip(rel, 0, 1)[..., None] * np.array(est["pupila_luz"])
-    a = pu[..., None]
-    im = im * (1 - a) + np.clip(cor, 0, 1) * a
-    rel = relevo(tr, 0.9 * px_por_img)
-    yy = np.mgrid[0:H, 0:W][0].astype(np.float32)
-    g = np.clip((yy - (centro[1] - R * px_por_img)) / (2 * R * px_por_img), 0, 1)[..., None]
-    base = np.array(est["cima"]) * (1 - g) + np.array(est["baixo"]) * g
-    cor = base + np.clip(rel, 0, 1)[..., None] * np.array(est["luz"]) - np.clip(-rel, 0, 1)[..., None] * np.array(est["sombra"])
-    a = tr[..., None]
-    im = im * (1 - a) + np.clip(cor, 0, 1) * a
-    a = bi[..., None] * 0.95
-    im = im * (1 - a) + np.array(est["reflexo"]) * a
-    return np.clip(im, 0, 1), m
-
-
-# ───────────────────────────────────────────── apagar o olho antigo
 def textura_aleatoria(alta, livre, forma, passo=10):
     P = passo * 2
     w = np.hanning(P + 2)[1:-1]
@@ -328,57 +110,6 @@ def apagar_olho(im, centro, R, forca_alta):
 
 
 # ───────────────────────────────────────────── disco em 2x
-def disco_2x(limpo, centro, R, espelhar, est, nome, estilo):
-    """Sol/lua em 2x SEM o olho pintado (o olho é desenhado no shader para
-    piscar e mexer a pupila) + o mapa do olho:
-      egito_disco_<nome>.png  disco limpo com a luz do olho já espalhada nele
-      egito_olho_<nome>.png   R = traços (suaves), G = altura na abertura do
-                              olho (0 pálpebra de cima .. 1 de baixo),
-                              B = abertura do olho, A = relevo dos traços"""
-    x0, y0 = centro[0] - JANELA, centro[1] - JANELA
-    reg = limpo[y0:y0 + 2 * JANELA, x0:x0 + 2 * JANELA]
-    img = Image.fromarray((reg * 255 + 0.5).astype(np.uint8)).resize((4 * JANELA, 4 * JANELA), Image.LANCZOS)
-    img = img.filter(ImageFilter.UnsharpMask(radius=2.0, percent=60, threshold=2))
-    arr = np.asarray(img).astype(np.float32) / 255
-    N = 4 * JANELA
-    c2 = (2 * JANELA, 2 * JANELA)
-    S = TAMANHO_OLHO * R * 2
-    m = mascaras_olho((N, N), c2, S, espelhar, estilo)
-    traco = ndi.gaussian_filter(m["traco"], 0.6)
-    branco = np.clip(m["branco"] - traco * 1.2, 0, 1)
-    # profundidade: o olho é gravado em relevo no disco. Sombra do relevo
-    # para baixo/direita e luz rasante para cima/esquerda, assadas no disco
-    # (são paradas; a pálpebra e a pupila se mexem no shader).
-    todo = np.clip(m["traco"] + m["branco"], 0, 1)
-    sombra = ndi.shift(ndi.gaussian_filter(todo, 4.0), (7, 6), order=1) * (1 - todo)
-    luz = ndi.shift(ndi.gaussian_filter(todo, 2.5), (-4, -4), order=1) * (1 - todo)
-    arr = arr * (1 - np.clip(sombra * 0.55, 0, 0.6))[..., None]
-    arr = 1 - (1 - arr) * (1 - np.clip(luz * 0.35, 0, 0.4))[..., None]
-    # luz do olho espalhada no disco
-    halo = ndi.gaussian_filter(np.clip(m["traco"] + m["branco"] * 0.6, 0, 1), 11.0)
-    arr = 1 - (1 - arr) * (1 - np.clip(halo * est["halo_forca"] * 0.6, 0, 1)[..., None] * np.array(est["halo"]))
-    # altura dentro da abertura, coluna por coluna
-    v = np.zeros((N, N), np.float32)
-    aberto = branco > 0.35
-    for x in range(N):
-        ys = np.nonzero(aberto[:, x])[0]
-        if len(ys) < 2:
-            continue
-        topo, base = ys.min(), ys.max()
-        v[topo:base + 1, x] = np.linspace(0.0, 1.0, base - topo + 1)
-    v = ndi.grey_dilation(v, size=(3, 3)) * (branco > 0.02)
-    rel = np.clip(relevo(m["traco"], 2.4) * 0.65 + 0.5, 0, 1)
-    yy, xx = np.mgrid[0:N, 0:N]
-    d = np.hypot(xx + 0.5 - c2[0], yy + 0.5 - c2[1]) / 2.0     # em px da imagem
-    alfa = np.clip((R + 10 - d) / 10.0, 0, 1)
-    gravar(np.dstack([arr, alfa]), "egito_disco_%s.png" % nome, "RGBA")
-    gravar(np.dstack([traco, v, branco, rel]), "egito_olho_%s.png" % nome, "RGBA")
-    px, py = m["pupila_px"]
-    print("   olho %s: pupila UV (%.4f, %.4f) raio %.4f  unidade %.4f  raio_disco %.4f" % (
-        nome, px / N, py / N, m["pupila_r"] / N, S / N, R * 2 / N))
-
-
-# ───────────────────────────────────────────── pontas de ouro (2x)
 def pontas_2x():
     x0, y0, x1, y1 = PONTAS_CAIXA
     W, H = (x1 - x0) * 2, (y1 - y0) * 2
@@ -456,13 +187,10 @@ def main():
     arg = ap.parse_args()
     sol = ler(os.path.join(arg.originais, "sol.png"))
     lua = ler(os.path.join(arg.originais, "lua.png"))
-    sol_limpo = apagar_olho(sol, *SOL, 0.6)
-    lua_limpo = apagar_olho(lua, *LUA, 1.0)
-    for limpo, (c, R), esp, est, nome, estilo in [(sol_limpo, SOL, True, ESTILO_RA, "sol", "masculino"),
-                                                  (lua_limpo, LUA, False, ESTILO_HORUS, "lua", "feminino")]:
-        fundo, _ = pintar_olho(limpo, c, R, esp, est, 1, estilo)
-        gravar(fundo, "deserto_%s.png" % nome)
-        disco_2x(limpo, c, R, esp, est, nome, estilo)
+    # fundo sem o olho antigo, com o sol/a lua novos pintados por cima (o que
+    # o menu mostra; no jogo as camadas de gerar_astros.py ficam por cima)
+    for limpo, nome in ((apagar_olho(sol, *SOL, 0.6), "sol"), (apagar_olho(lua, *LUA, 1.0), "lua")):
+        gravar(colar_astro(limpo, nome), "deserto_%s.png" % nome)
     pontas_2x()
     cristal_2x(os.path.join(arg.originais, "sol.png"))
     estrela()

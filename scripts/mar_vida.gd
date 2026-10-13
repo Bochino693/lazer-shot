@@ -8,9 +8,11 @@ extends Node2D
 #   cardumes     três cardumes nadando juntos (MultiMesh; o nado é no shader)
 #   baleias      nadando devagar; cada volta nova toca o canto delas ao longe
 #   navio        aos 9 s de partida afunda de cima (a água segura, ele desce
-#                de proa balançando), soltando um rastro de bolhas do casco e
-#                das vergas; bate no fundo: nuvem de lodo que sobe e assenta,
-#                lodo empurrado rente ao chão, tábuas e farpas soltando, e o
+#                de proa balançando), com a cor da foto e sem nada em volta
+#                dele; a água cede: redemoinhos sobem pelo casco, bolhas saem
+#                das vergas e do fundo, tábuas do fundo se soltam; bate no
+#                fundo: colunas de areia e água jogadas para cima, jatos nas
+#                pontas do casco, tábuas do fundo voando, farpas e bolhas, e o
 #                cenário volta a ser exatamente a foto
 #   pedras       as escritas acendem de cima para baixo; tiro na pedra solta
 #                lascas e deixa o buraco com rachaduras no lugar
@@ -22,7 +24,6 @@ const SHADER_CASCATA := "res://shaders/mar_cascata.gdshader"
 const SHADER_BALEIA := "res://shaders/mar_baleia.gdshader"
 const SHADER_CARDUME := preload("res://shaders/mar_cardume.gdshader")
 const SHADER_PEDRA := preload("res://shaders/mar_pedra.gdshader")
-const SHADER_NAVIO := preload("res://shaders/mar_navio.gdshader")
 const PEIXE := preload("res://sprites/mar_peixe.png")
 const NAVIO := preload("res://sprites/mar_navio.png")
 const NAVIO_POUSO := preload("res://sprites/mar_navio_pouso.png")
@@ -92,9 +93,13 @@ var _navio: Sprite2D = null
 var _navio_pouso: Sprite2D = null
 var _navio_estado := ""          # "" fora, "caindo", "pousado", "fim"
 var _navio_t := 0.0
-var _rastro: CPUParticles2D = null      # bolhas saindo do casco enquanto afunda
-var _lodo: CPUParticles2D = null        # nuvem de lodo que sobe e assenta
-var _lodo_jatos: CPUParticles2D = null  # lodo empurrado para os lados pela batida
+var _rastro: CPUParticles2D = null      # bolhas saindo das vergas enquanto afunda
+var _esteira: CPUParticles2D = null     # água cedendo: redemoinhos subindo pelo casco
+var _bolhas_casco: CPUParticles2D = null  # bolhas do fundo do casco enquanto afunda
+var _soltas := 0                        # tábuas que já se soltaram na descida
+var _lodo: CPUParticles2D = null        # colunas de areia e água jogadas para cima
+var _lodo_jatos: CPUParticles2D = null  # jatos nas pontas do casco (água espremida)
+var _areia: CPUParticles2D = null       # grãos de areia jogados para cima
 var _farpas: CPUParticles2D = null      # farpas de madeira girando
 var _bolhas_pouso: CPUParticles2D = null
 
@@ -284,9 +289,6 @@ func _criar_navio() -> void:
 	_navio.offset = -(NAVIO_PIVO - NAVIO_CANTO)
 	_navio.position = NAVIO_PIVO
 	_navio.visible = false
-	var mat := ShaderMaterial.new()
-	mat.shader = SHADER_NAVIO
-	_navio.material = mat
 	add_child(_navio)
 
 	# rastro: bolhas que escapam do casco e das vergas e ficam para trás
@@ -318,6 +320,58 @@ func _criar_navio() -> void:
 	_rastro.color_ramp = _rampa(Color(0.85, 0.95, 1.0), 0.85)
 	_navio.add_child(_rastro)
 
+	# a água cedendo ao navio: redemoinhos claros nascem no fundo e nos lados
+	# do casco e ficam para trás (sobem em relação a ele) enquanto ele desce
+	var casco := PackedVector2Array()
+	for p in NAVIO_CASCO:
+		casco.append(p - (NAVIO_PIVO - NAVIO_CANTO))
+	_esteira = CPUParticles2D.new()
+	_esteira.name = "Esteira"
+	_esteira.amount = 46
+	_esteira.lifetime = 1.9
+	_esteira.emitting = false
+	_esteira.local_coords = false
+	_esteira.texture = LODO
+	_esteira.emission_shape = CPUParticles2D.EMISSION_SHAPE_POINTS
+	_esteira.emission_points = casco
+	_esteira.direction = Vector2(0, -1)
+	_esteira.spread = 50.0
+	_esteira.gravity = Vector2(0, -25)
+	_esteira.initial_velocity_min = 40.0
+	_esteira.initial_velocity_max = 110.0
+	_esteira.damping_min = 30.0
+	_esteira.damping_max = 60.0
+	_esteira.angle_max = 360.0
+	_esteira.angular_velocity_min = -40.0
+	_esteira.angular_velocity_max = 40.0
+	_esteira.scale_amount_min = 0.4
+	_esteira.scale_amount_max = 0.9
+	_esteira.scale_amount_curve = _curva(0.5, 1.7)
+	_esteira.color_ramp = _rampa(Color(0.86, 0.95, 1.0), 0.42)
+	_navio.add_child(_esteira)
+
+	_bolhas_casco = CPUParticles2D.new()
+	_bolhas_casco.name = "BolhasCasco"
+	_bolhas_casco.amount = 50
+	_bolhas_casco.lifetime = 2.4
+	_bolhas_casco.emitting = false
+	_bolhas_casco.local_coords = false
+	_bolhas_casco.texture = BOLHA
+	_bolhas_casco.emission_shape = CPUParticles2D.EMISSION_SHAPE_POINTS
+	_bolhas_casco.emission_points = casco
+	_bolhas_casco.direction = Vector2(0, -1)
+	_bolhas_casco.spread = 40.0
+	_bolhas_casco.gravity = Vector2(0, -140)
+	_bolhas_casco.initial_velocity_min = 20.0
+	_bolhas_casco.initial_velocity_max = 70.0
+	_bolhas_casco.tangential_accel_min = -40.0
+	_bolhas_casco.tangential_accel_max = 40.0
+	_bolhas_casco.scale_amount_min = 0.12
+	_bolhas_casco.scale_amount_max = 0.38
+	_bolhas_casco.scale_amount_curve = _curva(0.6, 1.3)
+	_bolhas_casco.color_ramp = _rampa(Color(0.88, 0.96, 1.0), 0.9)
+	_navio.add_child(_bolhas_casco)
+
 	# a foto original na caixa do navio: entra quando ele pousa
 	_navio_pouso = Sprite2D.new()
 	_navio_pouso.name = "NavioPousado"
@@ -335,10 +389,12 @@ func cair_navio() -> void:
 	_navio_estado = "caindo"
 	_navio_t = 0.0
 	_navio.visible = true
-	_navio.modulate = Color(0.78, 0.9, 1.0, 0.0)
+	_navio.modulate = Color(1, 1, 1, 1)
 	_navio.position = NAVIO_PIVO - Vector2(0, NAVIO_ALTURA)
-	(_navio.material as ShaderMaterial).set_shader_parameter("agita", 1.0)
+	_soltas = 0
 	_rastro.emitting = true
+	_esteira.emitting = true
+	_bolhas_casco.emitting = true
 	Maquina.efeito(SOM_NAVIO_DESCE, -5.0)
 
 
@@ -355,8 +411,13 @@ func _animar_navio(delta: float) -> void:
 		var resta := 1.0 - k
 		_navio.position = NAVIO_PIVO - Vector2(24.0 * resta * sin(_navio_t * 0.9 + 0.4), NAVIO_ALTURA * (1.0 - desce))
 		_navio.rotation = deg_to_rad(5.5) * resta + deg_to_rad(2.2) * sin(_navio_t * 1.45) * resta
-		# vem da névoa lá de cima: azulado no começo, cor certa ao chegar
-		_navio.modulate = Color(lerpf(0.72, 1.0, k), lerpf(0.86, 1.0, k), 1.0, clampf(_navio_t / 0.6, 0.0, 1.0))
+		# tábuas do fundo do casco se soltando na descida (ficam para trás)
+		if _soltas < 4 and _navio_t > 0.9 + _soltas * 0.75:
+			_soltas += 1
+			var ponto: Vector2 = NAVIO_CASCO[randi() % NAVIO_CASCO.size()] + Vector2(randf_range(-10, 10), randf_range(-16, -4))
+			var l := _soltar_lasca(_navio.transform * (ponto - (NAVIO_PIVO - NAVIO_CANTO)), randf_range(9.0, 14.0), true, NAVIO, ponto, true)
+			l["vel"] = Vector2(randf_range(-50.0, 50.0), randf_range(20.0, 60.0))
+			l["vida"] = randf_range(2.0, 2.6)
 		if k >= 1.0:
 			_pousar()
 	elif _navio_estado == "pousado":
@@ -364,7 +425,6 @@ func _animar_navio(delta: float) -> void:
 		var t := _navio_t
 		_navio.position = NAVIO_PIVO + Vector2(0, 5.0 * exp(-t * 4.0) * sin(t * 9.0 + 0.6))
 		_navio.rotation = deg_to_rad(1.6) * exp(-t * 3.0) * cos(t * 7.0)
-		(_navio.material as ShaderMaterial).set_shader_parameter("agita", clampf(1.0 - t * 1.2, 0.0, 1.0))
 		if t > 0.35 and not _navio_pouso.visible:
 			_navio_pouso.visible = true
 			_navio_pouso.modulate.a = 0.0
@@ -379,13 +439,19 @@ func _pousar() -> void:
 	_navio_estado = "pousado"
 	_navio_t = 0.0
 	_rastro.emitting = false
-	for p: CPUParticles2D in [_lodo, _lodo_jatos, _farpas, _bolhas_pouso]:
+	_esteira.emitting = false
+	_bolhas_casco.emitting = false
+	for p: CPUParticles2D in [_lodo, _lodo_jatos, _areia, _farpas, _bolhas_pouso]:
 		p.restart()
 		p.emitting = true
-	# tábuas que se soltam do casco na batida (recortadas do próprio navio)
-	for i in 9:
-		var ponto: Vector2 = NAVIO_CASCO[randi() % NAVIO_CASCO.size()] + Vector2(randf_range(-14, 14), randf_range(-30, -4))
-		_soltar_lasca(NAVIO_CANTO + ponto, randf_range(12.0, 20.0), true, NAVIO, ponto, true)
+	# tábuas do fundo do casco arrancadas na batida (recortadas do próprio
+	# navio): voam para cima e para os lados, giram e afundam devagar
+	for i in 14:
+		var ponto: Vector2 = NAVIO_CASCO[i % NAVIO_CASCO.size()] + Vector2(randf_range(-16, 16), randf_range(-22, -2))
+		var l := _soltar_lasca(NAVIO_CANTO + ponto, randf_range(12.0, 21.0), true, NAVIO, ponto, true)
+		var lado := (ponto.x - 230.0) / 160.0
+		l["vel"] = Vector2(lado * randf_range(120.0, 260.0) + randf_range(-60.0, 60.0), -randf_range(260.0, 460.0))
+		l["vida"] = randf_range(3.2, 4.4)
 	Maquina.efeito(SOM_NAVIO_IMPACTO, -2.0)
 	navio_pousou.emit()
 
@@ -467,7 +533,7 @@ func _quebrar(p: Dictionary, pos: Vector2, local: Vector2) -> void:
 ## Lasca recortada de uma textura: por padrão o próprio fundo no ponto `pos`;
 ## para o navio, a textura dele e o ponto `uv_em` dentro do recorte. `tabua`
 ## faz uma tira comprida (madeira) em vez de um caco redondo (pedra).
-func _soltar_lasca(pos: Vector2, raio: float, grande: bool, textura: Texture2D = null, uv_em: Vector2 = Vector2.INF, tabua: bool = false) -> void:
+func _soltar_lasca(pos: Vector2, raio: float, grande: bool, textura: Texture2D = null, uv_em: Vector2 = Vector2.INF, tabua: bool = false) -> Dictionary:
 	var fundo := get_parent() as Sprite2D
 	if textura == null:
 		textura = fundo.texture
@@ -526,7 +592,8 @@ func _soltar_lasca(pos: Vector2, raio: float, grande: bool, textura: Texture2D =
 		lasca["giro"] = randf_range(-7.0, 7.0)
 		lasca["vida"] = randf_range(2.6, 3.6)
 		lasca["cresce"] = 0.2
-		no.color = Color(0.9, 0.9, 0.92)
+		no.color = Color(1, 1, 1)
+	return lasca
 
 
 func _animar_lascas(delta: float) -> void:
@@ -577,46 +644,66 @@ func _criar_efeitos() -> void:
 	_bolhas_pedra.scale_amount_max = 0.24
 	_bolhas_pedra.color_ramp = _rampa(Color(0.85, 0.95, 1.0), 0.8)
 
-	# lodo: nuvens grandes que sobem devagar, giram, crescem e assentam
-	_lodo = _particulas("Lodo", 30, 4.6, LODO, false)
-	_lodo.position = Vector2(355, 912)
-	_lodo.explosiveness = 0.85
+	# o mar cedendo na batida: colunas de areia e água jogadas para cima ao
+	# longo do fundo do casco; a água freia, elas abrem, giram e assentam
+	_lodo = _particulas("Lodo", 48, 4.0, LODO, false)
+	_lodo.position = Vector2(370, 905)
+	_lodo.explosiveness = 0.9
 	_lodo.emission_shape = CPUParticles2D.EMISSION_SHAPE_RECTANGLE
-	_lodo.emission_rect_extents = Vector2(165, 12)
+	_lodo.emission_rect_extents = Vector2(150, 8)
 	_lodo.direction = Vector2(0, -1)
-	_lodo.spread = 70.0
-	_lodo.initial_velocity_min = 40.0
-	_lodo.initial_velocity_max = 130.0
-	_lodo.damping_min = 25.0
-	_lodo.damping_max = 45.0
-	_lodo.gravity = Vector2(0, 5)
-	_lodo.angular_velocity_min = -25.0
-	_lodo.angular_velocity_max = 25.0
-	_lodo.angle_min = 0.0
+	_lodo.spread = 24.0
+	_lodo.initial_velocity_min = 150.0
+	_lodo.initial_velocity_max = 380.0
+	_lodo.damping_min = 240.0
+	_lodo.damping_max = 320.0
+	_lodo.gravity = Vector2(0, 14)
+	_lodo.angular_velocity_min = -40.0
+	_lodo.angular_velocity_max = 40.0
 	_lodo.angle_max = 360.0
-	_lodo.scale_amount_min = 1.3
-	_lodo.scale_amount_max = 2.6
-	_lodo.scale_amount_curve = _curva(0.45, 1.6)
-	_lodo.color_ramp = _rampa(Color(0.74, 0.82, 0.84), 0.88)
+	_lodo.scale_amount_min = 0.7
+	_lodo.scale_amount_max = 1.6
+	_lodo.scale_amount_curve = _curva(0.5, 2.0)
+	_lodo.color_ramp = _rampa(Color(0.76, 0.86, 0.90), 0.72)
 
-	# lodo empurrado para os lados, rente ao chão
-	_lodo_jatos = _particulas("LodoJatos", 18, 2.8, LODO, false)
-	_lodo_jatos.position = Vector2(355, 918)
-	_lodo_jatos.explosiveness = 1.0
-	_lodo_jatos.emission_shape = CPUParticles2D.EMISSION_SHAPE_RECTANGLE
-	_lodo_jatos.emission_rect_extents = Vector2(150, 6)
+	# água espremida nas pontas do casco: dois jatos para cima e para fora
+	_lodo_jatos = _particulas("LodoJatos", 24, 3.0, LODO, false)
+	_lodo_jatos.explosiveness = 0.95
+	_lodo_jatos.emission_shape = CPUParticles2D.EMISSION_SHAPE_DIRECTED_POINTS
+	_lodo_jatos.emission_points = PackedVector2Array([Vector2(238, 900), Vector2(250, 906), Vector2(500, 884), Vector2(515, 866)])
+	_lodo_jatos.emission_normals = PackedVector2Array([Vector2(-0.55, -1).normalized(), Vector2(-0.45, -1).normalized(),
+		Vector2(0.3, -1).normalized(), Vector2(0.38, -1).normalized()])
 	_lodo_jatos.direction = Vector2(0, -1)
-	_lodo_jatos.spread = 88.0
-	_lodo_jatos.initial_velocity_min = 170.0
-	_lodo_jatos.initial_velocity_max = 320.0
-	_lodo_jatos.damping_min = 120.0
-	_lodo_jatos.damping_max = 170.0
-	_lodo_jatos.gravity = Vector2(0, 30)
+	_lodo_jatos.spread = 14.0
+	_lodo_jatos.initial_velocity_min = 240.0
+	_lodo_jatos.initial_velocity_max = 420.0
+	_lodo_jatos.damping_min = 300.0
+	_lodo_jatos.damping_max = 380.0
+	_lodo_jatos.gravity = Vector2(0, 20)
 	_lodo_jatos.angle_max = 360.0
-	_lodo_jatos.scale_amount_min = 0.6
-	_lodo_jatos.scale_amount_max = 1.3
-	_lodo_jatos.scale_amount_curve = _curva(0.5, 1.4)
-	_lodo_jatos.color_ramp = _rampa(Color(0.70, 0.78, 0.80), 0.7)
+	_lodo_jatos.angular_velocity_min = -60.0
+	_lodo_jatos.angular_velocity_max = 60.0
+	_lodo_jatos.scale_amount_min = 0.5
+	_lodo_jatos.scale_amount_max = 1.2
+	_lodo_jatos.scale_amount_curve = _curva(0.4, 1.7)
+	_lodo_jatos.color_ramp = _rampa(Color(0.84, 0.92, 0.95), 0.75)
+
+	# grãos de areia jogados para cima: sobem rápido e caem de volta
+	_areia = _particulas("Areia", 70, 2.6, bola, false)
+	_areia.position = Vector2(370, 905)
+	_areia.explosiveness = 0.92
+	_areia.emission_shape = CPUParticles2D.EMISSION_SHAPE_RECTANGLE
+	_areia.emission_rect_extents = Vector2(150, 6)
+	_areia.direction = Vector2(0, -1)
+	_areia.spread = 40.0
+	_areia.initial_velocity_min = 220.0
+	_areia.initial_velocity_max = 470.0
+	_areia.damping_min = 60.0
+	_areia.damping_max = 110.0
+	_areia.gravity = Vector2(0, 240)
+	_areia.scale_amount_min = 0.05
+	_areia.scale_amount_max = 0.13
+	_areia.color_ramp = _rampa(Color(0.92, 0.93, 0.86), 0.95)
 
 	# farpas de madeira girando e afundando devagar
 	_farpas = _particulas("Farpas", 22, 3.2, FARPA, false)
@@ -644,22 +731,27 @@ func _criar_efeitos() -> void:
 	_farpas.color_ramp = some
 
 	# bolhas que escapam do casco depois da batida
-	_bolhas_pouso = _particulas("BolhasPouso", 44, 3.0, BOLHA, false)
-	_bolhas_pouso.position = Vector2(355, 860)
-	_bolhas_pouso.explosiveness = 0.55
+	_bolhas_pouso = _particulas("BolhasPouso", 70, 3.4, BOLHA, false)
+	_bolhas_pouso.position = Vector2(370, 870)
+	_bolhas_pouso.explosiveness = 0.6
 	_bolhas_pouso.emission_shape = CPUParticles2D.EMISSION_SHAPE_RECTANGLE
-	_bolhas_pouso.emission_rect_extents = Vector2(170, 50)
+	_bolhas_pouso.emission_rect_extents = Vector2(165, 40)
 	_bolhas_pouso.direction = Vector2(0, -1)
 	_bolhas_pouso.spread = 30.0
-	_bolhas_pouso.gravity = Vector2(0, -130)
-	_bolhas_pouso.initial_velocity_min = 10.0
-	_bolhas_pouso.initial_velocity_max = 60.0
+	_bolhas_pouso.gravity = Vector2(0, -160)
+	_bolhas_pouso.initial_velocity_min = 40.0
+	_bolhas_pouso.initial_velocity_max = 130.0
 	_bolhas_pouso.tangential_accel_min = -30.0
 	_bolhas_pouso.tangential_accel_max = 30.0
 	_bolhas_pouso.scale_amount_min = 0.10
 	_bolhas_pouso.scale_amount_max = 0.34
 	_bolhas_pouso.scale_amount_curve = _curva(0.6, 1.35)
 	_bolhas_pouso.color_ramp = _rampa(Color(0.85, 0.95, 1.0), 0.85)
+
+	# o que a batida levanta fica atrás das pedras da frente (como o navio)
+	var depois_do_navio := _navio_pouso.get_index() + 1
+	for p: CPUParticles2D in [_bolhas_pouso, _farpas, _areia, _lodo_jatos, _lodo]:
+		move_child(p, depois_do_navio)
 
 
 func _particulas(nome: String, n: int, vida: float, tex: Texture2D, continuo: bool) -> CPUParticles2D:

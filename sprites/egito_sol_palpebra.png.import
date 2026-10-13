@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://s6or1hxyyx64"
-path="res://.godot/imported/egito_olho_sol.png-75fa8b25abc8c25492508254a90485c5.ctex"
+uid="uid://dkvk6jj0dy0bx"
+path="res://.godot/imported/egito_sol_palpebra.png-a57109a1b965d86a71d133181e5585a6.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://sprites/egito_olho_sol.png"
-dest_files=["res://.godot/imported/egito_olho_sol.png-75fa8b25abc8c25492508254a90485c5.ctex"]
+source_file="res://sprites/egito_sol_palpebra.png"
+dest_files=["res://.godot/imported/egito_sol_palpebra.png-a57109a1b965d86a71d133181e5585a6.ctex"]
 
 [params]
 
@@ -23,7 +23,7 @@ compress/rdo_quality_loss=0.0
 compress/hdr_compression=1
 compress/normal_map=0
 compress/channel_pack=0
-mipmaps/generate=false
+mipmaps/generate=true
 mipmaps/limit=-1
 roughness/mode=0
 roughness/src_normal=""

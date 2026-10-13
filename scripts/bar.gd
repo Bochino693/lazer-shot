@@ -250,6 +250,10 @@ var marcas_erro: Array[Dictionary] = []
 ## são redesenhadas quando entra/sai uma marca, e não mais em todo quadro
 ## junto com os efeitos. Guarda as marcas mais recentes (as mais antigas somem).
 const MAX_MARCAS_ERRO: int = 80
+## Furo com profundidade (tools/gerar_bar.py): madeira da estante/barril ou
+## o cartaz rasgado do barril.
+const FURO_MADEIRA := preload("res://sprites/bar_furo_madeira.png")
+const FURO_PAPEL := preload("res://sprites/bar_furo_papel.png")
 var _camada_estantes: Node2D = null
 var _camada_marcas: Node2D = null
 var fx_madeira: Array[Dictionary] = []
@@ -833,8 +837,10 @@ func _processar_tiro_global(pos_global: Vector2) -> void:
 	erros_seguidos += 1
 	_resetar_combo()
 
-	_registrar_erro_visual(pos_global)
-	_registrar_fx_madeira(pos_global)
+	# lascas da madeira (ou o cartaz do barril rasgando) e o furo que fica
+	var material := BarTiro.material_em(fundo, pos_global)
+	_registrar_erro_visual(pos_global, material)
+	BarTiro.criar(self, fundo, pos_global, material)
 	_registrar_fx_impacto(pos_global)
 
 	_set_status_erro("ERROU!")
@@ -2737,7 +2743,7 @@ func _registrar_fx_vidro_colorido(pos: Vector2, cor_base: Color, cor_liquido: Co
 
 
 
-func _registrar_erro_visual(pos: Vector2) -> void:
+func _registrar_erro_visual(pos: Vector2, material: String = "madeira") -> void:
 	while marcas_erro.size() >= MAX_MARCAS_ERRO:
 		marcas_erro.remove_at(0)
 	marcas_erro.append({
@@ -2748,7 +2754,10 @@ func _registrar_erro_visual(pos: Vector2) -> void:
 		"anel": randf_range(12.0, 18.0),
 		"poeira": randf_range(16.0, 24.0),
 		"desvio_x": randf_range(-1.5, 1.5),
-		"desvio_y": randf_range(-1.5, 1.5)
+		"desvio_y": randf_range(-1.5, 1.5),
+		"tipo": material,
+		"espelho": -1.0 if randf() < 0.5 else 1.0,
+		"giro": randf_range(-0.3, 0.3) if material != "papel" else randf() * TAU,
 	})
 	queue_redraw()
 	_redesenhar_marcas()
@@ -2768,20 +2777,6 @@ func _atualizar_marcas_erro(delta: float) -> void:
 			_redesenhar_marcas()
 		else:
 			marcas_erro[i] = marca
-
-
-func _registrar_fx_madeira(pos: Vector2) -> void:
-	for i in range(14):
-		var ang: float = randf_range(-PI, PI)
-		var vel: Vector2 = Vector2.RIGHT.rotated(ang) * randf_range(90.0, 240.0)
-
-		fx_madeira.append({
-			"pos": pos + Vector2(randf_range(-4.0, 4.0), randf_range(-4.0, 4.0)),
-			"vel": vel,
-			"idade": 0.0,
-			"vida": randf_range(0.18, 0.36),
-			"tam": randf_range(4.0, 11.0)
-		})
 
 
 func _atualizar_fx_madeira(delta: float) -> void:
@@ -3161,15 +3156,20 @@ func _animar_texto_record_salvo_temporario(nome_salvo: String) -> void:
 
 
 func _desenhar_marcas_erro() -> void:
-	# Furo de bala na madeira: uma forma pronta do Pincel por marca (antes
-	# eram 8 desenhos por furo, e ficam até 80 furos na tela).
+	# Furo com profundidade: um sprite por marca (madeira lascada no sentido
+	# do veio, ou o cartaz rasgado do barril); ficam até 80 furos na tela.
 	for marca in marcas_erro:
 		var pos: Vector2 = Vector2(marca.get("pos", Vector2.ZERO))
 		var poeira: float = float(marca.get("poeira", 20.0))
 		var dx: float = float(marca.get("desvio_x", 0.0))
 		var dy: float = float(marca.get("desvio_y", 0.0))
-		var giro: float = (dx * 1.7 + dy * 2.3) * PI
-		Pincel.forma(_camada_marcas, Pincel.FURO, pos + Vector2(dx, dy), poeira, Color.WHITE, giro)
+		var papel: bool = String(marca.get("tipo", "madeira")) == "papel"
+		var tam: float = poeira * (4.2 if papel else 4.4)
+		_camada_marcas.draw_set_transform(pos + Vector2(dx, dy), float(marca.get("giro", 0.0)),
+			Vector2(float(marca.get("espelho", 1.0)), 1.0))
+		_camada_marcas.draw_texture_rect(FURO_PAPEL if papel else FURO_MADEIRA,
+			Rect2(Vector2(-tam, -tam) * 0.5, Vector2(tam, tam)), false)
+	_camada_marcas.draw_set_transform(Vector2.ZERO)
 
 
 func _desenhar_fx_madeira() -> void:
