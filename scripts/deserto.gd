@@ -242,6 +242,7 @@ var label_municao_estado: Label = null
 var label_recarga: Label = null
 var label_status: Label = null
 var label_combo: Label = null
+var _anuncio: ComboAnuncio = null   # o combo grande no meio da tela, com a voz do templo
 
 
 var modal_inicio_subtitulo: Label = null
@@ -839,6 +840,8 @@ func _configurar_hud() -> void:
 	Leve.constant(label_combo, "outline_size", 6)
 	label_combo.visible = false
 	hud_root.add_child(label_combo)
+	if _anuncio == null:
+		_anuncio = ComboAnuncio.criar(self, "deserto")
 
 	_criar_blocos_municao(card_municao)
 
@@ -2005,6 +2008,8 @@ func _resolver_acerto(indice: int) -> void:
 		pontuacao_total += alvo.valor_correto + bonus_longe
 		total_acertos += 1
 		_registrar_hit_combo(alvo.tipo)
+		if _anuncio != null:
+			_anuncio.combo(combo_qtd)
 		if _vivo != null:
 			_vivo.evento("acerto", Vector2.INF, combo_qtd)
 
@@ -2059,6 +2064,8 @@ func _carregar_cristal() -> void:
 		pegos.append(a)
 		pontos_raio.append(a.tela)
 	_vivo.disparar_descarga(pontos_raio)
+	if _anuncio != null:
+		_anuncio.especial("POWER OF RA!")
 	if pegos.is_empty():
 		_set_status("DESCARGA DO CRISTAL!", Color(1.0, 0.86, 0.36, 1.0), 1.4)
 		return
@@ -2089,6 +2096,8 @@ func _quebrar_combo() -> void:
 	combo_tipo = ""
 	combo_qtd = 0
 	combo_timer = 0.0
+	if _anuncio != null:
+		_anuncio.zerar()
 	if _vivo != null:
 		_vivo.evento("combo_quebrou")
 

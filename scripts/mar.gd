@@ -120,6 +120,7 @@ var combo_timer_restante: float = 0.0
 
 var combo_layer: CanvasLayer
 var combo_label: Label
+var _anuncio: ComboAnuncio      # o combo grande no meio da tela, com a voz de Poseidon
 
 @export var escala_vaso_min: float = 0.58
 @export var escala_vaso_max: float = 0.70
@@ -728,58 +729,13 @@ func _atualizar_mira_hibrida(_delta: float) -> void:
 	alvo_pos = MiraGlobal.pos
 
 
-func _obter_texto_combo(hit_count: int) -> String:
-	match hit_count:
-		2:
-			return "DOUBLE HIT"
-		3:
-			return "TRIPLE HIT"
-		4:
-			return "QUADRA HIT"
-		5:
-			return "MEGA COMBO x5"
-		6:
-			return "MEGA COMBO x6"
-		7:
-			return "MEGA COMBO x7"
-		8:
-			return "MEGA COMBO x8"
-		_:
-			if hit_count >= 9:
-				return "INSANO x%d" % hit_count
-
-	return ""
-
-
+## O combo agora é anunciado grande no meio da tela, com a voz de Poseidon
+## (scripts/combo_anuncio.gd); o rótulo pequeno do canto fica escondido.
 func _mostrar_combo_hits() -> void:
-	if combo_label == null:
-		return
-
-	var texto: String = _obter_texto_combo(combo_hits_seguidos)
-	if texto == "":
+	if combo_label != null:
 		combo_label.visible = false
-		return
-
-	combo_label.text = texto
-	combo_label.visible = true
-	combo_label.modulate = Color(1.0, 1.0, 1.0, 1.0)
-	combo_label.scale = Vector2.ONE * escala_combo_visual_base
-
-	var tw := create_tween()
-	tw.set_parallel(true)
-	tw.tween_property(
-		combo_label,
-		"scale",
-		Vector2.ONE * (escala_combo_visual_base * 1.10),
-		0.10
-	).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-
-	tw.tween_property(
-		combo_label,
-		"scale",
-		Vector2.ONE * escala_combo_visual_base,
-		0.22
-	).set_delay(0.10).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	if _anuncio != null:
+		_anuncio.combo(combo_hits_seguidos)
 
 func _obter_nivel_dificuldade() -> int:
 	if pontos_por_nivel_dificuldade <= 0:
@@ -2494,6 +2450,7 @@ func _criar_hud_combo() -> void:
 	Leve.color(combo_label, "font_outline_color", Color.BLACK)
 	Leve.constant(combo_label, "outline_size", 6)
 	combo_layer.add_child(combo_label)
+	_anuncio = ComboAnuncio.criar(self, "mar")
 
 	_ajustar_layout_combo()
 
@@ -5110,6 +5067,8 @@ func _acertar_alvo(alvo: Area2D, pos_impacto: Vector2 = Vector2.ZERO) -> void:
 		if combo_label != null:
 			combo_label.visible = false
 			combo_label.text = ""
+		if _anuncio != null:
+			_anuncio.zerar()
 
 		_atualizar_bombas_hud()
 
@@ -5299,7 +5258,8 @@ func _acertar_cardume(pos_global: Vector2) -> bool:
 	total_acertos += 1
 	combo_hits_seguidos += 1
 	combo_timer_restante = janela_combo_seg
-	_mostrar_combo_hits()
+	if _anuncio != null:
+		_anuncio.especial("POSEIDON'S TREASURE!")
 	_set_status("CARDUME DOURADO! +%d" % BONUS_CARDUME, "acerto")
 	_mostrar_pontos(pos_global, BONUS_CARDUME, true)
 	_flash_tela(Color(1.0, 0.85, 0.40, 0.16))

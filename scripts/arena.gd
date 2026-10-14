@@ -188,6 +188,8 @@ var pontuacao: int        = 0
 var municao_atual: int    = 0
 var tiros: int            = 0
 var acertos: int          = 0
+var _seguidos := 0                         # acertos seguidos (o combo da arena)
+var _anuncio: ComboAnuncio = null          # o combo grande no meio da tela, com a voz da arena
  
 var jogo_ativo: bool    = false
 var jogo_iniciado: bool = false
@@ -401,6 +403,9 @@ func _ready() -> void:
 	pontuacao = 0
 	tiros = 0
 	acertos = 0
+	_seguidos = 0
+	if _anuncio == null:
+		_anuncio = ComboAnuncio.criar(self, "arena")
 	jogo_ativo = false
 	jogo_iniciado = false
 	recarregando = false
@@ -826,6 +831,7 @@ func _tentar_atirar(pos_mouse: Vector2) -> void:
 	if alvo == null:
 		_registrar_marca_laser_parede(pos_mouse)
 		_adicionar_chat_rodape("ERROU!", Color.RED)
+		_quebrar_seguidos()
 		return
 
 	var slot_clicado: int = -1
@@ -857,6 +863,13 @@ func _tentar_atirar(pos_mouse: Vector2) -> void:
 		indice_sequencia += 1
 
 		var sequencia_completa: bool = indice_sequencia >= sequencia_atual.size()
+		# combo: acertos seguidos; a sequência completa ganha o anúncio especial
+		_seguidos += 1
+		if _anuncio != null:
+			if sequencia_completa:
+				_anuncio.especial("PERFECT SEQUENCE!")
+			else:
+				_anuncio.combo(_seguidos)
 
 		# Se completou, bloqueia imediatamente para evitar crash no double hit
 		if sequencia_completa:
@@ -1242,7 +1255,14 @@ func _iniciar_rodada_fixa() -> void:
 			await get_tree().create_timer(randf_range(1.0, 1.5)).timeout
 
 
+func _quebrar_seguidos() -> void:
+	_seguidos = 0
+	if _anuncio != null:
+		_anuncio.zerar()
+
+
 func _erro_sequencia(alvo: Area2D) -> void:
+	_quebrar_seguidos()
 	pontuacao -= penalidade_erro_sequencia
 	bloqueia_tiro_sequencia = true
 	_rodada += 1
