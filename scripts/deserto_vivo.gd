@@ -131,6 +131,7 @@ const POLI_PONTAS := [
 	[Vector2(812, 760), Vector2(799, 790), Vector2(797, 842), Vector2(830, 842), Vector2(826, 790)],
 ]
 const TIROS_PONTA := 4
+const PLANOS_COM_LUZ := ["cristal", "obelisco_esq", "obelisco_dir"]
 const PONTA_VOLTA := 22.0
 const Z_OBELISCO := 1.554
 const CRISTAL_VOLTA := 30.0
@@ -281,6 +282,7 @@ func _init() -> void:
 	_fundo_sol = _criar_fundo(FUNDO_SOL, sem_mascara, Color(1.0, 0.74, 0.34), 0.0)
 	_fundo_lua = _criar_fundo(FUNDO_LUA, sem_mascara, Color(1.0, 0.28, 0.30), 3.7)
 	_criar_planos()
+	_criar_feixes()
 	_raios_sol = _criar_raios(CENTRO_SOL, RAIO_SOL, 3.1, false, COR_SOL)
 	_raios_lua = _criar_raios(CENTRO_LUA, RAIO_LUA, 2.7, true, COR_LUA)
 	_disco_sol = _criar_astro(TEX_SOL, ASTRO_SOL, CENTRO_SOL)
@@ -354,6 +356,7 @@ func _criar_fundo(tex: Texture2D, mascara: Texture2D, cor: Color, fase: float) -
 	var mat := ShaderMaterial.new()
 	mat.shader = SHADER_FUNDO
 	mat.set_shader_parameter("mascara", mascara)
+	mat.set_shader_parameter("usa_mascara", false)
 	mat.set_shader_parameter("luz_lancada", LUZ_FUNDO)
 	mat.set_shader_parameter("cor_energia", Vector3(cor.r, cor.g, cor.b))
 	mat.set_shader_parameter("respiro", 0.0)   # quem respira é o nó inteiro
@@ -754,7 +757,10 @@ func _animar_camera(delta: float) -> void:
 	_camada_perto.position = camera * (1.0 - 1.0 / Z_CRISTAL) / esc
 	_camada_obeliscos.position = camera * (1.0 - 1.0 / Z_OBELISCO) / esc
 	for pl in _planos:
-		(pl["no"] as Node2D).position = pl["canto"] + camera * (1.0 - 1.0 / float(pl["z"])) / esc
+		var pos: Vector2 = pl["canto"] + camera * (1.0 - 1.0 / float(pl["z"])) / esc
+		(pl["no"] as Node2D).position = pos
+		if pl["lua"] != null:
+			(pl["lua"] as Node2D).position = pos
 	_feixes.camera_local = camera / esc
 	_poeira_perto.position = Vector2(-60.0, 300.0) + camera * (1.0 - 1.0 / 0.45) / esc
 	for fundo: Sprite2D in [_fundo_sol, _fundo_lua]:
@@ -822,6 +828,12 @@ func _definir_noite(v: float) -> void:
 		no.modulate.a = par[1]
 	(_cristal.material as ShaderMaterial).set_shader_parameter("noite", _noite)
 	_mat_planos.set_shader_parameter("noite", _noite)
+	for pl in _planos:
+		if pl["lua"] != null:
+			var lua: Sprite2D = pl["lua"]
+			lua.visible = _noite > 0.001
+			lua.modulate.a = _noite
+			(pl["no"] as Sprite2D).visible = _noite < 0.999
 	_feixes.noite = _noite
 	# névoa da distância nos brasões: areia quente de dia, azul-escuro de noite
 	var nevoa := Color(0.96, 0.74, 0.46).lerp(Color(0.16, 0.18, 0.30), _noite)
@@ -1209,28 +1221,45 @@ func _criar_planos() -> void:
 	_mat_planos.set_shader_parameter("folha_lua", PLANOS_LUA)
 	_mat_planos.set_shader_parameter("brilho", PLANOS_BRILHO)
 	for d: Dictionary in EgitoPlanos.PLANOS:
-		var s := Sprite2D.new()
-		s.name = "Plano_" + str(d["nome"])
-		s.texture = PLANOS_SOL
-		s.centered = false
-		s.region_enabled = true
-		s.region_rect = d["folha"]
-		s.position = d["canto"]
-		s.material = _mat_planos
-		s.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
-		s.z_as_relative = false
-		s.z_index = z_desenho(float(d["z"]))
-		add_child(s)
 		var nome := str(d["nome"])
+		# só o cristal e os obeliscos brilham e apagam (shader); colunas e
+		# estátuas são imagem pura: a do sol e a da lua por cima, cruzando
+		# (mais leve para a placa)
+		var com_luz := nome in PLANOS_COM_LUZ
+		var s := _sprite_plano(d, PLANOS_SOL)
+		s.name = "Plano_" + nome
+		s.material = _mat_planos if com_luz else null
+		var lua: Sprite2D = null
+		if not com_luz:
+			lua = _sprite_plano(d, PLANOS_LUA)
+			lua.name = "Plano_" + nome + "_lua"
+			lua.visible = false
 		var lado := 0 if nome.ends_with("_esq") else (1 if nome.ends_with("_dir") else -1)
-		_planos.append({"no": s, "canto": d["canto"], "z": float(d["z"]), "lado": lado})
-		match str(d["nome"]):
+		_planos.append({"no": s, "lua": lua, "canto": d["canto"], "z": float(d["z"]), "lado": lado})
+		match nome:
 			"cristal":
 				_plano_cristal = s
 			"obelisco_esq":
 				_plano_obeliscos[0] = s
 			"obelisco_dir":
 				_plano_obeliscos[1] = s
+
+
+func _sprite_plano(d: Dictionary, folha: Texture2D) -> Sprite2D:
+	var s := Sprite2D.new()
+	s.texture = folha
+	s.centered = false
+	s.region_enabled = true
+	s.region_rect = d["folha"]
+	s.position = d["canto"]
+	s.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	s.z_as_relative = false
+	s.z_index = z_desenho(float(d["z"]))
+	add_child(s)
+	return s
+
+
+func _criar_feixes() -> void:
 	_feixes = EgitoFeixes.new()
 	_feixes.z_as_relative = false
 	_feixes.z_index = z_desenho(Z_OBELISCO) + 3
@@ -1540,6 +1569,8 @@ func _atualizar_tiros_fundo(delta: float) -> void:
 		mf.set_shader_parameter("energia", _energia)
 		mf.set_shader_parameter("luz_lados", lados)
 	for pl in _planos:
+		if pl["lua"] != null:
+			continue
 		var no := pl["no"] as Sprite2D
 		var lado: int = pl["lado"]
 		var acesa := _energia

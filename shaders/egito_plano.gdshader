@@ -25,9 +25,15 @@ void vertex() {
 }
 
 void fragment() {
-	vec4 dia = texture(TEXTURE, UV);
-	vec4 lua = texture(folha_lua, UV);
-	vec4 base = mix(dia, lua, noite);
+	// fora da troca sol/lua lê uma folha só
+	vec4 base;
+	if (noite <= 0.001) {
+		base = texture(TEXTURE, UV);
+	} else if (noite >= 0.999) {
+		base = texture(folha_lua, UV);
+	} else {
+		base = mix(texture(TEXTURE, UV), texture(folha_lua, UV), noite);
+	}
 	vec2 gm = texture(brilho, UV).rg;
 	float g = gm.r;
 	vec3 col = base.rgb;

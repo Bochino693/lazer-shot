@@ -18,7 +18,8 @@ Egito (dia e noite, mesmo recorte):
       na mesma folha: R = onde o cristal e as pontas dos obeliscos brilham,
       G = onde a luz deles bate (some quando o cristal quebra)
   sprites/egito_fundo_luz.png
-      a luz do cristal no chão e nos degraus do fundo (idem)
+      R = a luz do cristal no chão e nos degraus do fundo (idem); G = o céu
+      onde as nuvens se mexem (fora das pirâmides)
   scripts/egito_planos.gd
       onde cada recorte fica na imagem, onde está na folha e a distância dele
 
@@ -355,7 +356,21 @@ def luz_egito():
     H, W = lua.shape[:2]
     luz = _luz(lua)
     luz[:600] = 0.0          # o céu (lua, estrelas, pontas de ouro) não é luz do cristal
-    gravar((cv2.resize(luz, (W // 2, H // 2), interpolation=cv2.INTER_AREA) * 255 + 0.5), "egito_fundo_luz.png")
+    # G: onde as nuvens se mexem (céu, fora das três pirâmides, sumindo no
+    # horizonte); antes o shader fazia essa conta em todo pixel do céu
+    yy, xx = np.mgrid[0:H, 0:W].astype(np.float32)
+    fora = np.ones((H, W), np.float32)
+    for a, b, c in (((508, 440), (292, 746), (724, 746)), ((229, 510), (82, 710), (368, 710)), ((776, 510), (634, 710), (922, 710))):
+        m = np.zeros((H, W), np.uint8)
+        cv2.fillPoly(m, [np.array([a, b, c], np.int32)], 1)
+        dentro = cv2.GaussianBlur(m.astype(np.float32), (0, 0), 1.5)
+        fora *= 1.0 - dentro
+    hz = 700.0
+    horizonte = np.clip((hz - yy) / (0.06 * H), 0.0, 1.0)
+    horizonte = horizonte * horizonte * (3 - 2 * horizonte)
+    ceu = fora * horizonte
+    rg = np.dstack([luz, ceu, np.zeros_like(luz)])
+    gravar((cv2.resize(rg, (W // 2, H // 2), interpolation=cv2.INTER_AREA) * 255 + 0.5), "egito_fundo_luz.png")
     folha = np.asarray(Image.open(os.path.join(SP, "egito_planos_lua.png")).convert("RGBA"))
     br = np.asarray(Image.open(os.path.join(SP, "egito_planos_brilho.png")))
     if br.ndim == 3:

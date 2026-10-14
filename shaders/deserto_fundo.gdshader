@@ -10,6 +10,8 @@ shader_type canvas_item;
 // script, de Maquina.energia_musica()).
 
 uniform sampler2D mascara : filter_linear, repeat_disable;
+// no jogo a máscara é vazia (os feixes e cristais são peças): nem lê
+uniform bool usa_mascara = true;
 uniform vec3 cor_energia = vec3(1.0, 0.72, 0.32);
 uniform vec2 centro = vec2(0.5, 0.52);   // cristal, em UV da imagem
 uniform vec2 sol = vec2(0.5, 0.19);      // disco do sol/lua, em UV da imagem
@@ -76,16 +78,6 @@ void vertex() {
 	uv_vivo = (UV - 0.5) / z + 0.5 + respiro * vec2(0.006 * sin(t * 0.11), 0.004 * cos(t * 0.09));
 }
 
-// 1 dentro do triângulo (com borda suave de alguns px), 0 fora
-float _aresta(vec2 u, vec2 v, vec2 p) {
-	return (v.x - u.x) * (p.y - u.y) - (v.y - u.y) * (p.x - u.x);
-}
-float dentro_tri(vec2 p, vec2 a, vec2 b, vec2 c) {
-	float o = sign(_aresta(a, b, c));
-	float e = min(min(_aresta(a, b, p) * o / length(b - a), _aresta(b, c, p) * o / length(c - b)), _aresta(c, a, p) * o / length(a - c));
-	return smoothstep(-3.0, 3.0, e);
-}
-
 vec3 ouro(vec3 pedra, vec4 msk, vec2 up) {
 	float cob = msk.a;
 	float quina = clamp(msk.b / max(cob, 0.004), 0.0, 1.0);
@@ -125,14 +117,13 @@ void fragment() {
 		uv = 1.0 - abs(1.0 - abs(uv));   // na borda, espelha (fica sob o placar)
 	}
 
+	// R da luz_lancada: luz do cristal no chão; G: o céu onde as nuvens
+	// andam (fora das pirâmides, some no horizonte). Uma leitura só.
+	vec2 luz_ceu = texture(luz_lancada, uv).rg;
+
 	// nuvens: o céu (fora das pirâmides) ondula e corre; mais com o humor alegre
-	if (nuvens > 0.001 && uv.y < horizonte_uv) {
-		vec2 q = uv * vec2(1024.0, 1536.0);
-		float fora = 1.0;
-		fora *= 1.0 - dentro_tri(q, vec2(508.0, 440.0), vec2(292.0, 746.0), vec2(724.0, 746.0));
-		fora *= 1.0 - dentro_tri(q, vec2(229.0, 510.0), vec2(82.0, 710.0), vec2(368.0, 710.0));
-		fora *= 1.0 - dentro_tri(q, vec2(776.0, 510.0), vec2(634.0, 710.0), vec2(922.0, 710.0));
-		float k_ceu = fora * smoothstep(horizonte_uv, horizonte_uv - 0.06, uv.y) * nuvens;
+	if (nuvens > 0.001 && luz_ceu.g > 0.004) {
+		float k_ceu = luz_ceu.g * nuvens;
 		vec2 w = vec2(sin(uv.y * 23.0 + fase_nuvens * 1.3) + 0.6 * sin(uv.x * 17.0 - fase_nuvens * 0.9 + uv.y * 9.0),
 			cos(uv.x * 19.0 + fase_nuvens * 1.1) + 0.6 * sin(uv.y * 13.0 + fase_nuvens * 0.7));
 		uv += w * vec2(0.0042, 0.0026) * k_ceu;
@@ -146,8 +137,9 @@ void fragment() {
 	}
 
 	vec4 base = texture(TEXTURE, uv);
-	vec3 m = texture(mascara, uv).rgb;
-	float lz = texture(luz_lancada, uv).r;
+	vec3 m = usa_mascara ? texture(mascara, uv).rgb : vec3(0.0);
+	// a luz do cristal só bate do horizonte para baixo
+	float lz = luz_ceu.r;
 	if (lz > 0.004) {
 		float wl = smoothstep(0.40, 0.24, uv.x);
 		float wr = smoothstep(0.60, 0.76, uv.x);
