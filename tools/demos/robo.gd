@@ -134,7 +134,7 @@ func _na_mira(cs: Node, p: Vector2) -> bool:
 			return false
 		"bar":
 			var g = cs._detectar_garrafa_no_ponto(p)
-			return g != null and str(g.get("tipo_alvo")) != "garrafa_falsa"
+			return g != null and _tipo_garrafa(g) != "garrafa_falsa"
 		"arena":
 			var a2 = cs._detectar_alvo_no_ponto_visual(p)
 			if a2 == null or cs.sequencia_atual.is_empty() or cs.indice_sequencia >= cs.sequencia_atual.size():
@@ -142,6 +142,15 @@ func _na_mira(cs: Node, p: Vector2) -> bool:
 			var dados: Dictionary = cs.dados_alvos.get(a2.get_instance_id(), {})
 			return int(dados.get("slot", -1)) == cs.sequencia_atual[cs.indice_sequencia]
 	return true
+
+
+## Tipo da garrafa: as impostoras guardam o tipo no meta (a garrafa não tem
+## a propriedade tipo_alvo).
+func _tipo_garrafa(g: Node) -> String:
+	var t = g.get("tipo_alvo")
+	if t == null:
+		t = g.get_meta("tipo_alvo", "")
+	return str(t)
 
 
 func _municao(cs: Node) -> void:
@@ -225,7 +234,7 @@ func _candidatos(cs: Node) -> Array:
 					continue
 				if a.get("ja_acertado") == true or a.get("saindo_individual") == true:
 					continue
-				if str(a.get("tipo_alvo")) == "garrafa_falsa":
+				if _tipo_garrafa(a) == "garrafa_falsa":
 					continue
 				var pos: Vector2 = a.global_position
 				for off in [Vector2.ZERO, Vector2(0, -24), Vector2(0, 24), Vector2(0, -48)]:
