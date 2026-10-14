@@ -356,6 +356,11 @@ const Y_PRATELEIRA_20 := 1400.0
 const TABUAS_BAR := [Vector3(585.0, 620.0, 1024.0), Vector3(847.0, 888.0, 1024.0),
 	Vector3(1127.0, 1201.0, 818.0), Vector3(1398.0, 1448.0, 818.0)]
 
+# barril de vinho (bônus): pontos por furo, até BARRIL_FUROS_PAGOS furos
+const BONUS_BARRIL := 40
+const BARRIL_FUROS_PAGOS := 6
+var _barril_furos := 0
+var _vinho: BarVinho = null
 const AREA_BARRIL_X_INICIO := 700.0
 const AREA_BARRIL_X_FIM := 900.0
 
@@ -853,6 +858,13 @@ func _processar_tiro_global(pos_global: Vector2) -> void:
 		queue_redraw()
 		return
 
+	# o barril é alvo de bônus: cada furo paga e solta o vinho (até
+	# BARRIL_FUROS_PAGOS; depois é tiro perdido como os outros)
+	var material := BarTiro.material_em(fundo, pos_global)
+	if (material == "barril" or material == "papel") and _barril_furos < BARRIL_FUROS_PAGOS:
+		_tiro_no_barril(pos_global, material)
+		return
+
 	total_erros += 1
 	erros_seguidos += 1
 	_resetar_combo()
@@ -866,7 +878,6 @@ func _processar_tiro_global(pos_global: Vector2) -> void:
 		return
 
 	# lascas da madeira (ou o cartaz do barril rasgando) e o furo que fica
-	var material := BarTiro.material_em(fundo, pos_global)
 	_registrar_erro_visual(pos_global, material)
 	BarTiro.criar(self, fundo, pos_global, material)
 	_registrar_fx_impacto(pos_global)
@@ -877,6 +888,29 @@ func _processar_tiro_global(pos_global: Vector2) -> void:
 	queue_redraw()
 
 
+
+
+## Tiro no barril (bônus): o furo com as lascas (ou o cartaz rasgando), o
+## vinho vazando por ele (BarVinho) e os pontos; não é erro nem quebra o
+## combo.
+func _tiro_no_barril(pos_global: Vector2, material: String) -> void:
+	_barril_furos += 1
+	_registrar_erro_visual(pos_global, material)
+	BarTiro.criar(self, fundo, pos_global, material)
+	_registrar_fx_impacto(pos_global)
+	if _vinho == null or not is_instance_valid(_vinho):
+		_vinho = BarVinho.criar(self, fundo)
+	_vinho.furo(pos_global)
+	pontuacao_total += BONUS_BARRIL
+	total_acertos += 1
+	total_erros = max(0, total_tiros - total_acertos)
+	AvisoTiro.pontos(self, get_viewport().get_canvas_transform() * pos_global, "+%d" % BONUS_BARRIL, Color(1.0, 0.45, 0.52))
+	if _barril_furos == 1:
+		AvisoTiro.instrucao(self, "VINHO VAZANDO! +%d POR FURO" % BONUS_BARRIL, Color(1.0, 0.72, 0.76))
+	elif _barril_furos == BARRIL_FUROS_PAGOS:
+		AvisoTiro.instrucao(self, "BARRIL ESGOTADO", Color(1.0, 0.72, 0.76))
+	_marcar_hud_sujo()
+	queue_redraw()
 
 
 func _processar_acerto_alvo(alvo: Area2D, pos_tiro: Vector2 = Vector2.INF) -> void:

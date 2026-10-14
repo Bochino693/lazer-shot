@@ -40,6 +40,12 @@ Bar
                        moldura de madeira bate, cacos caindo na tábua de
                        baixo (vidro quicando na madeira) e os últimos
                        caquinhos soltando da moldura
+  vinho_jorra.wav      furo no barril: o vinho jorra com pressão (chiado
+                       líquido e borbulhas "glug"), cai no chão espirrando
+                       e vai virando um fio que pinga
+Arena (bônus)
+  led_estoura.wav      tiro no LED do alto: estalo elétrico, o vidro da
+                       lâmpada trincando, zumbido que morre e faíscas
 
     python3 tools/gerar_sons_efeitos.py
 """
@@ -557,13 +563,65 @@ def janela_quebra():
     return sala(s, 0.6, 0.2)
 
 
+def _bolha(f0, dur, d):
+    """Bolha estourando na água (frequência de Minnaert subindo)."""
+    t = t_(dur)
+    f = f0 * (1.0 + 0.8 * t / dur)
+    return np.sin(2 * np.pi * np.cumsum(f) / TAXA) * np.exp(-t * d)
+
+
+def vinho_jorra():
+    dur = 2.6
+    s = vazio(dur)
+    t = t_(dur)
+    # a pressão: forte no começo, vira um fio
+    pressao = np.exp(-t * 1.6) * np.clip(t / 0.03, 0, 1)
+    jato = filtro(ruido(dur), "bandpass", [350, 2600], 2)
+    jato *= 0.65 + 0.35 * filtro(rng.standard_normal(len(jato)), "lowpass", 14)   # o jato oscilando
+    colar(s, jato * pressao, 0.0, 0.9)
+    # o vinho batendo no chão: chiado mais aberto e espirros
+    chao = filtro(ruido(dur), "bandpass", [900, 7000], 2) * np.clip((t - 0.08) / 0.05, 0, 1) * (0.25 + 0.75 * pressao)
+    colar(s, chao, 0.0, 0.45)
+    # "glug": bolhas saindo pelo furo, mais no começo
+    tb = 0.02
+    while tb < dur - 0.2:
+        k = np.exp(-tb * 1.2)
+        colar(s, _bolha(rng.uniform(260, 820), 0.06, rng.uniform(40, 70)), tb, rng.uniform(0.25, 0.6) * (0.3 + 0.7 * k))
+        tb += rng.uniform(0.03, 0.09) / (0.35 + k)
+    # pingos no fim
+    for i in range(6):
+        colar(s, _bolha(rng.uniform(900, 1600), 0.04, 90), 1.4 + i * rng.uniform(0.12, 0.2), 0.25)
+    return sala(s, 0.4, 0.15)
+
+
+def led_estoura():
+    s = vazio(1.6)
+    # o estalo elétrico e a lâmpada trincando
+    colar(s, estalo(0.003, 2500), 0.0, 2.0)
+    colar(s, baque(0.05, 900, 50), 0.0, 0.6)
+    colar(s, modos(0.35, [1900, 3150, 4700, 6800], [1.0, 0.7, 0.5, 0.3], [18, 24, 32, 44], 0.004), 0.002, 0.4)
+    # zumbido da rede (60 Hz e harmônicos) que morre aos trancos
+    t = t_(1.1)
+    zum = sum(np.sin(2 * np.pi * 120 * h * t) / h for h in (1, 2, 3, 5))
+    zum *= np.exp(-t * 3.0) * (0.6 + 0.4 * (rng.random(len(t)) > 0.3))
+    colar(s, filtro(zum, "highpass", 90, 2), 0.01, 0.35)
+    # faíscas: estalinhos que caem
+    for i in range(16):
+        colar(s, som(estalo(0.0015, 4000), ressonancia_curta(rng.uniform(3000, 8000), 500, 0.01) * 0.4),
+              rng.uniform(0.0, 0.5) ** 1.5, rng.uniform(0.2, 0.6))
+    # cacos de vidro caindo no chão lá embaixo
+    for i in range(8):
+        quicar(s, rng.uniform(0.0, 0.05), rng.uniform(0.45, 0.7), rng.uniform(3000, 7000), rng.uniform(0.08, 0.2), 0.8, 2)
+    return sala(s, 0.7, 0.25)
+
+
 SONS = {
     "cristal_trinca": (cristal_trinca, 0.75), "cristal_quebra": (cristal_quebra, 0.9),
     "cristal_volta": (cristal_volta, 0.6), "ouro_ping": (ouro_ping, 0.65), "areia_tiro": (areia_tiro, 0.6),
     "laser_parede": (laser_parede, 0.65), "arena_vapor": (arena_vapor, 0.5), "arena_faisca": (arena_faisca, 0.55),
     "arena_troca": (arena_troca, 0.7), "lanterna_sobe": (lanterna_sobe, 0.55), "lanterna_desce": (lanterna_desce, 0.55),
     "madeira_tiro": (madeira_tiro, 0.7), "papel_tiro": (papel_tiro, 0.6), "janela_quebra": (janela_quebra, 0.85),
-    "garrafa_pousa": (garrafa_pousa, 0.6),
+    "garrafa_pousa": (garrafa_pousa, 0.6), "vinho_jorra": (vinho_jorra, 0.6), "led_estoura": (led_estoura, 0.7),
     "tiro_sol": (tiro_sol, 0.8), "tiro_lua": (tiro_lua, 0.8), "tiro_mar": (tiro_mar, 0.85), "tiro_menu": (tiro_menu, 0.75),
 }
 
