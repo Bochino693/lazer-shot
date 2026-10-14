@@ -153,6 +153,56 @@ def transferir_cor(dia, noite, buraco):
 
 
 # ───────────────────────────────────────────── Egito
+# colunas grandes da frente: atrás delas o fundo é a continuação espelhada do
+# que está ao lado, linha a linha (lado de dentro da tela). Quando a câmera
+# anda, a faixa que aparece ao lado da coluna continua exatamente o céu, as
+# pirâmides e o chão vizinhos, sem emenda nem borrão (o preenchimento por
+# difusão deixava faixas e fantasmas que viravam "o recorte" na tela)
+COLUNAS_ESPELHO = [("coluna_esq", 13, +1), ("coluna_dir", 14, -1)]   # +1 = copia da direita
+
+
+def mascara_coluna(img, idx):
+    pol, _pe = EG_COISAS[idx]
+    m = refinar(img, mascara_poligono(pol, img.shape[:2]))
+    return cv2.dilate(m, k(7))
+
+
+def espelhar(fundo, m, lado):
+    """Cada linha: o trecho coberto vira o espelho do que vem logo depois
+    dele, do lado `lado` (+1 direita, -1 esquerda)."""
+    out = fundo.copy()
+    H, W = m.shape
+    for y in range(H):
+        xs = np.nonzero(m[y])[0]
+        if len(xs) == 0:
+            continue
+        a, b = xs.min(), xs.max() + 1
+        n = b - a
+        if lado > 0:
+            src = b + (b - 1 - np.arange(a, b))
+            src = np.clip(src, b, W - 1)
+        else:
+            src = (a - 1) - (np.arange(a, b) - a)
+            src = np.clip(src, 0, a - 1)
+        out[y, a:b] = fundo[y, src]
+    # uma pitada de suavização só dentro (as linhas espelhadas não "serrilham")
+    suave = cv2.GaussianBlur(out, (0, 0), 0.8)
+    dentro = cv2.erode(m, k(2)).astype(bool)
+    out[dentro] = suave[dentro]
+    return out
+
+
+def colunas_espelhadas():
+    """Refaz só o fundo atrás das duas colunas grandes (dia e noite) nos
+    egito_fundo_*.png já gerados."""
+    sol = ler("deserto_sol.png")
+    for modo in ("sol", "lua"):
+        fundo = ler("egito_fundo_%s.png" % modo)
+        for nome, idx, lado in COLUNAS_ESPELHO:
+            fundo = espelhar(fundo, mascara_coluna(sol, idx), lado)
+        gravar(fundo, "egito_fundo_%s.png" % modo)
+
+
 def egito():
     sol = ler("deserto_sol.png")
     lua = ler("deserto_lua.png")
@@ -199,6 +249,7 @@ def egito():
     # a noite é a mesma cena: o que foi reconstruído de dia ganha a cor da
     # noite em volta (mapeamento de cor local, dia -> noite)
     gravar(transferir_cor(fundo_sol, lua, tira), "egito_fundo_lua.png")
+    colunas_espelhadas()
 
     # recortes: alfa suave na borda; o que estava escondido atrás de uma
     # coisa mais perto é reconstruído dentro do próprio recorte
@@ -289,6 +340,59 @@ MAR_PEDRAS = [("esq", (0, 466), (238, 471)), ("dir", (523, 523), (428, 710))]
 # (o contorno de verdade passa um pouco da máscara antiga); scripts/mar_vida.gd
 # usa a mesma folga
 MAR_FOLGA = 24
+
+
+def espelhar_dois_lados(img, m):
+    """Cada trecho coberto de cada linha vira o espelho do que está logo à
+    esquerda e logo à direita dele, pesado pela distância de cada beirada
+    (perto da beirada da esquerda vale o espelho da esquerda, e vice-versa).
+    Um lado só vale onde o espelho cai dentro da imagem e fora da área
+    coberta. Nas beiradas o fundo continua exatamente o que está ao lado:
+    quando a câmera anda e a faixa aparece, não há remendo nem borrão."""
+    out = img.astype(np.float32).copy()
+    H, W = m.shape
+    for y in range(H):
+        linha = m[y].astype(np.int8)
+        if not linha.any():
+            continue
+        d = np.diff(np.concatenate([[0], linha, [0]]))
+        inicios, fins = np.nonzero(d == 1)[0], np.nonzero(d == -1)[0]
+        for a, b in zip(inicios, fins):
+            xs = np.arange(a, b)
+            li = 2 * a - 1 - xs
+            ri = 2 * b - 1 - xs
+            lv = (li >= 0) & (m[y, np.clip(li, 0, W - 1)] == 0)
+            rv = (ri <= W - 1) & (m[y, np.clip(ri, 0, W - 1)] == 0)
+            wl = lv / (xs - a + 1.0) ** 2
+            wr = rv / (b - xs + 0.0) ** 2
+            tot = wl + wr
+            # nenhum lado valendo: o mais perto que existir na imagem
+            nada = tot == 0
+            if nada.any():
+                if a > 0:
+                    wl = np.where(nada, 1.0, wl)
+                else:
+                    wr = np.where(nada, 1.0, wr)
+                tot = wl + wr
+            esq = img[y, np.clip(li, 0, W - 1)].astype(np.float32)
+            dir_ = img[y, np.clip(ri, 0, W - 1)].astype(np.float32)
+            out[y, a:b] = (esq * wl[:, None] + dir_ * wr[:, None]) / tot[:, None]
+    suave = cv2.GaussianBlur(out, (0, 0), 0.8)
+    dentro = cv2.erode(m, k(2)).astype(bool)
+    out[dentro] = suave[dentro]
+    return np.clip(out, 0, 255).astype(np.uint8)
+
+
+def mar_espelhado():
+    """Refaz o fundo atrás das duas pedras (atlantis_fundo.png) com o espelho
+    do que está em volta, linha a linha (o remendo antigo repetia o templo e
+    a estátua e deixava uma cunha lisa, que aparecia quando a pedra andava)."""
+    orig = ler("atlantis_jogo.png")
+    atual = ler("atlantis_fundo.png")
+    trocado = (np.abs(atual.astype(np.int16) - orig.astype(np.int16)).sum(2) > 6).astype(np.uint8)
+    trocado = cv2.morphologyEx(trocado, cv2.MORPH_CLOSE, k(6))
+    trocado = cv2.dilate(trocado, k(2))
+    gravar(espelhar_dois_lados(orig, trocado), "atlantis_fundo.png")
 
 
 def mar():
@@ -383,7 +487,11 @@ if __name__ == "__main__":
     qual = sys.argv[1] if len(sys.argv) > 1 else "tudo"
     if qual in ("tudo", "egito"):
         egito()
-    if qual in ("tudo", "egito", "luz"):
+    if qual == "colunas":
+        colunas_espelhadas()
+    if qual in ("tudo", "egito", "luz", "colunas"):
         luz_egito()
     if qual in ("tudo", "mar"):
         mar()
+    if qual in ("tudo", "mar", "mar_espelho"):
+        mar_espelhado()
