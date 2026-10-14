@@ -7,12 +7,22 @@
                             as penas da ponta abertas ("dedos"), cauda em
                             leque, barriga escura, faixa clara nas asas, borda
                             clara onde a luz atravessa as penas
+  sprites/egito_aguia_pousada.png
+                            7 quadros de 160x128: a mesma águia pousada DE
+                            FRENTE (na ponta de uma pirâmide apagada), no
+                            mesmo traço, cores e escala da que voa: parada,
+                            olhando para a esquerda, para a direita,
+                            gritando, asas meio abertas (assentando / indo
+                            voar), asas abertas (o falcão dos hieróglifos) e
+                            olhando para baixo
   songs/aguia.wav           grito da águia ("kiiii-arrr") com eco do vale
   songs/aguia_noite.wav     o mesmo, mais longe: mais grave, abafado e com
                             mais eco (de noite)
 
-    python3 tools/gerar_aguias.py
+    python3 tools/gerar_aguias.py            (tudo)
+    python3 tools/gerar_aguias.py pousada    (só a águia pousada)
 """
+import sys
 import os
 import wave
 import numpy as np
@@ -128,6 +138,177 @@ def folha():
     print("egito_aguia.png  %dx%d (%d quadros)" % (arr.shape[1], arr.shape[0], len(quadros)))
 
 
+# ───────────────────────────────────────────── pousada (de frente)
+WP, HP = 160, 128
+POSES = ["parada", "olha_esq", "olha_dir", "grita", "asas_meio", "asas_abertas", "olha_baixo"]
+
+
+def quadro_pousada(pose):
+    """Águia-real pousada DE FRENTE para quem joga, no mesmo traço e cores da
+    que voa: peito marrom-escuro, asas dobradas dos lados com as coberteiras
+    claras no ombro e as pontas cruzando atrás da cauda, "calça" de penas,
+    pés amarelos agarrando a ponta, nuca dourada, sobrancelha saliente (o
+    olhar bravo) e o bico em gancho. Poses: parada, olha_esq / olha_dir
+    (vira só a cabeça), grita (cabeça erguida, bico aberto), asas_meio
+    (assentando / indo voar), asas_abertas (abre as asas como o falcão dos
+    hieróglifos), olha_baixo."""
+    S = SS
+    cx = WP / 2.0
+    nomes = ("cauda", "pontas", "corpo", "peito", "asa", "claro", "penas", "calca", "pe", "unha",
+             "nuca", "cabeca", "bico", "ponta_bico", "boca", "olho", "brilho", "sobr")
+    cam = {k: Image.new("L", (WP * S, HP * S), 0) for k in nomes}
+    dr = {k: ImageDraw.Draw(v) for k, v in cam.items()}
+    P = lambda pts: [((cx + x) * S, y * S) for x, y in pts]
+    poly = lambda k, pts: dr[k].polygon(P(pts), fill=255)
+    linha = lambda k, pts, w: dr[k].line(P(pts), fill=255, width=max(1, int(w * S)))
+
+    def elipse(k, c, rx, ry):
+        dr[k].ellipse([(cx + c[0] - rx) * S, (c[1] - ry) * S, (cx + c[0] + rx) * S, (c[1] + ry) * S], fill=255)
+
+    espelho = lambda pts: [(-x, y) for x, y in pts]
+    ombro = 3.0 if pose == "grita" else 0.0
+
+    # cauda e as pontas das asas cruzando atrás dela
+    poly("cauda", [(-8, 98), (8, 98), (13, 124), (0, 126), (-13, 124)])
+    for i in range(5):
+        linha("penas", [(-6 + 3 * i, 102), (-10 + 5 * i, 123)], 0.8)
+    if pose not in ("asas_meio", "asas_abertas"):
+        for lado in (-1, 1):
+            poly("pontas", [(lado * 18, 96), (lado * 12, 100), (lado * 2, 121), (lado * 6, 122)])
+    # corpo (ovo, largo nos ombros)
+    corpo = [(-10, 34), (-17, 44), (-20, 58), (-18, 76), (-13, 92), (-6, 100), (6, 100), (13, 92), (18, 76),
+             (20, 58), (17, 44), (10, 34)]
+    poly("corpo", corpo)
+    elipse("peito", (0, 64), 11, 22)
+    # asas
+    for lado in (-1, 1):
+        if pose == "asas_meio":
+            asa = [(lado * 14, 40), (lado * 26, 26), (lado * 38, 14), (lado * 48, 6), (lado * 52, 2), (lado * 52, 8),
+                   (lado * 57, 6), (lado * 55, 13), (lado * 60, 13), (lado * 56, 19), (lado * 60, 22), (lado * 53, 25),
+                   (lado * 46, 34), (lado * 36, 50), (lado * 26, 64), (lado * 18, 72), (lado * 14, 58)]
+            poly("asa", asa)
+            poly("claro", [(lado * 15, 42), (lado * 26, 28), (lado * 38, 16), (lado * 42, 24), (lado * 30, 38), (lado * 18, 52)])
+            for i in range(6):
+                k = i / 5.0
+                linha("penas", [(lado * (22 + 12 * k), 64 - 28 * k), (lado * (40 + 14 * k), 40 - 28 * k)], 0.8)
+        elif pose == "asas_abertas":
+            # abertas e um pouco caídas (o falcão dos hieróglifos)
+            asa = [(lado * 14, 40), (lado * 30, 32), (lado * 48, 28), (lado * 62, 30), (lado * 70, 32), (lado * 76, 36),
+                   (lado * 72, 38), (lado * 77, 42), (lado * 72, 44), (lado * 76, 49), (lado * 70, 50), (lado * 73, 56),
+                   (lado * 66, 56), (lado * 62, 62), (lado * 52, 66), (lado * 40, 70), (lado * 28, 72), (lado * 18, 70)]
+            poly("asa", asa)
+            poly("claro", [(lado * 15, 42), (lado * 32, 35), (lado * 50, 31), (lado * 58, 34), (lado * 52, 42),
+                           (lado * 34, 46), (lado * 18, 50)])
+            for i in range(9):
+                xx = lado * (22 + 5.5 * i)
+                linha("penas", [(xx, 50), (xx + lado * 1.5, 70 - i * 0.6)], 0.8)
+        else:
+            asa = [(lado * 12, 36 - ombro), (lado * 21, 40 - ombro), (lado * 26, 54), (lado * 26, 72), (lado * 21, 92),
+                   (lado * 16, 104), (lado * 12, 100), (lado * 15, 86), (lado * 16, 62), (lado * 13, 46)]
+            poly("asa", asa)
+            poly("claro", [(lado * 13, 38 - ombro), (lado * 21, 41 - ombro), (lado * 25, 54), (lado * 21, 60), (lado * 15, 54)])
+            for i in range(5):
+                yy = 66 + 7 * i
+                linha("penas", [(lado * 16, yy), (lado * 24.5 - lado * i * 0.9, yy + 6)], 0.8)
+    # "calça" de penas e os pés agarrando a ponta
+    for lado in (-1, 1):
+        elipse("calca", (lado * 7.5, 95), 7.5, 10)
+        linha("pe", [(lado * 6, 103), (lado * 6, 110)], 3.0)
+        for dx, dy in ((-4, 7), (0, 8), (4, 7)):
+            linha("pe", [(lado * 6, 109), (lado * 6 + dx, 109 + dy)], 2.0)
+            elipse("unha", (lado * 6 + dx * 1.12, 109 + dy * 1.1), 0.9, 0.9)
+    # pescoço, cabeça, nuca dourada
+    cab_y = {"grita": 19.0, "olha_baixo": 26.0}.get(pose, 23.0)
+    cab_x = {"olha_esq": -1.5, "olha_dir": 1.5}.get(pose, 0.0)
+    poly("corpo", [(-10, 38), (-9, cab_y + 4), (9, cab_y + 4), (10, 38)])
+    elipse("cabeca", (cab_x, cab_y), 10.5, 9.5)
+    elipse("nuca", (cab_x, cab_y - 3), 11, 9)
+    elipse("nuca", (0, cab_y + 10), 12, 6)                   # a gola dourada do pescoço
+    if pose in ("olha_esq", "olha_dir"):
+        lado = -1 if pose == "olha_esq" else 1
+        bico = [(1, cab_y - 1), (7, cab_y - 1.5), (11, cab_y + 0.5), (13.5, cab_y + 3.5), (12.5, cab_y + 6),
+                (11, cab_y + 4), (8, cab_y + 4.5), (1, cab_y + 5)]
+        bico = [(cab_x + lado * x, y) for x, y in bico]
+        poly("bico", bico)
+        poly("ponta_bico", [(cab_x + lado * x, y) for x, y in [(10.5, cab_y), (13.5, cab_y + 3.5), (12.5, cab_y + 6), (11, cab_y + 3.5)]])
+        ox = cab_x + lado * 1.5
+        elipse("olho", (ox, cab_y - 1.5), 1.7, 1.7)
+        elipse("brilho", (ox + lado * 0.6, cab_y - 2.1), 0.6, 0.6)
+        linha("sobr", [(cab_x - lado * 2.5, cab_y - 4.0), (cab_x + lado * 4.5, cab_y - 3.4)], 1.1)
+        # o outro olho escondido do outro lado; a nuca aparece mais
+        elipse("nuca", (cab_x - lado * 5, cab_y), 6, 8)
+    else:
+        baixo = 2.0 if pose == "olha_baixo" else 0.0
+        if pose == "grita":
+            poly("bico", [(-3.2, cab_y + 2), (3.2, cab_y + 2), (2.2, cab_y - 5), (0, cab_y - 7), (-2.2, cab_y - 5)])
+            poly("bico", [(-3.0, cab_y + 5.5), (3.0, cab_y + 5.5), (1.8, cab_y + 11), (-1.8, cab_y + 11)])
+            poly("boca", [(-2.6, cab_y + 2), (2.6, cab_y + 2), (2.6, cab_y + 6.5), (-2.6, cab_y + 6.5)])
+            poly("ponta_bico", [(-1.4, cab_y - 5.5), (0, cab_y - 7), (1.4, cab_y - 5.5)])
+            olho_y = cab_y - 1.0
+        else:
+            poly("bico", [(-3.6, cab_y + 1 + baixo), (3.6, cab_y + 1 + baixo), (3.0, cab_y + 8 + baixo),
+                          (1.6, cab_y + 12 + baixo), (0, cab_y + 13.5 + baixo), (-1.6, cab_y + 12 + baixo), (-3.0, cab_y + 8 + baixo)])
+            poly("ponta_bico", [(-2.4, cab_y + 9 + baixo), (2.4, cab_y + 9 + baixo), (1.6, cab_y + 12 + baixo),
+                                (0, cab_y + 13.5 + baixo), (-1.6, cab_y + 12 + baixo)])
+            olho_y = cab_y + 0.5 + baixo * 0.5
+        for lado in (-1, 1):
+            elipse("olho", (lado * 5.6, olho_y), 1.7, 1.6)
+            elipse("brilho", (lado * 5.6 - 0.5, olho_y - 0.6), 0.55, 0.55)
+            # sobrancelha saliente, descendo para o bico (o olhar bravo)
+            linha("sobr", [(lado * 9.0, olho_y - 3.2), (lado * 2.6, olho_y - 1.6)], 1.2)
+
+    def m(k, r=0.0):
+        im = cam[k].resize((WP, HP), Image.LANCZOS)
+        if r:
+            im = im.filter(ImageFilter.GaussianBlur(r))
+        return np.asarray(im).astype(np.float32)[..., None] / 255
+    yy, xx = np.mgrid[0:HP, 0:WP].astype(np.float32)
+    base = np.array([0.30, 0.20, 0.13])
+    cor = np.zeros((HP, WP, 3), np.float32)
+    alfa = np.zeros((HP, WP, 1), np.float32)
+
+    def por(c, a):
+        nonlocal cor, alfa
+        cor = cor * (1 - a) + np.asarray(c, np.float32) * a
+        alfa = alfa + a * (1 - alfa)
+    por(base * 0.8, m("cauda"))
+    por(base * 0.7, m("pontas"))
+    a_corpo = m("corpo")
+    por(base, a_corpo)
+    pe = m("peito", 3.0) * a_corpo
+    cor = cor * (1 - 0.30 * pe) + np.array([0.44, 0.31, 0.20]) * (0.30 * pe)
+    por(np.array([0.48, 0.36, 0.24]), m("calca", 0.6))
+    a_asa = m("asa")
+    por(base * 0.84, a_asa)
+    cl = m("claro", 0.9) * a_asa
+    cor = cor * (1 - 0.38 * cl) + np.array([0.62, 0.48, 0.32]) * (0.38 * cl)
+    por(base * 1.05, m("cabeca"))
+    nu = m("nuca", 2.0) * alfa
+    cor = cor * (1 - 0.75 * nu) + np.array([0.74, 0.54, 0.24]) * (0.75 * nu)
+    cor = cor * (1 - 0.25 * m("penas") * alfa)
+    por(np.array([0.88, 0.72, 0.26]), m("pe"))
+    por(np.array([0.12, 0.10, 0.09]), m("unha"))
+    por(np.array([0.88, 0.74, 0.32]), m("bico"))
+    por(np.array([0.24, 0.21, 0.20]), m("ponta_bico"))
+    por(np.array([0.38, 0.08, 0.06]), m("boca"))
+    sb = m("sobr") * alfa
+    cor = cor * (1 - 0.55 * sb)
+    por(np.array([0.32, 0.18, 0.04]), m("olho"))
+    cor = cor + 0.6 * m("brilho")
+    # luz do céu de cima; embaixo mais escuro
+    cor = cor * (1.06 - 0.24 * np.clip((yy - 30) / 90, 0, 1))[..., None]
+    mask = alfa[..., 0]
+    borda = np.clip(mask - ndi.grey_erosion(mask, size=(3, 3)), 0, 1)[..., None]
+    cor = cor + np.array([0.55, 0.45, 0.30]) * (0.5 * borda)
+    return np.dstack([np.clip(cor, 0, 1), mask])
+
+
+def pousada():
+    arr = np.concatenate([quadro_pousada(p) for p in POSES], axis=1)
+    Image.fromarray((arr * 255 + 0.5).astype(np.uint8), "RGBA").save(os.path.join(SP, "egito_aguia_pousada.png"), optimize=True)
+    print("egito_aguia_pousada.png  %dx%d (%d quadros)" % (arr.shape[1], arr.shape[0], len(POSES)))
+
+
 # ───────────────────────────────────────────── som
 TAXA = 32000
 
@@ -197,5 +378,9 @@ def sons():
 
 
 if __name__ == "__main__":
-    folha()
-    sons()
+    if sys.argv[1:] == ["pousada"]:
+        pousada()
+    else:
+        folha()
+        pousada()
+        sons()

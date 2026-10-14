@@ -291,6 +291,8 @@ var recarregando: bool = false
 var reload_tempo_restante: float = 0.0
 
 var pontuacao_total: int = 0
+const BONUS_CRISTAL := 300   # quebrar o cristal do meio
+const BONUS_PONTA := 150     # quebrar o cristal da ponta de um obelisco
 var total_tiros: int = 0
 var total_acertos: int = 0
 var total_erros: int = 0
@@ -306,6 +308,7 @@ var fim_pulso_t: float = 0.0
 
 
 func _ready() -> void:
+	_aquecer_fase.call_deferred()
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 
 	var tela := get_viewport_rect().size
@@ -1607,7 +1610,8 @@ func _atualizar_hud() -> void:
 			label_recarga.modulate = Color(0.76, 0.88, 1.0, 0.95)
 
 	if label_combo != null:
-		label_combo.visible = true
+		# a linha de sequência do rodapé saiu (o combo aparece grande no meio)
+		label_combo.visible = false
 
 		if combo_qtd > 0 and combo_tipo != "":
 			label_combo.text = "SEQUÊNCIA: %s x%d    |    MELHOR: x%d" % [
@@ -1746,16 +1750,35 @@ func _processar_tiro(pos_global: Vector2) -> void:
 	if idx >= 0:
 		_resolver_acerto(idx)
 	else:
+		# cada lugar responde: o cristal trinca (e quebra), pedra lasca, areia
+		# levanta; marca de bala só na pedra e na areia
+		var mat: String = _vivo.impacto(pos_global) if _vivo != null else "areia"
+		if mat.begins_with("cristal"):
+			# os cristais são alvo de bônus: tiro neles não é erro, e quem
+			# quebra ganha pontos
+			_premiar_cristal(pos_global)
+			return
 		total_erros += 1
 		_quebrar_combo()
 		if _vivo != null:
 			_vivo.evento("erro", MiraGlobal.pos)
-		# cada lugar responde: o cristal trinca (e quebra), o ouro toca,
-		# pedra lasca, areia levanta; marca de bala só na pedra e na areia
-		var mat: String = _vivo.impacto(pos_global) if _vivo != null else "areia"
 		if (mat == "pedra" or mat == "areia") and _vivo != null and _vivo.no_chao(pos_global):
 			_furar_fundo(pos_global, mat)
 		_set_status("ERRO!", Color(1.0, 0.28, 0.22, 1.0), 1.2)
+
+
+## Cristal quebrado neste tiro: o do meio vale BONUS_CRISTAL, o da ponta de
+## um obelisco BONUS_PONTA (pontos rosados saltando do cristal).
+func _premiar_cristal(pos_global: Vector2) -> void:
+	var quebrou: String = _vivo.quebrou_agora if _vivo != null else ""
+	if quebrou == "":
+		return
+	var pontos := BONUS_CRISTAL if quebrou == "cristal" else BONUS_PONTA
+	pontuacao_total += pontos
+	total_acertos += 1
+	AvisoTiro.pontos(self, get_viewport().get_canvas_transform() * pos_global, "+%d" % pontos,
+		Color(1.0, 0.66, 0.96), Color(1.0, 1.0, 1.0, 0.7))
+	AvisoTiro.instrucao(self, "CRISTAL QUEBRADO! +%d" % pontos, Color(1.0, 0.78, 0.97))
 
 
 func _iniciar_countdown() -> void:
@@ -2319,9 +2342,10 @@ func _z_desenho(z: float) -> int:
 	return 100 + clampi(int(round(60.0 / maxf(z, 0.3))), 0, 190)
 
 
-## Névoa da distância: nada até 1,5; longe cobre até a metade.
+## Névoa da distância: nada até 2; bem longe só um véu (o brasão continua
+## nítido e cheio, nunca meio apagado).
 func _nevoa(z: float) -> float:
-	return clampf((z - 1.5) / 6.0, 0.0, 0.5)
+	return clampf((z - 2.0) / 8.0, 0.0, 0.3)
 
 
 func _sortear_estilo_3d() -> String:
@@ -3031,17 +3055,15 @@ func _reiniciar_jogo() -> void:
 
 
 func _set_status(texto: String, cor: Color, duracao: float = 1.5) -> void:
-	if texto == "":
+	# sem faixa no rodapé: o recado sai pequeno perto da mira (AvisoTiro) e
+	# os recados do jogo na pílula de cima; os pontos já saltam do alvo
+	if texto == "" or texto.contains("+"):
 		return
-
-	status_msgs.append({
-		"text": texto,
-		"cor": cor,
-		"time": duracao
-	})
-
-	if status_msgs.size() > 3:
-		status_msgs.pop_front()
+	for inicio in ["COMEÇOU", "MODO", "RECARREG", "DESCARGA"]:
+		if texto.begins_with(inicio):
+			AvisoTiro.instrucao(self, texto, cor.lerp(Color.WHITE, 0.3))
+			return
+	AvisoTiro.mostrar(self, mira_pos, texto, cor.lerp(Color.WHITE, 0.45))
 
 
 func _tocar_som(stream: AudioStream) -> void:
@@ -3417,3 +3439,14 @@ func _atualizar_estilo_modais_por_modo() -> void:
 		Leve.color(ranking_nome_timer_label, "font_color",
 			Color(1.0, 0.68, 0.18, 1.0) if modo_atual == MODO_SOL
 			else Color(0.56, 0.84, 1.0, 1.0))
+
+
+## Ao abrir a tela: monta as letras dos avisos e prepara os sons dos
+## efeitos antes do primeiro tiro (a TV box não engasga no começo).
+func _aquecer_fase() -> void:
+	if not is_inside_tree():
+		return
+	AvisoTiro.preparar(self)
+	if _vivo != null:
+		Maquina.aquecer([_vivo.SOM_TRINCA, _vivo.SOM_QUEBRA, _vivo.SOM_VOLTA, _vivo.SOM_OURO, _vivo.SOM_PEDRA,
+			_vivo.SOM_AREIA, _vivo.SOM_AGUIA, _vivo.SOM_AGUIA_NOITE])

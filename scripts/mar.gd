@@ -466,18 +466,21 @@ const ESTILOS_3D := {
 	"bau": [["classico", 0.32], ["queda", 0.32], ["l_cima", 0.14], ["templo", 0.10], ["l_lado", 0.12]],
 	"bomba": [["classico", 0.46], ["queda", 0.22], ["templo", 0.16], ["l_cima", 0.16]],
 }
-const PROFUNDO_ZMAX := 4.2      # mais longe que um alvo chega (perto da porta do templo)
+const PROFUNDO_ZMAX := 2.6      # mais longe que um alvo chega (de lá já vem grande e nítido)
+const ESCALA_MIN_LONGE := 0.42  # o menor tamanho de um alvo na tela (nada miúdo)
 const PROFUNDO_VIDRO := 0.42    # bem perto do vidro, onde ele some
 const PROFUNDO_BONUS := 0.40    # acertar ainda longe (mais que isso) vale o dobro
 const PROFUNDO_RAIO_MIN := 30.0 # px: de longe o alvo é pequeno; um mínimo justo para a mira
 const CHAO_TELA := 0.86         # o chão do mar no plano Z = 1 (fração da altura da tela)
 const COR_NEVOA_ALVO := Color(0.52, 0.80, 0.95)
 var _profundo: Node2D = null
-# cardume dourado (bônus): passa de tempos em tempos; tiro nele vale BONUS_CARDUME
-const BONUS_CARDUME := 150
+# cardume dourado (bônus): passa de tempos em tempos; cada peixe acertado
+# vale BONUS_PEIXE e pegar o cardume inteiro, mais BONUS_CARDUME
+const BONUS_PEIXE := 40
+const BONUS_CARDUME := 200
 const Z_CARDUME := 1.0      # na frente das pedras (bem visível)
 var _cardume: MarCardumeDourado = null
-var _cardume_espera := 14.0
+var _cardume_espera := 10.0
 var SOM_OURO_CARDUME: AudioStream = load("res://songs/ouro_ping.wav")
 # Efeitos da Rodada 17. load() e não preload(): o Godot 4.6 nunca descarrega
 # um script já carregado, e o que ele pré-carrega ficaria na memória.
@@ -496,6 +499,7 @@ var _mat_soma: CanvasItemMaterial = null
 
 
 func _ready() -> void:
+	_aquecer_fase.call_deferred()
 	randomize()
 
 # Mira controlada localmente por _atualizar_mira_hibrida.
@@ -4077,17 +4081,20 @@ func _lancar_3d(alvo: Area2D, tipo: String, estilo: String, duracao: float, esca
 	var c2: Vector3
 	var dur := duracao
 	var cai := false
+	# nada pequeno demais na tela: de longe ele já vem com pelo menos
+	# ESCALA_MIN_LONGE do tamanho
+	var z_max := clampf(escala / ESCALA_MIN_LONGE, 1.0, PROFUNDO_ZMAX)
 	match estilo:
 		"templo":
 			# da porta do templo direto para o vidro
 			var destino := Vector2(randf_range(0.14, 0.86) * tela.x, randf_range(0.30, 0.86) * tela.y) - vp
-			p0 = Vector3(destino.x, destino.y, PROFUNDO_ZMAX)
+			p0 = Vector3(destino.x, destino.y, z_max)
 			p3 = Vector3(destino.x * 1.1, destino.y * 1.1, PROFUNDO_VIDRO)
 			c1 = p0.lerp(p3, 0.34)
 			c2 = p0.lerp(p3, 0.67)
 			dur *= 1.05
 		"l_cima", "l_lado":
-			var zf := randf_range(1.7, 3.0)
+			var zf := randf_range(1.0, 2.2) if z_max >= 2.2 else randf_range(1.0, z_max)
 			var canto_tela := Vector2(randf_range(0.18, 0.82) * tela.x, randf_range(0.30, 0.60) * tela.y)
 			var canto := Vector3((canto_tela.x - vp.x) * zf, (canto_tela.y - vp.y) * zf, zf)
 			if estilo == "l_cima":
@@ -4103,7 +4110,7 @@ func _lancar_3d(alvo: Area2D, tipo: String, estilo: String, duracao: float, esca
 		_:
 			# queda: do alto até o chão, longe ou perto
 			cai = true
-			var zq := randf_range(1.0, 3.0)
+			var zq := randf_range(1.0, minf(2.0, z_max))
 			var x := (randf_range(0.12, 0.88) * tela.x - vp.x) * zq
 			var y_chao := tela.y * CHAO_TELA - vp.y - _meia_altura(alvo, escala) + randf_range(-8.0, 16.0)
 			p0 = Vector3(x, (-170.0 - vp.y) * zq, zq)
@@ -4169,13 +4176,14 @@ func _mover_3d(t: float, alvo: Area2D) -> void:
 		+ (sin(t * 9.0 + balanco) * 6.0 if cai else 0.0)
 	var longe: float = clampf((z - 1.0) / (PROFUNDO_ZMAX - 1.0), 0.0, 1.0)
 	alvo.set_meta("longe", longe)
-	# de longe ele tem a cor da água e deixa o fundo passar (névoa)
-	var nevoa: float = pow(longe, 0.7) * 0.85
-	var a: float = smoothstep(0.0, 0.07, t)
+	# de longe só um toque da cor da água; sempre cheio e nítido (nada de
+	# meio transparente): só aparece no começo e some ao passar pelo vidro
+	var nevoa: float = pow(longe, 0.8) * 0.22
+	var a: float = smoothstep(0.0, 0.05, t)
 	if not cai:
-		a *= 1.0 - smoothstep(0.86, 1.0, t)
+		a *= 1.0 - smoothstep(0.90, 1.0, t)
 	var c: Color = Color.WHITE.lerp(COR_NEVOA_ALVO, nevoa)
-	alvo.modulate = Color(c.r, c.g, c.b, a * lerpf(1.0, 0.55, nevoa))
+	alvo.modulate = Color(c.r, c.g, c.b, a)
 	# já passou por nós e sumiu: não pega mais tiro
 	alvo.visible = t < 0.5 or a > 0.05
 	alvo.z_index = MarVida.z_desenho(z) + (1 if String(alvo.get_meta("tipo_alvo", "")) == "bomba" else 0)
@@ -5244,7 +5252,7 @@ func _atualizar_cardume(delta: float) -> void:
 	_cardume_espera -= delta
 	if _cardume_espera > 0.0:
 		return
-	_cardume_espera = randf_range(20.0, 30.0)
+	_cardume_espera = randf_range(14.0, 22.0)
 	_cardume = MarCardumeDourado.new()
 	_cardume.name = "CardumeDourado"
 	_cardume.z_as_relative = false
@@ -5257,20 +5265,26 @@ func _atualizar_cardume(delta: float) -> void:
 func _acertar_cardume(pos_global: Vector2) -> bool:
 	if _cardume == null or not is_instance_valid(_cardume) or alvos_root == null:
 		return false
-	if not _cardume.acertar(alvos_root.to_local(pos_global)):
+	var r := _cardume.acertar(alvos_root.to_local(pos_global))
+	if r == 0:
 		return false
-	pontuacao_total += BONUS_CARDUME
+	var pontos := BONUS_PEIXE + (BONUS_CARDUME if r == 2 else 0)
+	pontuacao_total += pontos
 	total_acertos += 1
 	combo_hits_seguidos += 1
 	combo_timer_restante = janela_combo_seg
-	if _anuncio != null:
-		_anuncio.especial("POSEIDON'S TREASURE!")
-	_set_status("CARDUME DOURADO! +%d" % BONUS_CARDUME, "acerto")
-	_mostrar_pontos(pos_global, BONUS_CARDUME, true)
-	_flash_tela(Color(1.0, 0.85, 0.40, 0.16))
-	Maquina.efeito(SOM_OURO_CARDUME, -2.0, 1.15)
-	if som_bau_hit_stream != null:
-		_tocar_som(som_bau_hit_stream, -6.0, 1.25, inicio_bau_hit_seg)
+	_mostrar_pontos(pos_global, pontos, r == 2)
+	# cada peixe um "tim" de ouro mais agudo
+	Maquina.efeito(SOM_OURO_CARDUME, -3.0, 1.0 + 0.06 * float(_cardume.pegos()))
+	if _cardume.pegos() == 1:
+		AvisoTiro.instrucao(self, "PEIXES DOURADOS! +%d CADA" % BONUS_PEIXE, Color(1.0, 0.86, 0.45))
+	if r == 2:
+		if _anuncio != null:
+			_anuncio.especial("POSEIDON'S TREASURE!")
+		AvisoTiro.instrucao(self, "CARDUME INTEIRO! +%d" % BONUS_CARDUME, Color(1.0, 0.86, 0.45))
+		_flash_tela(Color(1.0, 0.85, 0.40, 0.16))
+		if som_bau_hit_stream != null:
+			_tocar_som(som_bau_hit_stream, -6.0, 1.25, inicio_bau_hit_seg)
 	return true
 
 
@@ -5368,72 +5382,23 @@ func _calcular_precisao() -> int:
 
 
 func _set_status(texto: String, tipo: String = "neutro") -> void:
-	if status_label == null or status_panel == null:
+	# sem faixa no rodapé: o recado sai pequeno perto da mira (AvisoTiro); os
+	# pontos dos acertos já saltam do alvo
+	if status_panel != null:
+		status_panel.visible = false
+	if status_label != null:
+		status_label.visible = false
+	if texto == "" or texto.contains("+"):
 		return
-
-	status_label.text = texto
-	status_label.visible = texto != ""
-	status_panel.visible = texto != ""
-	status_panel.scale = Vector2.ONE
-	status_panel.modulate = Color(1, 1, 1, 1)
-
-	if texto == "":
-		return
-
-	status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	status_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	Leve.color(status_label, "font_outline_color", Color.BLACK)
-	Leve.constant(status_label, "outline_size", 7)
-
-	var estilo := status_panel.get_theme_stylebox("panel") as StyleBoxFlat
-	if estilo == null:
-		estilo = StyleBoxFlat.new()
-		estilo.corner_radius_top_left = 18
-		estilo.corner_radius_top_right = 18
-		estilo.corner_radius_bottom_left = 18
-		estilo.corner_radius_bottom_right = 18
-		estilo.border_width_left = 3
-		estilo.border_width_right = 3
-		estilo.border_width_top = 3
-		estilo.border_width_bottom = 3
-		Leve.stylebox(status_panel, "panel", estilo)
-
-	match tipo:
-		"bomba", "erro":
-			Leve.color(status_label, "font_color", Color(1.0, 0.88, 0.84, 1.0))
-			estilo.bg_color = Color(0.18, 0.015, 0.018, 0.94)
-			estilo.border_color = Color(1.0, 0.12, 0.08, 1.0)
-			estilo.shadow_color = Color(1.0, 0.04, 0.02, 0.70)
-			estilo.shadow_size = 30
-
-		"acerto":
-			Leve.color(status_label, "font_color", Color(0.86, 1.0, 1.0, 1.0))
-			estilo.bg_color = Color(0.015, 0.075, 0.115, 0.94)
-			estilo.border_color = COR_NEON_MAR
-			estilo.shadow_color = Color(COR_NEON_MAR.r, COR_NEON_MAR.g, COR_NEON_MAR.b, 0.62)
-			estilo.shadow_size = 28
-
-		_:
-			Leve.color(status_label, "font_color", Color.WHITE)
-			estilo.bg_color = Color(0.015, 0.035, 0.065, 0.94)
-			estilo.border_color = COR_NEON_MAR_CLARO
-			estilo.shadow_color = Color(0.35, 0.85, 1.0, 0.46)
-			estilo.shadow_size = 24
-
-	var tw := create_tween()
-	tw.set_parallel(true)
-	tw.tween_property(status_panel, "scale", Vector2(1.012, 1.08), 0.08)
-	tw.tween_property(status_panel, "scale", Vector2.ONE, 0.14).set_delay(0.08)
-	tw.tween_property(status_panel, "modulate:a", 0.0, 0.25).set_delay(1.45)
-
-	tw.finished.connect(func() -> void:
-		if is_instance_valid(status_panel) and status_label.text == texto:
-			status_label.text = ""
-			status_label.visible = false
-			status_panel.visible = false
-			status_panel.modulate.a = 1.0
-	)
-
+	# recados do jogo (arma, nível, bombas) na pílula de cima
+	for inicio in ["RECARREG", "CARTUCHO", "MUNIÇÃO", "NÍVEL", "COMEÇOU", "NÃO ACERTE", "3 BOMBAS"]:
+		if texto.begins_with(inicio):
+			AvisoTiro.instrucao(self, texto, Color(1.0, 0.6, 0.55) if tipo == "erro" or tipo == "bomba" else Color(0.8, 0.96, 1.0))
+			return
+	var cor := Color(0.88, 0.97, 1.0)
+	if tipo == "erro" or tipo == "bomba":
+		cor = Color(1.0, 0.72, 0.66)
+	AvisoTiro.mostrar(self, get_viewport().get_canvas_transform() * alvo_pos, texto, cor)
 
 
 func _atualizar_hud() -> void:
@@ -6199,3 +6164,12 @@ func _estilo_faixa_interna_mar(cor: Color) -> StyleBoxFlat:
 	estilo.shadow_size = 14
 	estilo.shadow_offset = Vector2.ZERO
 	return estilo
+
+
+## Ao abrir a tela: monta as letras dos avisos e prepara os sons dos
+## efeitos antes do primeiro tiro (a TV box não engasga no começo).
+func _aquecer_fase() -> void:
+	if not is_inside_tree():
+		return
+	AvisoTiro.preparar(self)
+	Maquina.aquecer([SOM_OURO_CARDUME])

@@ -49,6 +49,15 @@ uniform vec3 ouro_toque = vec3(0.0, 0.0, -1.0);   // tiro no ouro: xy = ponto (U
 // do obelisco esquerdo), y = do meio (cristal do meio), z = da direita. 0 =
 // cristal quebrado: a ponta para de brilhar e fica ouro velho, apagado.
 uniform vec3 pontas_acesas = vec3(1.0);
+// Crepúsculo (no meio da troca sol/lua, 0..1): o céu em brasa (vermelho e
+// rosa perto do horizonte, roxo no alto) e a terra na luz baixa e quente.
+uniform float crepusculo = 0.0;
+// O céu sem o astro (tools/gerar_ceu_astro.py): quando o sol / a lua sai do
+// lugar (pôr do sol, nascer da lua), o disco pintado nesta imagem dá lugar
+// ao céu, e o brilho em volta do lugar dele se apaga um pouco.
+uniform sampler2D ceu_sem : filter_linear, repeat_disable;
+uniform vec4 ceu_sem_caixa = vec4(0.0, 0.0, 1.0, 1.0);   // em UV da imagem
+uniform float ceu_sem_forca = 0.0;
 
 // Câmera 3D (só no jogo, scripts/deserto_vivo.gd): no jogo este é só o
 // fundo (céu, pirâmides e chão, com as coisas em pé tiradas e reconstruídas
@@ -87,16 +96,24 @@ vec3 ouro(vec3 pedra, vec4 msk, vec2 up) {
 	float quina = clamp(msk.b / max(cob, 0.004), 0.0, 1.0);
 	// o claro e o escuro são os da pedra; só o tom vira ouro
 	float l = dot(pedra, vec3(0.30, 0.59, 0.11));
-	vec3 tom = mix(vec3(1.26, 0.98, 0.50), vec3(1.0, 0.96, 0.86), ouro_noite);
-	vec3 col = mix(pedra, tom * l * 1.06, 0.62);
-	float aceso = smoothstep(0.30, 0.80, l);
-	vec3 luz = mix(vec3(1.0, 0.92, 0.66), vec3(0.80, 0.88, 1.0), ouro_noite);
 	// qual ponta é esta (pelo x na caixa) e se o cristal dela está aceso
 	float wl = smoothstep(0.32, 0.22, up.x);
 	float wr = smoothstep(0.68, 0.78, up.x);
 	float acesa = dot(vec3(wl, 1.0 - wl - wr, wr), pontas_acesas);
+	vec3 tom = mix(vec3(1.26, 0.98, 0.50), vec3(1.0, 0.96, 0.86), ouro_noite);
+	// acesa: metal mais puro e mais claro (a ponta se destaca da pedra)
+	vec3 col = mix(pedra, tom * l * (1.06 + 0.28 * acesa), 0.62 + 0.24 * acesa);
+	float aceso = smoothstep(0.30, 0.80, l);
+	vec3 luz = mix(vec3(1.0, 0.92, 0.66), vec3(0.80, 0.88, 1.0), ouro_noite);
 	luz *= acesa;
-	col += luz * quina * (0.05 + 0.09 * batida + 0.04 * grave + 0.14 * max(ouro_brilho, 0.0)) * (0.4 + aceso);
+	col += luz * quina * (0.20 + 0.10 * batida + 0.05 * grave + 0.14 * max(ouro_brilho, 0.0)) * (0.4 + aceso);
+	// e brilha por dentro (a sombra do metal também acende)
+	col += luz * tom * 0.07;
+	// a energia subindo pela ponta até o pico: uma faixa clara que corre
+	// de baixo para cima (cada pirâmide no seu tempo)
+	float sobe = fract(TIME * 0.38 + wl * 0.33 + wr * 0.66);
+	float fy = (up.y - 1.05 + sobe * 1.1) / 0.075;
+	col += luz * exp(-fy * fy) * (0.18 + 0.42 * aceso);
 	// reflexo correndo de pirâmide em pirâmide (a cada acerto)
 	if (ouro_varre >= 0.0) {
 		float x = up.x - (ouro_varre * 1.4 - 0.2) + (up.y - 0.5) * 0.3;
@@ -149,6 +166,15 @@ void fragment() {
 	}
 
 	vec4 base = texture(TEXTURE, uv);
+	if (ceu_sem_forca > 0.001) {
+		vec2 q = (uv - ceu_sem_caixa.xy) / ceu_sem_caixa.zw;
+		if (q.x > 0.0 && q.x < 1.0 && q.y > 0.0 && q.y < 1.0) {
+			vec4 c = texture(ceu_sem, q);
+			base.rgb = mix(base.rgb, c.rgb, c.a * ceu_sem_forca);
+		}
+		vec2 pa = (uv - ceu_sem_caixa.xy - ceu_sem_caixa.zw * 0.5) * vec2(1.0, 1.5);
+		base.rgb *= 1.0 - 0.38 * ceu_sem_forca * smoothstep(0.36, 0.06, length(pa)) * luz_ceu.g;
+	}
 	vec3 m = usa_mascara ? texture(mascara, uv).rgb : vec3(0.0);
 	// a luz do cristal só bate do horizonte para baixo
 	float lz = luz_ceu.r;
@@ -220,5 +246,10 @@ void fragment() {
 	}
 
 	vec3 rgb = base.rgb * (1.0 + 0.06 * batida) + soma * forca;
+	if (crepusculo > 0.001) {
+		vec3 brasa = mix(vec3(1.28, 0.56, 0.44), vec3(0.70, 0.38, 0.86), smoothstep(0.34, 0.06, uv.y));
+		vec3 terra = vec3(0.92, 0.62, 0.52);
+		rgb = mix(rgb, rgb * mix(terra, brasa, luz_ceu.g), crepusculo * 0.8);
+	}
 	COLOR = vec4(rgb, base.a) * cor_no;
 }

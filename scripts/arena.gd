@@ -176,6 +176,7 @@ var modo_fixo: bool = false               # rodada fixa (true) ou de memória
 var _rodada: int = 0                      # muda a cada rodada: corta as esperas da anterior
 var _fixa_nasceu: Array[int] = []         # ms em que cada lanterna da rodada fixa nasceu
 var _vivo: ArenaVivo = null               # vida do fundo e troca de arte
+const BONUS_LED := 50                      # estourar o LED do alto (volta a acender em 7 s)
 var _placar: Placar = null
  
  
@@ -386,6 +387,7 @@ var intro_contagem_valor: int = 3
 # ═══════════════════════════════════════════════════════════
  
 func _ready() -> void:
+	_aquecer_fase.call_deferred()
 	randomize()
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 	# fundo em alta (scripts/hd.gd): o mesmo tamanho para o jogo
@@ -833,6 +835,14 @@ func _tentar_atirar(pos_mouse: Vector2) -> void:
 	var alvo: Area2D = _detectar_alvo_no_ponto_visual(pos_mouse)
 
 	if alvo == null:
+		# o LED do alto é alvo de bônus (estoura; volta a acender depois)
+		if _vivo != null and _vivo.tiro_no_led(pos_mouse):
+			pontuacao += BONUS_LED
+			acertos += 1
+			AvisoTiro.pontos(self, pos_mouse, "+%d" % BONUS_LED, Color(1.0, 0.45, 0.35), Color(1.0, 0.9, 0.8, 0.6))
+			AvisoTiro.instrucao(self, "LED ESTOURADO! +%d" % BONUS_LED, Color(1.0, 0.72, 0.62))
+			_atualizar_hud()
+			return
 		_registrar_marca_laser_parede(pos_mouse)
 		_adicionar_chat_rodape("ERROU!", Color.RED)
 		_quebrar_seguidos()
@@ -2067,15 +2077,18 @@ func _desenhar_fx_colisao() -> void:
 # ═══════════════════════════════════════════════════════════
  
 func _adicionar_chat_rodape(texto: String, cor: Color) -> void:
-	# Mantém SOMENTE a mensagem principal atual
+	# sem faixa no rodapé (AvisoTiro): os pontos saltam da mira, o erro sai
+	# pequeno perto dela e os recados da sequência vão na pílula de cima
 	status_msgs.clear()
-
-	status_msgs.append({
-		"text": texto,
-		"cor": cor
-	})
-
 	_atualizar_status_labels()
+	if chat_rodape_panel != null:
+		chat_rodape_panel.visible = false
+	if texto.begins_with("+"):
+		AvisoTiro.pontos(self, mira_pos, texto.get_slice(" ", 0), Color(1.0, 0.85, 0.35))
+	elif texto.begins_with("ERROU") or texto.begins_with("SEM MUNI") or texto.begins_with("ORDEM ERRADA"):
+		AvisoTiro.mostrar(self, mira_pos, texto.get_slice("|", 0).strip_edges(), cor.lerp(Color.WHITE, 0.45))
+	else:
+		AvisoTiro.instrucao(self, texto, cor.lerp(Color.WHITE, 0.3))
  
  
 func _atualizar_chat_rodape(delta: float) -> void:
@@ -3590,3 +3603,13 @@ func _aplicar_config_admin_na_cena() -> void:
 	get_tree().set_meta("admin_tempo_partida", tempo_total)
 	get_tree().set_meta("admin_tempo_modal_final", fim_tempo_voltar)
 	get_tree().set_meta("admin_tempo_ranking_nome", ranking_nome_tempo)
+
+
+## Ao abrir a tela: monta as letras dos avisos e prepara os sons dos
+## efeitos antes do primeiro tiro (a TV box não engasga no começo).
+func _aquecer_fase() -> void:
+	if not is_inside_tree():
+		return
+	AvisoTiro.preparar(self)
+	if _vivo != null:
+		Maquina.aquecer([_vivo.SOM_LED, ArenaVivo.SOM_FAISCA, ArenaVivo.SOM_VAPOR, ArenaVivo.SOM_TROCA])

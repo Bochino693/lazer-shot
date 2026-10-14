@@ -74,6 +74,10 @@ var TEX_LUA: Array = [load("res://sprites/egito_lua_disco.png"), load("res://spr
 	load("res://sprites/egito_lua_iris.png"), load("res://sprites/egito_lua_palpebra.png"),
 	load("res://sprites/egito_lua_halo.png"), load("res://sprites/egito_lua_palpebra_baixo.png")]
 var AGUIA: Texture2D = load("res://sprites/egito_aguia.png")
+var CEU_SEM_SOL: Texture2D = load("res://sprites/egito_ceu_sol.png")
+var CEU_SEM_LUA: Texture2D = load("res://sprites/egito_ceu_lua.png")
+const SHADER_ASTRO := preload("res://shaders/egito_astro.gdshader")
+var AGUIA_POUSADA: Texture2D = load("res://sprites/egito_aguia_pousada.png")
 var SOM_AGUIA: AudioStream = load("res://songs/aguia.wav")
 var SOM_AGUIA_NOITE: AudioStream = load("res://songs/aguia_noite.wav")
 var PONTAS: Texture2D = load("res://sprites/egito_pontas.png")
@@ -125,6 +129,9 @@ const CRISTAL_CAIXA := Rect2(440, 620, 136, 340)
 # por CRISTAL_VOLTA s, até se refazer. As pontas de ouro tocam (clarão e
 # anel no metal, faíscas e lasquinhas de ouro), pedra lasca e areia levanta.
 const TIROS_CRISTAL := 9
+## O tiro que acabou de quebrar um cristal ("cristal" o do meio, "ponta" o de
+## um obelisco; "" nenhum): a fase dá os pontos.
+var quebrou_agora := ""
 # cristais das pontas dos obeliscos (px da imagem): trincam e quebram com
 # menos tiros que o do meio e voltam sozinhos
 const POLI_PONTAS := [
@@ -162,7 +169,16 @@ const COR_LUA := Color(0.62, 0.80, 1.0)
 const BRILHOS_CRISTAL := [Vector2(506, 634), Vector2(466, 721), Vector2(548, 721), Vector2(486, 792),
 		Vector2(527, 846), Vector2(505, 893), Vector2(461, 944), Vector2(551, 944)]
 const BRILHOS_PONTAS := [Vector2(229, 520), Vector2(509, 448), Vector2(774, 520)]
-const TEMPO_TROCA := 1.6
+# Pôr do sol / nascer da lua (a troca sol <-> lua no jogo): o astro que sai
+# desce e some atrás das pirâmides (shaders/egito_astro.gdshader corta o que
+# fica atrás delas), o céu passa pelo crepúsculo em brasa enquanto o dia
+# vira noite (fundos, planos, ouro/prata, luzes, águias, tudo junto) e o
+# outro astro sobe de trás das pirâmides até o lugar dele; de manhã, o
+# contrário. Onde o astro estava aparece o céu sem ele (sprites/
+# egito_ceu_*.png, tools/gerar_ceu_astro.py).
+const TEMPO_POENTE := 5.4
+const DESCIDA := 640.0        # px que o astro desce até sumir de todo
+const CEU_SEM_CANTO := Vector2(512 - 232, 300 - 210)   # canto de egito_ceu_*.png na imagem
 # Câmera 3D: com a mira no canto ela anda CAMERA_PASSO px; uma coisa à
 # distância Z anda CAMERA_PASSO * (1 - 1/Z) (Z = 1 é o plano dos brasões).
 # O mapa vai de Z = 10 (preto: céu, pirâmides) a Z = 0,7 (branco: chão perto).
@@ -181,6 +197,27 @@ const CHAO_1 := 1300.0
 const AGUIA_QUADROS := 11
 const CEU := Rect2(150, 196, 724, 236)
 const N_AGUIAS := 3
+# Pouso: com o cristal de uma pirâmide quebrado (a energia não circula mais
+# nela) às vezes uma águia vem e pousa na ponta apagada, de frente para quem
+# joga, grita uma vez e fica lá se mexendo (vira a cabeça, olha para baixo,
+# abre as asas como o falcão dos hieróglifos) até a energia voltar, quando
+# levanta voo; outras vezes só dá umas voltas por cima da pirâmide; e às
+# vezes nada. Cada vez de um jeito (chegada direta, em espiral ou num
+# mergulho; o que faz pousada é sorteado).
+# Ponta de cada pirâmide na ordem de _pontas_acesas (esq, meio, dir), px da
+# imagem; o quadro pousado (egito_aguia_pousada.png, 160x128, de frente) tem
+# os pés PES_POUSADA px abaixo do meio.
+const POUSOS := [Vector2(229, 516), Vector2(508, 446), Vector2(775, 516)]
+const MODOS_POUSO := ["pousar", "descer", "pousada", "decolar"]
+const ESCALA_POUSADA := 0.30
+const PES_POUSADA := 54.0
+const CHANCE_POUSO := 0.5
+const CHANCE_RONDA := 0.3
+const TEMPO_DESCER := 1.3
+const TEMPO_DECOLAR := 1.4
+# quadros de egito_aguia_pousada.png
+enum Pose { PARADA, OLHA_ESQ, OLHA_DIR, GRITA, ASAS_MEIO, ASAS_ABERTAS, OLHA_BAIXO }
+const POSES_QUADROS := 7
 const N_ESTRELAS_CEU := 18
 
 var _fundo_sol: Sprite2D
@@ -217,6 +254,12 @@ var _estrelas: Array = []     # {no, w, f}
 var _modo := ""
 var _noite := 0.0             # 0 = sol ... 1 = lua
 var _tw: Tween = null
+var _poente := -1.0            # 0..1 durante o pôr do sol / nascer da lua; -1 parado
+var _poente_de := 0.0
+var _poente_para := 0.0
+var _crepusculo := 0.0
+var _desce := [0.0, 0.0]       # px que o sol / a lua está abaixo do lugar dele
+var _mat_astro: ShaderMaterial
 var _pisco := 0.0
 var _proximo_pisco := 5.0
 var _onda := 9.0
@@ -229,6 +272,9 @@ var _cadente_para := Vector2.ZERO
 #  vida, bat, fase, inclin, grito, ruido, vento, espera}
 var _aguias: Array = []
 var _grito_espera := 4.0
+var _pouso_apagada := [false, false, false]
+# halo das pontas de ouro acesas (esq, meio, dir)
+var _halos: Array[Sprite2D] = []
 
 # planos 3D (recortes da imagem): {no, canto, z}
 var _planos: Array[Dictionary] = []
@@ -284,6 +330,15 @@ func _init() -> void:
 	var sem_mascara := ImageTexture.create_from_image(vazia)
 	_fundo_sol = _criar_fundo(FUNDO_SOL, sem_mascara, Color(1.0, 0.74, 0.34), 0.0)
 	_fundo_lua = _criar_fundo(FUNDO_LUA, sem_mascara, Color(1.0, 0.28, 0.30), 3.7)
+	# o céu sem o astro (aparece quando ele sai do lugar): o shader de cada
+	# fundo põe o pedaço por cima do disco pintado
+	var caixa_ceu := Vector4(CEU_SEM_CANTO.x / IMG.x, CEU_SEM_CANTO.y / IMG.y,
+		float(CEU_SEM_SOL.get_width()) / IMG.x, float(CEU_SEM_SOL.get_height()) / IMG.y)
+	for par in [[_fundo_sol, CEU_SEM_SOL], [_fundo_lua, CEU_SEM_LUA]]:
+		var mf := (par[0] as Sprite2D).material as ShaderMaterial
+		mf.set_shader_parameter("ceu_sem", par[1])
+		mf.set_shader_parameter("ceu_sem_caixa", caixa_ceu)
+		mf.set_shader_parameter("ceu_sem_forca", 0.0)
 	_criar_planos()
 	_criar_feixes()
 	_raios_sol = _criar_raios(CENTRO_SOL, RAIO_SOL, 3.1, false, COR_SOL)
@@ -315,7 +370,16 @@ func _init() -> void:
 	for p in BRILHOS_CRISTAL:
 		_criar_brilho(p, soma, randf_range(0.30, 0.55), "cristal")
 	for p in BRILHOS_PONTAS:
-		_criar_brilho(p, soma, randf_range(0.30, 0.42), "ponta")
+		_criar_brilho(p, soma, randf_range(0.40, 0.52), "ponta")
+	# halo de cada ponta de ouro acesa: a energia chegando no pico
+	for i in 3:
+		var h := Sprite2D.new()
+		h.name = "HaloPonta%d" % i
+		h.texture = FundoVivo.brilho_redondo()
+		h.material = soma
+		h.position = POUSOS[i] + Vector2(0.0, 4.0)
+		add_child(h)
+		_halos.append(h)
 	# o "pisco" do disco: estrela grande na borda de cima
 	_criar_brilho(CENTRO_SOL + Vector2(-0.62, -0.66) * RAIO_SOL, soma, 0.9, "disco")
 
@@ -344,11 +408,90 @@ func mostrar(modo: String, suave: bool = true) -> void:
 	if _tw != null and _tw.is_valid():
 		_tw.kill()
 	if not suave:
+		_poente = -1.0
+		_crepusculo = 0.0
+		_desce = [0.0, 0.0]
+		_astros_cortados(false)
 		_definir_noite(alvo)
+		_aplicar_poente()
 		return
-	_pisco = 1.0
-	_tw = create_tween()
-	_tw.tween_method(_definir_noite, _noite, alvo, TEMPO_TROCA).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	# o pôr do sol (ou da lua): _animar_poente
+	_poente_de = _noite
+	_poente_para = alvo
+	_poente = 0.0
+	_astros_cortados(true)
+
+
+func _animar_poente(delta: float) -> void:
+	_poente = minf(1.0, _poente + delta / TEMPO_POENTE)
+	var k := _poente
+	var sai := 0 if _poente_para > 0.5 else 1      # 0 = sol, 1 = lua
+	var entra := 1 - sai
+	# o que sai desce acelerando até sumir; o que entra sobe freando
+	var a := clampf(k / 0.5, 0.0, 1.0)
+	_desce[sai] = DESCIDA * a * a
+	var b := clampf((k - 0.46) / 0.54, 0.0, 1.0)
+	_desce[entra] = DESCIDA * (1.0 - b) * (1.0 - b)
+	# o dia vira noite no meio, com o crepúsculo em brasa no caminho
+	_definir_noite(lerpf(_poente_de, _poente_para, smoothstep(0.24, 0.76, k)))
+	_crepusculo = pow(sin(PI * k), 1.3)
+	if _mat_astro != null:
+		var g := _camada_ceu.get_global_transform()
+		_mat_astro.set_shader_parameter("para_imagem", Vector4(g.origin.x, g.origin.y, g.get_scale().x, g.get_scale().y))
+	if k >= 1.0:
+		_poente = -1.0
+		_crepusculo = 0.0
+		_desce = [0.0, 0.0]
+		_definir_noite(_poente_para)
+		_astros_cortados(false)
+	_aplicar_poente()
+
+
+## Põe o sol e a lua (e os raios, e o céu sem eles) onde estão agora.
+func _aplicar_poente() -> void:
+	var discos: Array[Node2D] = [_disco_sol, _disco_lua]
+	var raios: Array[ColorRect] = [_raios_sol, _raios_lua]
+	var centros := [CENTRO_SOL, CENTRO_LUA]
+	var em_troca := _poente >= 0.0
+	for i in 2:
+		var d: float = _desce[i]
+		var c: Vector2 = centros[i] + Vector2(0.0, d)
+		var disco := discos[i]
+		var r := raios[i]
+		disco.position = c
+		r.position = c - r.size * 0.5
+		if em_troca:
+			# baixo no céu o astro fica mais quente (a luz atravessa mais ar)
+			var baixo := smoothstep(0.0, 320.0, d)
+			disco.visible = d < DESCIDA - 1.0
+			disco.modulate = Color(1.0, 1.0 - 0.22 * baixo, 1.0 - 0.42 * baixo, 1.0)
+			var no_ceu := 1.0 - smoothstep(0.0, 170.0, d)
+			r.visible = no_ceu > 0.01
+			r.modulate.a = no_ceu
+		else:
+			disco.modulate = Color(1.0, 1.0, 1.0, disco.modulate.a)
+		# no fundo de cada um, o céu sem o disco pintado conforme ele sai
+		var mf := ([_fundo_sol, _fundo_lua][i] as Sprite2D).material as ShaderMaterial
+		mf.set_shader_parameter("ceu_sem_forca", smoothstep(0.0, 70.0, d))
+		mf.set_shader_parameter("crepusculo", _crepusculo)
+	_mat_planos.set_shader_parameter("crepusculo", _crepusculo)
+
+
+## Durante a troca o sol e a lua passam atrás das pirâmides (o shader corta
+## o que fica atrás delas); parados no céu, sem shader nenhum.
+func _astros_cortados(sim: bool) -> void:
+	if sim and _mat_astro == null:
+		_mat_astro = ShaderMaterial.new()
+		_mat_astro.shader = SHADER_ASTRO
+		_mat_astro.set_shader_parameter("horizonte", HORIZONTE)
+		var tri := PackedVector2Array()
+		for p in PIRAMIDES:
+			tri.append_array(p)
+		_mat_astro.set_shader_parameter("piramides", tri)
+	for disco: Node2D in [_disco_sol, _disco_lua]:
+		disco.material = _mat_astro if sim else null
+		for filho in disco.get_children():
+			(filho as CanvasItem).use_parent_material = sim
 
 
 # ───────────────────────────────────────────── montagem
@@ -485,6 +628,7 @@ func _entrar_modo(a: Dictionary) -> void:
 
 func _animar_aguias(delta: float) -> void:
 	_grito_espera -= delta
+	_vigiar_pousos()
 	for a in _aguias:
 		var s: Sprite2D = a["no"]
 		if a["espera"] > 0.0:
@@ -494,6 +638,9 @@ func _animar_aguias(delta: float) -> void:
 			continue
 		a["t"] += delta
 		a["t_modo"] -= delta
+		if a["modo"] in MODOS_POUSO:
+			_animar_pouso(a, s, delta)
+			continue
 		var t: float = a["t"]
 		var v: float = a["vel"]
 		var giro := 0.0
@@ -525,15 +672,7 @@ func _animar_aguias(delta: float) -> void:
 		a["inclin"] = lerpf(a["inclin"], giro * 0.6, 1.0 - exp(-delta * 2.5))
 		a["pos"] += Vector2.RIGHT.rotated(a["dir"]) * v * delta + Vector2(0.0, sin(t * 1.3 + rr) * 3.0 * delta)
 
-		# asas: batidas de vez em quando, senão planando
-		if a["bat"] > 0.0:
-			a["bat"] -= delta
-			a["fase"] += delta * 2.3
-			s.frame = 1 + int(a["fase"] * 10.0) % 10
-		else:
-			s.frame = 0
-			if randf() < delta * 0.06:
-				a["bat"] = randf_range(0.7, 1.5)
+		_bater_asas(a, s, delta)
 
 		# chega de longe e vai embora subindo (fica menor)
 		var chega := clampf(t / 2.8, 0.0, 1.0)
@@ -550,17 +689,7 @@ func _animar_aguias(delta: float) -> void:
 		s.scale = Vector2(esc * (1.0 - 0.35 * absf(inc)), esc)
 		s.skew = inc * 0.45
 
-		# luz: contra o sol/a lua vira silhueta; longe some na névoa do céu
-		var astro := CENTRO_SOL.lerp(CENTRO_LUA, _noite)
-		var raio_astro := lerpf(RAIO_SOL, RAIO_LUA, _noite)
-		var contra := clampf(1.0 - ((a["pos"] as Vector2).distance_to(astro) - raio_astro * 0.9) / (raio_astro * 0.6), 0.0, 1.0)
-		var dia := Color(1.0, 0.93, 0.84).lerp(Color(0.16, 0.10, 0.06), contra)
-		var noite := Color(0.24, 0.28, 0.40).lerp(Color(0.03, 0.04, 0.08), contra)
-		var cor := dia.lerp(noite, _noite)
-		var nevoa: float = (1.0 - (a["escala"] - 0.15) / 0.18) * 0.35 * (1.0 - contra)
-		cor = cor.lerp(Color(1.0, 0.78, 0.48).lerp(Color(0.22, 0.30, 0.48), _noite), nevoa)
-		cor.a = perto
-		s.modulate = cor
+		s.modulate = _cor_aguia(a, perto)
 
 		# grito (um de cada vez, de tempos em tempos)
 		a["grito"] -= delta
@@ -572,6 +701,281 @@ func _animar_aguias(delta: float) -> void:
 				var noite_som := _noite > 0.5
 				Maquina.efeito(SOM_AGUIA_NOITE if noite_som else SOM_AGUIA,
 					lerpf(-17.0, -8.0, forca) - (2.0 if noite_som else 0.0), randf_range(0.92, 1.08))
+
+
+## Asas: batidas de vez em quando, senão planando.
+func _bater_asas(a: Dictionary, s: Sprite2D, delta: float) -> void:
+	if a["bat"] > 0.0:
+		a["bat"] -= delta
+		a["fase"] += delta * 2.3
+		s.frame = 1 + int(a["fase"] * 10.0) % 10
+	else:
+		s.frame = 0
+		if randf() < delta * 0.06:
+			a["bat"] = randf_range(0.7, 1.5)
+
+
+## Luz: contra o sol/a lua vira silhueta; longe some na névoa do céu.
+func _cor_aguia(a: Dictionary, alfa: float) -> Color:
+	var astro := (CENTRO_SOL + Vector2(0.0, _desce[0])).lerp(CENTRO_LUA + Vector2(0.0, _desce[1]), _noite)
+	var raio_astro := lerpf(RAIO_SOL, RAIO_LUA, _noite)
+	var contra := clampf(1.0 - ((a["pos"] as Vector2).distance_to(astro) - raio_astro * 0.9) / (raio_astro * 0.6), 0.0, 1.0)
+	var dia := Color(1.0, 0.93, 0.84).lerp(Color(0.16, 0.10, 0.06), contra)
+	var noite := Color(0.24, 0.28, 0.40).lerp(Color(0.03, 0.04, 0.08), contra)
+	var cor := dia.lerp(noite, _noite)
+	var nevoa: float = clampf(1.0 - (a["escala"] - 0.15) / 0.18, 0.0, 1.0) * 0.35 * (1.0 - contra)
+	cor = cor.lerp(Color(1.0, 0.78, 0.48).lerp(Color(0.22, 0.30, 0.48), _noite), nevoa)
+	if _crepusculo > 0.001:
+		cor = cor.lerp(cor * Color(1.0, 0.68, 0.58), _crepusculo * 0.7)
+	cor.a = alfa
+	return cor
+
+
+## Cada pirâmide segue o seu cristal (a do meio o cristal do meio; as dos
+## lados o cristal do obelisco do lado): quebrou, às vezes uma águia vai
+## pousar na ponta apagada; voltou a energia, quem estava lá levanta voo.
+func _vigiar_pousos() -> void:
+	for i in 3:
+		var apagada: bool = _cristal_quebrado if i == 1 else bool(_pontas[0 if i == 0 else 1]["quebrado"])
+		if apagada == _pouso_apagada[i]:
+			continue
+		_pouso_apagada[i] = apagada
+		if apagada:
+			var sorte := randf()
+			if sorte < CHANCE_POUSO:
+				_mandar_pousar(i)
+			elif sorte < CHANCE_POUSO + CHANCE_RONDA:
+				_mandar_rondar(i)
+		else:
+			for a in _aguias:
+				if a.get("pouso", -1) == i and a["modo"] in MODOS_POUSO and a["modo"] != "decolar":
+					_decolar(a)
+
+
+func _mandar_pousar(i: int) -> void:
+	var melhor: Dictionary = {}
+	var dist := INF
+	for a in _aguias:
+		if a.get("pouso", -1) == i and a["modo"] in MODOS_POUSO:
+			return
+		if a["espera"] > 0.0 or a["modo"] in MODOS_POUSO:
+			continue
+		var d := (a["pos"] as Vector2).distance_to(POUSOS[i])
+		if d < dist:
+			dist = d
+			melhor = a
+	if melhor.is_empty():
+		# nenhuma no céu agora: chega uma
+		for a in _aguias:
+			if a["espera"] > 0.0:
+				a["espera"] = 0.0
+				_nova_aguia(a)
+				melhor = a
+				break
+	if melhor.is_empty():
+		return
+	melhor["pouso"] = i
+	# cada vez chega de um jeito
+	melhor["chegada"] = ["direta", "espiral", "mergulho"][randi() % 3]
+	melhor["giro_ang"] = ((melhor["pos"] as Vector2) - POUSOS[i]).angle()
+	melhor["giro_raio"] = 70.0
+	melhor["modo"] = "pousar"
+	melhor["t_modo"] = 12.0
+	melhor["vida"] = 1.0e6
+	melhor["bat"] = 1.0
+
+
+## Só passa por cima: umas voltas planando sobre a pirâmide apagada.
+func _mandar_rondar(i: int) -> void:
+	for a in _aguias:
+		if a["espera"] > 0.0 or a["modo"] in MODOS_POUSO:
+			continue
+		a["modo"] = "termica"
+		a["centro"] = POUSOS[i] + Vector2(randf_range(-20.0, 20.0), -randf_range(80.0, 100.0))
+		a["raio"] = randf_range(50.0, 80.0)
+		a["sentido"] = 1.0 if randf() < 0.5 else -1.0
+		a["t_modo"] = randf_range(8.0, 13.0)
+		a["vida"] = maxf(a["vida"], a["t"] + 16.0)
+		return
+
+
+func _decolar(a: Dictionary) -> void:
+	var s: Sprite2D = a["no"]
+	a["vida"] = a["t"] + randf_range(8.0, 14.0)
+	if a["modo"] != "pousada":
+		# ainda chegando: desiste e volta para o céu
+		a["modo"] = "plana"
+		a["pouso"] = -1
+		_entrar_modo(a)
+		return
+	# abre as asas e sobe batendo forte (cada vez para um lado)
+	a["modo"] = "decolar"
+	a["t_pouso"] = 0.0
+	a["dir"] = -PI * 0.5 + randf_range(-0.9, 0.9)
+	a["bat"] = 2.0
+	a["escala_voo"] = randf_range(0.20, 0.30)
+
+
+func _animar_pouso(a: Dictionary, s: Sprite2D, delta: float) -> void:
+	var i: int = a["pouso"]
+	var pes: Vector2 = POUSOS[i]
+	var sentada := pes - Vector2(0.0, PES_POUSADA * ESCALA_POUSADA - 1.5)
+	var chega := smoothstep(0.0, 2.8, a["t"])
+	match a["modo"]:
+		"pousar":
+			# chega planando até um pouco acima da ponta: direto, dando voltas
+			# que fecham em espiral, ou de bem alto num mergulho
+			var alvo := pes + Vector2(0.0, -60.0)
+			var rapidez := 1.0
+			match a["chegada"]:
+				"espiral":
+					a["giro_raio"] = maxf(0.0, a["giro_raio"] - delta * 9.0)
+					a["giro_ang"] += delta * 1.1
+					alvo += Vector2.RIGHT.rotated(a["giro_ang"]) * a["giro_raio"] * Vector2(1.0, 0.45)
+				"mergulho":
+					if (a["pos"] as Vector2).y < alvo.y - 20.0:
+						rapidez = 1.7
+			var para: Vector2 = alvo - a["pos"]
+			var giro := clampf(angle_difference(a["dir"], para.angle()) * 2.6, -2.4, 2.4)
+			a["dir"] += giro * delta
+			a["inclin"] = lerpf(a["inclin"], giro * 0.3, 1.0 - exp(-delta * 2.5))
+			var v := clampf(para.length() * 1.1, 32.0, 120.0) * rapidez
+			a["pos"] += Vector2.RIGHT.rotated(a["dir"]) * v * delta
+			a["escala"] = lerpf(a["escala"], ESCALA_POUSADA, 1.0 - exp(-delta * 0.9))
+			if a["chegada"] == "mergulho" and rapidez > 1.0:
+				a["bat"] = 0.0
+				s.frame = 0                       # asas firmes no mergulho
+			else:
+				_bater_asas(a, s, delta)
+			var esc: float = a["escala"] * (0.25 + 0.75 * chega)
+			s.position = a["pos"]
+			s.rotation = a["dir"] + PI * 0.5
+			s.scale = Vector2(esc * (1.0 - 0.35 * absf(a["inclin"])), esc)
+			s.skew = a["inclin"] * 0.45
+			var perto: bool = para.length() < 24.0 and (a["chegada"] != "espiral" or a["giro_raio"] < 12.0)
+			if perto or a["t_modo"] <= 0.0:
+				a["modo"] = "descer"
+				a["t_pouso"] = 0.0
+				a["de"] = a["pos"]
+				a["rot_de"] = s.rotation
+				a["esc_de"] = esc
+		"descer":
+			# freia batendo as asas, de frente, e assenta na ponta
+			a["t_pouso"] += delta
+			var k := clampf(a["t_pouso"] / TEMPO_DESCER, 0.0, 1.0)
+			var e := k * k * (3.0 - 2.0 * k)
+			a["pos"] = (a["de"] as Vector2).lerp(sentada, e)
+			a["fase"] += delta * 4.2
+			s.frame = 1 + int(a["fase"] * 10.0) % 10
+			s.position = a["pos"]
+			s.rotation = lerp_angle(a["rot_de"], 0.0, minf(1.0, k * 1.7))
+			s.skew = 0.0
+			s.scale = Vector2.ONE * lerpf(a["esc_de"], ESCALA_POUSADA, e)
+			if k >= 1.0:
+				s.texture = AGUIA_POUSADA
+				s.hframes = POSES_QUADROS
+				s.rotation = 0.0
+				a["modo"] = "pousada"
+				a["t_pouso"] = 0.0
+				a["gritou"] = false
+				a["escala"] = ESCALA_POUSADA
+				a["pose"] = Pose.ASAS_MEIO
+				a["pose_t"] = randf_range(0.35, 0.6)     # as asas assentando
+				a["abriu"] = 0
+		"pousada":
+			a["t_pouso"] += delta
+			a["pos"] = sentada
+			a["pose_t"] -= delta
+			if a["pose_t"] <= 0.0:
+				_proxima_pose(a)
+			s.frame = a["pose"]
+			# respira; ao arrepiar as penas incha um pouco
+			var tp: float = a["t_pouso"]
+			var resp := 1.0 + 0.012 * sin(tp * 2.3)
+			var largo := 1.0
+			if a.get("arrepio", 0.0) > 0.0:
+				a["arrepio"] = maxf(0.0, a["arrepio"] - delta)
+				largo += 0.07 * sin(a["arrepio"] / 0.6 * PI) * (1.0 + 0.3 * sin(tp * 40.0))
+			s.position = sentada + Vector2(0.0, PES_POUSADA * ESCALA_POUSADA * (1.0 - resp))
+			s.scale = Vector2(ESCALA_POUSADA * largo, ESCALA_POUSADA * resp)
+			s.skew = 0.0
+		"decolar":
+			a["t_pouso"] += delta
+			var tp2: float = a["t_pouso"]
+			if s.texture == AGUIA_POUSADA:
+				# primeiro abre as asas e se agacha; depois salta
+				s.frame = Pose.ASAS_MEIO
+				s.position = sentada + Vector2(0.0, 1.5 * sin(minf(tp2 / 0.25, 1.0) * PI))
+				if tp2 >= 0.25:
+					s.texture = AGUIA
+					s.hframes = AGUIA_QUADROS
+					s.frame = 1
+					a["t_pouso"] = 0.0
+				s.modulate = _cor_aguia(a, chega)
+				return
+			var k2 := clampf(tp2 / TEMPO_DECOLAR, 0.0, 1.0)
+			a["fase"] += delta * 4.8
+			s.frame = 1 + int(a["fase"] * 10.0) % 10
+			a["pos"] += Vector2.RIGHT.rotated(a["dir"]) * (35.0 + 95.0 * k2) * delta
+			a["escala"] = lerpf(ESCALA_POUSADA, a["escala_voo"], k2)
+			s.position = a["pos"]
+			s.rotation = lerp_angle(0.0, a["dir"] + PI * 0.5, minf(1.0, k2 * 1.5))
+			s.scale = Vector2.ONE * a["escala"]
+			s.skew = 0.0
+			if k2 >= 1.0:
+				a["pouso"] = -1
+				a["modo"] = "plana"
+				_entrar_modo(a)
+	s.modulate = _cor_aguia(a, chega)
+
+
+## O que a águia pousada faz agora (sorteado, cada pouso diferente): logo
+## depois de assentar grita uma vez de cabeça erguida; depois fica parada,
+## vira a cabeça para um lado ou outro, olha para baixo, arrepia as penas ou
+## (no máximo duas vezes) abre as asas como o falcão dos hieróglifos.
+func _proxima_pose(a: Dictionary) -> void:
+	if not a["gritou"]:
+		if a["pose"] == Pose.ASAS_MEIO:
+			a["pose"] = Pose.PARADA
+			a["pose_t"] = randf_range(0.4, 0.9)
+			return
+		# uma de cada vez: se outra acabou de gritar, espera mais um pouco
+		if _grito_espera >= 4.6:
+			a["pose_t"] = 0.3
+			return
+		a["gritou"] = true
+		a["pose"] = Pose.GRITA
+		a["pose_t"] = 1.5
+		if is_visible_in_tree():
+			_grito_espera = maxf(_grito_espera, 6.0)
+			var noite_som := _noite > 0.5
+			Maquina.efeito(SOM_AGUIA_NOITE if noite_som else SOM_AGUIA, -7.0 - (2.0 if noite_som else 0.0), randf_range(0.95, 1.05))
+		return
+	if a["pose"] != Pose.PARADA:
+		# entre um movimento e outro, volta a ficar parada
+		a["pose"] = Pose.PARADA
+		a["pose_t"] = randf_range(1.0, 2.8)
+		return
+	var r := randf()
+	if r < 0.22:
+		a["pose"] = Pose.OLHA_ESQ
+		a["pose_t"] = randf_range(0.9, 2.2)
+	elif r < 0.44:
+		a["pose"] = Pose.OLHA_DIR
+		a["pose_t"] = randf_range(0.9, 2.2)
+	elif r < 0.62:
+		a["pose"] = Pose.OLHA_BAIXO
+		a["pose_t"] = randf_range(0.8, 1.6)
+	elif r < 0.80 and a["abriu"] < 2:
+		a["abriu"] += 1
+		a["pose"] = Pose.ASAS_ABERTAS
+		a["pose_t"] = randf_range(1.3, 2.2)
+	elif r < 0.92:
+		a["arrepio"] = 0.6
+		a["pose_t"] = 0.8
+	else:
+		a["pose"] = Pose.ASAS_MEIO
+		a["pose_t"] = 0.45
 
 
 func _sprite_2x(tex: Texture2D, canto: Vector2, shader: Shader) -> Sprite2D:
@@ -710,6 +1114,8 @@ func _montar_camera() -> void:
 	material_alvo.set_shader_parameter("inv_z_perto", 1.0 / Z_PERTO)
 
 	var ceu: Array[Node] = [_raios_sol, _raios_lua, _disco_sol, _disco_lua]
+	for h in _halos:
+		ceu.append(h)
 	for a in _aguias:
 		ceu.append(a["no"])
 	ceu.append(_ceu_noite)
@@ -891,6 +1297,8 @@ func _process(delta: float) -> void:
 	m2.set_shader_parameter("batida", som.y)
 	_faiscas.speed_scale = 1.0 + som.y * 1.3
 
+	if _poente >= 0.0:
+		_animar_poente(delta)
 	_animar_olhos(delta)
 	_animar_aguias(delta)
 	_animar_brilhos(delta)
@@ -1089,7 +1497,9 @@ func _animar_brilhos(delta: float) -> void:
 		var s: Sprite2D = b["no"]
 		if b["espera"] > 0.0:
 			b["espera"] -= delta
-			if b["espera"] <= 0.0 and b["tipo"] == "cristal" and _energia < 0.6:
+			if b["espera"] <= 0.0 and b["tipo"] == "disco" and _poente >= 0.0:
+				b["espera"] = randf_range(1.0, 2.0)   # o astro está se pondo / nascendo
+			elif b["espera"] <= 0.0 and b["tipo"] == "cristal" and _energia < 0.6:
 				b["espera"] = randf_range(0.5, 1.5)
 			elif b["espera"] <= 0.0 and b["tipo"] == "ponta" and _ponta_apagada(s.position):
 				b["espera"] = randf_range(0.5, 1.5)   # ponta de ouro apagada não cintila
@@ -1103,7 +1513,7 @@ func _animar_brilhos(delta: float) -> void:
 		var k: float = b["t"] / b["dur"]
 		if k >= 1.0:
 			s.visible = false
-			b["espera"] = randf_range(1.0, 4.0) if b["tipo"] != "disco" else randf_range(4.0, 8.0)
+			b["espera"] = randf_range(4.0, 8.0) if b["tipo"] == "disco" else (randf_range(0.6, 2.2) if b["tipo"] == "ponta" else randf_range(1.0, 4.0))
 			continue
 		var env := sin(PI * k)
 		env *= env
@@ -1199,6 +1609,7 @@ func no_chao(pos_global: Vector2) -> bool:
 ## Tiro que não pegou alvo: cada lugar responde do seu jeito. Devolve o
 ## material (a fase decide se ainda deixa a marca de tiro).
 func impacto(pos_global: Vector2) -> String:
+	quebrou_agora = ""
 	var p: Vector2 = ponto_da_imagem(pos_global)
 	var mat := material_em(p)
 	match mat:
@@ -1355,6 +1766,7 @@ func _ferir_ponta(i: int, p: Vector2) -> void:
 	_claroes.append({"pos": p, "t": 0.0, "vida": 0.3, "raio": 50.0, "cor": cor})
 	if pt["danos"] >= TIROS_PONTA:
 		pt["quebrado"] = true
+		quebrou_agora = "ponta"
 		pt["volta"] = PONTA_VOLTA
 		var centro: Vector2 = PONTAS_OBELISCO[i]
 		for k2 in 16:
@@ -1501,6 +1913,7 @@ func _ferir_cristal(p: Vector2) -> void:
 func _quebrar_cristal() -> void:
 	_reagir("surpreso", 0.8)
 	_cristal_quebrado = true
+	quebrou_agora = "cristal"
 	_cristal_volta = CRISTAL_VOLTA
 	_cristal_morte = 0.0
 	var centro := Vector2(508, 790)
@@ -1578,6 +1991,17 @@ func _atualizar_tiros_fundo(delta: float) -> void:
 	var lados := Vector2(1.0 - float(_pontas[0]["morte"]), 1.0 - float(_pontas[1]["morte"]))
 	# cada ponta de ouro acende com o seu cristal (o do meio manda nas três)
 	_pontas_acesas = Vector3(_energia * lados.x, _energia, _energia * lados.y)
+	# halo das pontas acesas: a energia chegando no pico, respirando devagar
+	var cor_halo := Color(1.0, 0.80, 0.42).lerp(Color(0.72, 0.85, 1.0), _noite)
+	for i in 3:
+		var h := _halos[i]
+		var acesa: float = _pontas_acesas[i]
+		h.visible = acesa > 0.02
+		if h.visible:
+			var resp := 0.80 + 0.20 * sin(_t * 1.9 + i * 2.1)
+			cor_halo.a = acesa * resp * 0.5
+			h.modulate = cor_halo
+			h.scale = Vector2.ONE * (2.2 if i == 1 else 1.7) * (0.92 + 0.08 * resp)
 	for fundo: Sprite2D in [_fundo_sol, _fundo_lua]:
 		var mf := fundo.material as ShaderMaterial
 		mf.set_shader_parameter("energia", _energia)
@@ -1640,7 +2064,7 @@ func _atualizar_tiros_fundo(delta: float) -> void:
 		_claroes.pop_front()
 
 	var ativo := not (_cacos.is_empty() and _faiscas_ouro.is_empty() and _poeiras.is_empty() and _claroes.is_empty()) \
-		or not _trincas.is_empty() or _onda_quebra >= 0.0
+		or not _trincas.is_empty() or _onda_quebra >= 0.0 or _cristal_refaz >= 0.0
 	if ativo or _fx_sujo:
 		_fx_n.queue_redraw()
 		_fx_s.queue_redraw()
@@ -1664,6 +2088,14 @@ func _desenhar_fx_n() -> void:
 		Pincel.caco(_fx_n, c["pos"], c["tam"], c["rot"], Color(c["cor"], 1.0 - k2 * k2))
 
 
+## Ponto k (0 longe .. 1 no cristal) de um fio de energia espiralando para
+## dentro do cristal.
+func _espiral(centro: Vector2, semente: float, k: float) -> Vector2:
+	var ang := semente * TAU + k * 2.4
+	var raio := 300.0 * (1.0 - k) * (0.7 + 0.3 * semente)
+	return centro + Vector2(cos(ang), sin(ang) * 1.3) * raio
+
+
 func _desenhar_fx_s() -> void:
 	# a energia vaza pelas trincas (some com o cristal apagado)
 	var cor_e := Color(1.0, 0.55, 0.9).lerp(Color(1.0, 0.25, 0.35), _noite)
@@ -1673,10 +2105,25 @@ func _desenhar_fx_s() -> void:
 			for i in range(linha.size() - 1):
 				Pincel.laser(_fx_s, linha[i], linha[i + 1], Color(cor_e, brilho), 4.0)
 	if _cristal_refaz >= 0.0:
-		# faixa de luz subindo pelo cristal enquanto ele se refaz
-		var y := lerpf(970.0, 620.0, _cristal_refaz)
-		Pincel.laser(_fx_s, Vector2(450, y), Vector2(566, y), Color(cor_e, 0.8 * sin(_cristal_refaz * PI)), 14.0)
-		Pincel.brilho(_fx_s, Vector2(508, y), 90.0, Color(cor_e, 0.4 * sin(_cristal_refaz * PI)))
+		# a energia volta: fios de luz espiralando de longe para dentro do
+		# cristal, cada um com uma faísca na ponta, e um brilho suave subindo
+		# por ele (sem faixa reta)
+		var r := _cristal_refaz
+		var forca := sin(r * PI)
+		var centro := Vector2(508, 790)
+		for i in 22:
+			var semente := fposmod(i * 0.6180339, 1.0)
+			var k := fposmod(r * 2.6 + semente, 1.0)
+			var a := forca * smoothstep(0.0, 0.2, k) * (1.0 - smoothstep(0.85, 1.0, k))
+			if a <= 0.02:
+				continue
+			var p := _espiral(centro, semente, k)
+			var q := _espiral(centro, semente, maxf(0.0, k - 0.06))
+			Pincel.laser(_fx_s, q, p, Color(cor_e, 0.7 * a), 5.0)
+			Pincel.brilho(_fx_s, p, 20.0, Color(1, 1, 1, 0.6 * a))
+		var y := lerpf(960.0, 640.0, r)
+		Pincel.brilho(_fx_s, Vector2(508, y), 150.0, Color(cor_e, 0.35 * forca))
+		Pincel.brilho(_fx_s, centro, 60.0 + 200.0 * r, Color(cor_e, 0.25 * forca))
 	if _onda_quebra >= 0.0:
 		var k0 := _onda_quebra / 0.8
 		Pincel.anel(_fx_s, Vector2(508, 790), 40.0 + 420.0 * k0, 10.0 * (1.0 - k0) + 2.0, Color(cor_e, 0.7 * (1.0 - k0)))

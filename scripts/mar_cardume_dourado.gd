@@ -3,9 +3,10 @@ extends Node2D
 
 ## Cardume dourado (bônus do Mar). De tempos em tempos um cardume de peixes de
 ## ouro atravessa a cena no meio da água, nadando junto (cada peixe com o seu
-## balanço e o rabo batendo) e deixando um rastro de brilho. Acertar qualquer
-## peixe dele vale o bônus: o cardume se espalha num estouro (cada peixe foge
-## para um lado girando e some) com faíscas de ouro.
+## balanço e o rabo batendo) e deixando um rastro de brilho. Cada peixe
+## acertado vale pontos (mar.gd): ele estoura em faíscas de ouro e sai
+## girando; o resto do cardume se assusta e nada mais rápido. Pegar todos
+## vale o tesouro.
 ## Fica em alvos_root (mesmas coordenadas dos alvos), na distância Z (anda com
 ## a câmera como os alvos daquela distância: o mar.gd passa o deslocamento).
 ## Um nó só: os peixes saem num desenho só (triângulos com a textura).
@@ -27,9 +28,9 @@ var _ate := Vector2.ZERO
 var _onda := 0.0
 var _esc := 0.5
 var _peixes: Array[Dictionary] = []   # {off, fase, esc}
-var _fuga := -1.0                      # tempo desde o tiro (-1 = nadando)
+var _pegos := 0
+var _pressa := 1.0                     # o cardume assustado nada mais rápido
 var _dir := 1.0                        # 1 = nada para a direita, -1 = esquerda
-var _centro_fuga := Vector2.ZERO
 var _faiscas: Array[Dictionary] = []
 var _luz: Node2D
 var _brilho: Texture2D
@@ -51,7 +52,8 @@ func montar(tela: Vector2, z_dist: float, esc: float) -> void:
 	for i in N:
 		var fila := floori(sqrt(float(i)) + 0.0001)
 		var off := Vector2(-fila * 70.0 + randf_range(-14.0, 14.0), (i - fila * fila - fila) * 46.0 + randf_range(-10.0, 10.0))
-		_peixes.append({"off": off, "fase": randf() * TAU, "esc": randf_range(0.85, 1.12), "fuga": Vector2.ZERO, "giro": 0.0})
+		_peixes.append({"off": off, "fase": randf() * TAU, "esc": randf_range(0.85, 1.12), "fuga": Vector2.ZERO, "giro": 0.0,
+			"pego": -1.0})
 	_dir = 1.0 if para_direita else -1.0
 	var soma := CanvasItemMaterial.new()
 	soma.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
@@ -74,29 +76,30 @@ func _pos_peixe(p: Dictionary) -> Vector2:
 	var c := _centro()
 	var off: Vector2 = p["off"] * _esc * 1.6
 	off += Vector2(sin(_t * 1.7 + p["fase"]) * 10.0, sin(_t * 2.3 + p["fase"] * 1.3) * 8.0) * _esc * 1.6
-	if _fuga >= 0.0:
-		off += p["fuga"] * (1.0 - exp(-_fuga * 2.4)) / 2.4
+	var pego: float = p["pego"]
+	if pego >= 0.0:
+		off += p["fuga"] * (1.0 - exp(-pego * 2.4)) / 2.4
 	return c + Vector2(off.x * _dir, off.y)
 
 
 func _process(delta: float) -> void:
-	_t += delta
-	if _fuga >= 0.0:
-		_fuga += delta
-		if _fuga > 1.1 and _faiscas.is_empty():
-			saiu.emit()
-			queue_free()
-			return
-	elif _t >= _dur:
+	_t += delta * _pressa
+	for p in _peixes:
+		if p["pego"] >= 0.0:
+			p["pego"] += delta
+	if (_t >= _dur or _pegos >= N) and _faiscas.is_empty():
 		vivo = false
 		saiu.emit()
 		queue_free()
 		return
+	if _pegos >= N:
+		vivo = false
 	# rastro de brilho de vez em quando, de um peixe qualquer
-	if _fuga < 0.0 and randf() < delta * 14.0:
+	if vivo and randf() < delta * 14.0:
 		var p: Dictionary = _peixes[randi() % _peixes.size()]
-		_faiscas.append({"pos": _pos_peixe(p) - Vector2(30.0 * _dir, 0.0) * _esc, "vel": Vector2(0, -18.0),
-			"t": 0.0, "vida": randf_range(0.5, 0.9), "tam": randf_range(10.0, 20.0) * _esc / 0.5})
+		if p["pego"] < 0.0:
+			_faiscas.append({"pos": _pos_peixe(p) - Vector2(30.0 * _dir, 0.0) * _esc, "vel": Vector2(0, -18.0),
+				"t": 0.0, "vida": randf_range(0.5, 0.9), "tam": randf_range(10.0, 20.0) * _esc / 0.5})
 	for f in _faiscas:
 		f["t"] += delta
 		f["vel"] *= pow(0.3, delta)
@@ -108,33 +111,47 @@ func _process(delta: float) -> void:
 	_luz.queue_redraw()
 
 
-## Tiro em `pos` (coordenadas do pai): pegou algum peixe? Se sim, o cardume
-## se espalha (uma vez só) e devolve true.
-func acertar(pos: Vector2) -> bool:
-	if not vivo or _fuga >= 0.0:
-		return false
+## Tiro em `pos` (coordenadas do pai): 0 = errou, 1 = pegou um peixe,
+## 2 = pegou o último do cardume (todos).
+func acertar(pos: Vector2) -> int:
+	if not vivo:
+		return 0
 	var raio := RAIO_TIRO * _esc / 0.5
+	var melhor: Dictionary = {}
+	var dist := INF
 	for p in _peixes:
-		if _pos_peixe(p).distance_to(pos) <= raio * float(p["esc"]):
-			_espalhar(pos)
-			return true
-	return false
+		if p["pego"] >= 0.0:
+			continue
+		var d := _pos_peixe(p).distance_to(pos)
+		if d <= raio * float(p["esc"]) and d < dist:
+			dist = d
+			melhor = p
+	if melhor.is_empty():
+		return 0
+	_pegar(melhor, pos)
+	return 2 if _pegos >= N else 1
 
 
-func _espalhar(pos: Vector2) -> void:
-	vivo = false
-	_fuga = 0.0
-	_centro_fuga = pos
-	for p in _peixes:
-		var d: Vector2 = _pos_peixe(p) - pos
-		if d.length() < 1.0:
-			d = Vector2.RIGHT.rotated(randf() * TAU)
-		var dir := d.normalized().rotated(randf_range(-0.5, 0.5))
-		p["fuga"] = dir * randf_range(500.0, 900.0) * _esc / 0.5
-		p["giro"] = randf_range(-9.0, 9.0)
-	for i in 30:
-		_faiscas.append({"pos": pos, "vel": Vector2.RIGHT.rotated(randf() * TAU) * randf_range(120.0, 420.0) * _esc / 0.5,
-			"t": 0.0, "vida": randf_range(0.5, 1.0), "tam": randf_range(14.0, 30.0) * _esc / 0.5, "estrela": true})
+func pegos() -> int:
+	return _pegos
+
+
+## O peixe acertado estoura em ouro e sai girando; o resto se assusta.
+func _pegar(p: Dictionary, pos: Vector2) -> void:
+	_pegos += 1
+	_pressa = minf(_pressa + 0.12, 1.7)
+	var c := _pos_peixe(p)
+	p["pego"] = 0.0
+	var d: Vector2 = c - pos
+	if d.length() < 1.0:
+		d = Vector2.RIGHT.rotated(randf() * TAU)
+	p["fuga"] = d.normalized().rotated(randf_range(-0.6, 0.6)) * randf_range(420.0, 700.0) * _esc / 0.5
+	p["giro"] = randf_range(-10.0, 10.0)
+	p["onde"] = c
+	var n := 14 if _pegos < N else 34
+	for i in n:
+		_faiscas.append({"pos": c, "vel": Vector2.RIGHT.rotated(randf() * TAU) * randf_range(100.0, 360.0) * _esc / 0.5,
+			"t": 0.0, "vida": randf_range(0.45, 0.9), "tam": randf_range(12.0, 26.0) * _esc / 0.5, "estrela": i % 3 == 0})
 
 
 func _draw() -> void:
@@ -144,24 +161,24 @@ func _draw() -> void:
 	var uvs := PackedVector2Array()
 	var cores := PackedColorArray()
 	var indices := PackedInt32Array()
-	var a := 1.0
-	if _fuga >= 0.0:
-		a = clampf(1.0 - (_fuga - 0.35) / 0.6, 0.0, 1.0)
-	else:
-		a = minf(1.0, _t / 0.4) * minf(1.0, (_dur - _t) / 0.4)
+	var a := minf(1.0, _t / 0.4) * clampf((_dur - _t) / 0.4, 0.0, 1.0)
 	if a > 0.0:
 		for p in _peixes:
+			var pego: float = p["pego"]
+			var af := a if pego < 0.0 else a * clampf(1.0 - (pego - 0.25) / 0.5, 0.0, 1.0)
+			if af <= 0.0:
+				continue
 			var c := _pos_peixe(p)
 			var e: float = _esc * float(p["esc"])
 			# rabo batendo: o peixe estica e encolhe um pouquinho de lado
 			var bate := 1.0 + 0.06 * sin(_t * 14.0 + p["fase"])
-			var giro: float = sin(_t * 1.7 + p["fase"]) * 0.10 + (p["giro"] * _fuga if _fuga >= 0.0 else 0.0)
+			var giro: float = sin(_t * 1.7 + p["fase"]) * 0.10 + (p["giro"] * pego if pego >= 0.0 else 0.0)
 			var xf := Transform2D(giro * _dir, Vector2(e * bate * _dir, e), 0.0, c)
 			var ini := pontos.size()
 			for v in [Vector2(-0.5, -0.5), Vector2(0.5, -0.5), Vector2(0.5, 0.5), Vector2(-0.5, 0.5)]:
 				pontos.append(xf * (v * tam))
 				uvs.append(v + Vector2(0.5, 0.5))
-				cores.append(Color(1, 1, 1, a))
+				cores.append(Color(1, 1, 1, af))
 			indices.append_array([ini, ini + 1, ini + 2, ini, ini + 2, ini + 3])
 	if not indices.is_empty():
 		RenderingServer.canvas_item_add_triangle_array(get_canvas_item(), indices, pontos, cores, uvs,
@@ -170,19 +187,21 @@ func _draw() -> void:
 
 func _desenhar_luz() -> void:
 	# brilho dourado em volta do cardume e as faíscas
-	if _fuga < 0.0:
-		var a := minf(1.0, _t / 0.4) * minf(1.0, (_dur - _t) / 0.4)
-		for p in _peixes:
+	var a := minf(1.0, _t / 0.4) * clampf((_dur - _t) / 0.4, 0.0, 1.0)
+	for p in _peixes:
+		var pego: float = p["pego"]
+		if pego < 0.0:
 			var c := _pos_peixe(p)
 			var s := 120.0 * _esc / 0.5
 			_luz.draw_texture_rect(_brilho, Rect2(c - Vector2(s, s) * 0.5, Vector2(s, s)), false,
 				Color(1.0, 0.78, 0.3, 0.30 * a))
-	elif _fuga < 0.3:
-		var k := _fuga / 0.3
-		var s2 := 420.0 * _esc / 0.5 * (0.5 + k)
-		var c2 := _centro_fuga
-		_luz.draw_texture_rect(_brilho, Rect2(c2 - Vector2(s2, s2) * 0.5, Vector2(s2, s2)), false,
-			Color(1.0, 0.85, 0.4, 0.9 * (1.0 - k)))
+		elif pego < 0.3:
+			# o estouro de ouro do peixe pego
+			var k := pego / 0.3
+			var s2 := 300.0 * _esc / 0.5 * (0.5 + k)
+			var c2: Vector2 = p["onde"]
+			_luz.draw_texture_rect(_brilho, Rect2(c2 - Vector2(s2, s2) * 0.5, Vector2(s2, s2)), false,
+				Color(1.0, 0.85, 0.4, 0.9 * (1.0 - k)))
 	for f in _faiscas:
 		var k: float = f["t"] / f["vida"]
 		var s: float = f["tam"] * (1.0 - 0.5 * k)
