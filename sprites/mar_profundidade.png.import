@@ -2,22 +2,20 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://bnuftfn0ibs76"
-path.s3tc="res://.godot/imported/DEUS-SOL.png-494f55ff691fd18d081045221f17c563.s3tc.ctex"
-path.etc2="res://.godot/imported/DEUS-SOL.png-494f55ff691fd18d081045221f17c563.etc2.ctex"
+uid="uid://dv8ahiwrgi8d3"
+path="res://.godot/imported/mar_profundidade.png-068ddcfad624e8330bb5c408902c8f82.ctex"
 metadata={
-"imported_formats": ["s3tc_bptc", "etc2_astc"],
-"vram_texture": true
+"vram_texture": false
 }
 
 [deps]
 
-source_file="res://sprites/DEUS-SOL.png"
-dest_files=["res://.godot/imported/DEUS-SOL.png-494f55ff691fd18d081045221f17c563.s3tc.ctex", "res://.godot/imported/DEUS-SOL.png-494f55ff691fd18d081045221f17c563.etc2.ctex"]
+source_file="res://sprites/mar_profundidade.png"
+dest_files=["res://.godot/imported/mar_profundidade.png-068ddcfad624e8330bb5c408902c8f82.ctex"]
 
 [params]
 
-compress/mode=2
+compress/mode=0
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

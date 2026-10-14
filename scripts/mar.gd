@@ -446,15 +446,40 @@ var mouse_delta_acumulado: Vector2 = Vector2.ZERO
 const SEGUNDO_NAVIO := 9.0
 var _navio_caiu := false
 
-# ── 2,5D: profundidade (scripts/mar_profundo.gd faz o fundo e a frente andarem
-# com a mira; aqui, parte dos alvos vem lá do fundo, da porta do templo)
-const PROFUNDO_CHANCE := {"aguaviva": 0.35, "vaso": 0.35, "bau": 0.40, "bomba": 0.25}
-const PROFUNDO_Z0 := 6.0        # distância onde nasce (1 = plano dos outros alvos)
-const PROFUNDO_Z1 := 0.85       # passa um pouco do plano dos outros e some (passou por nós)
-const PROFUNDO_BONUS := 0.45    # acertar ainda longe (mais que isso) vale o dobro
+# ── 2,5D: profundidade. Câmera: tela = centro + (X, Y) / Z, com o centro na
+# porta do templo e Z = 1 no plano dos alvos comuns (scripts/mar_profundo.gd
+# faz o fundo e a frente andarem com a mira). Cada alvo nasce num estilo:
+#   classico  o de sempre, no plano Z = 1 (com tamanhos variados)
+#   templo    sai da porta do templo, lá no fundo, e vem até perto do vidro
+#   l_cima    desce do alto, lá longe, e faz a curva vindo para o vidro (um L)
+#   l_lado    entra pelo lado, lá longe, e faz a curva vindo para o vidro
+#   queda     (vaso, baú e bomba) cai do alto, longe ou perto, e espatifa no
+#             chão do mar (a bomba explode lá, sem tirar chance do jogador)
+const ESTILOS_3D := {
+	"aguaviva": [["classico", 0.42], ["templo", 0.18], ["l_cima", 0.24], ["l_lado", 0.16]],
+	"vaso": [["classico", 0.36], ["queda", 0.28], ["l_cima", 0.14], ["templo", 0.10], ["l_lado", 0.12]],
+	"bau": [["classico", 0.32], ["queda", 0.32], ["l_cima", 0.14], ["templo", 0.10], ["l_lado", 0.12]],
+	"bomba": [["classico", 0.46], ["queda", 0.22], ["templo", 0.16], ["l_cima", 0.16]],
+}
+const PROFUNDO_ZMAX := 4.2      # mais longe que um alvo chega (perto da porta do templo)
+const PROFUNDO_VIDRO := 0.42    # bem perto do vidro, onde ele some
+const PROFUNDO_BONUS := 0.40    # acertar ainda longe (mais que isso) vale o dobro
 const PROFUNDO_RAIO_MIN := 30.0 # px: de longe o alvo é pequeno; um mínimo justo para a mira
+const CHAO_TELA := 0.86         # o chão do mar no plano Z = 1 (fração da altura da tela)
 const COR_NEVOA_ALVO := Color(0.52, 0.80, 0.95)
 var _profundo: Node2D = null
+# Efeitos da Rodada 17. load() e não preload(): o Godot 4.6 nunca descarrega
+# um script já carregado, e o que ele pré-carrega ficaria na memória.
+var TEX_CAVALO: Texture2D = load("res://sprites/mar_cavalo.png")
+var TEX_FUMACA: Texture2D = load("res://sprites/fx_fumaca.png")
+var TEX_ONDA: Texture2D = load("res://sprites/fx_onda.png")
+var TEX_FURO_AREIA: Texture2D = load("res://sprites/fx_furo_areia.png")
+var TEX_BOLHA: Texture2D = load("res://sprites/mar_bolha.png")
+var TEX_PROFUNDIDADE: Texture2D = load("res://sprites/mar_profundidade.png")
+const SHADER_FUNDO_PROFUNDO := preload("res://shaders/fundo_profundo.gdshader")
+var _furos: Furos = null              # furos de bala na areia (filho do fundo)
+var _pontos: PontosVoando = null      # "+80" saltando do alvo acertado
+var _mat_soma: CanvasItemMaterial = null
 
 
 func _ready() -> void:
@@ -510,10 +535,13 @@ func _ready() -> void:
 	# frente da cena (algas, bolhas, peixe grande): por cima dos alvos, por
 	# baixo do placar e dos efeitos
 	_profundo = MarProfundo.new()
-	_profundo.z_index = 200
+	_profundo.z_index = 320      # mais perto que qualquer alvo (MarVida.z_desenho)
 	add_child(_profundo)
 
 	_criar_fx_overlay()
+	_pontos = PontosVoando.new()
+	_pontos.fonte = fonte_luckiest
+	fx_front_layer.add_child(_pontos)
 	_criar_hud()
 	_instalar_placar()
 	_criar_hud_combo()
@@ -1659,7 +1687,7 @@ func _forcar_aguaviva_visivel(alvo: Area2D) -> AnimatedSprite2D:
 	anim.self_modulate = Color.WHITE
 	anim.process_mode = Node.PROCESS_MODE_INHERIT
 	anim.speed_scale = 1.0
-	anim.z_index = 50
+	anim.z_index = 1
 	anim.centered = true
 
 	return anim
@@ -1862,8 +1890,25 @@ func _tocar_som_com_atraso(
 
 
 
+## Tiro no chão do mar (da base do templo para baixo): furo na areia com a
+## poeira que fica pairando em cima dele.
+func _furar_chao(pos_global: Vector2) -> bool:
+	var vida := _vida_fundo()
+	if vida == null or _furos == null:
+		return false
+	var p := vida.to_local(pos_global)
+	if p.y < 800.0:
+		return false
+	var esc := lerpf(0.55, 1.15, clampf((p.y - 800.0) / 700.0, 0.0, 1.0))
+	_furos.furar(p, "areia", esc, Color(0.62, 0.78, 0.86))
+	return true
+
+
 func _efeito_erro_aquatico(pos_global: Vector2) -> void:
 	_set_status("SPLASH!")
+	if _furar_chao(pos_global):
+		_registrar_fx_agua(pos_global)
+		return
 
 	# efeito bem mais leve para a tela rodar lisa
 	if splash_erro_leve:
@@ -2539,14 +2584,14 @@ func _efeito_dano_bomba_forte() -> void:
 	dano_nevoa_ativo = true
 	dano_nevoa_t = 0.0
 
-	dano_overlay.color = Color(0.86, 0.02, 0.02, intensidade_dano_bomba)
+	dano_overlay.color = Color(0.86, 0.02, 0.02, 0.0)
 	dano_vinheta_overlay.color = Color(0.22, 0.00, 0.00, min(0.36, intensidade_dano_bomba * 0.90))
 
 	var tw := create_tween()
 	tw.set_parallel(true)
 
-	tw.tween_property(dano_overlay, "color:a", intensidade_dano_bomba, 0.03).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-	tw.tween_property(dano_overlay, "color:a", 0.0, duracao_dano_bomba).set_delay(0.05).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	tw.tween_property(dano_overlay, "color:a", intensidade_dano_bomba * 0.55, 0.12).set_delay(0.10).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	tw.tween_property(dano_overlay, "color:a", 0.0, duracao_dano_bomba).set_delay(0.24).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 
 	tw.tween_property(dano_vinheta_overlay, "color:a", 0.28, 0.04).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 	tw.tween_property(dano_vinheta_overlay, "color:a", 0.0, duracao_dano_bomba + 0.18).set_delay(0.07).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
@@ -3278,6 +3323,16 @@ func _ajustar_background_fullscreen() -> void:
 	background.position = Vector2(floor(tela.x * 0.5), floor(tela.y * 0.5))
 	background.scale = Vector2.ONE * escala
 	background.z_index = -100
+	# a foto vira cena de câmera: cada pixel anda pela distância dele
+	var mat_fundo := background.material as ShaderMaterial
+	if mat_fundo == null and TEX_PROFUNDIDADE != null:
+		mat_fundo = ShaderMaterial.new()
+		mat_fundo.shader = SHADER_FUNDO_PROFUNDO
+		mat_fundo.set_shader_parameter("profundidade", TEX_PROFUNDIDADE)
+		background.material = mat_fundo
+	if mat_fundo != null:
+		mat_fundo.set_shader_parameter("escala", escala)
+		mat_fundo.set_shader_parameter("px_uv", Vector2.ONE / tex_size)
 	if _profundo != null:
 		_profundo.fundo = background
 		_profundo.fundo_base = background.position
@@ -3292,6 +3347,16 @@ func _ajustar_background_fullscreen() -> void:
 		background.add_child(vida)
 		vida.navio_pousou.connect(_ao_navio_pousar)
 	vida.position = -tex_size * 0.5
+	if _furos == null or not is_instance_valid(_furos):
+		_furos = Furos.new()
+		_furos.name = "Furos"
+		_furos.tex_areia = TEX_FURO_AREIA
+		_furos.tex_fumaca = TEX_FUMACA
+		_furos.cor_poeira = Color(0.66, 0.78, 0.82)
+		_furos.deslocar = vida.deslocamento_no_chao
+		vida.add_child(_furos)
+	if _profundo != null:
+		_profundo.ao_mover = vida.ajustar_paralaxe
 
 
 
@@ -3802,7 +3867,7 @@ func _contar_tipo_ativo(tipo: String) -> int:
 	return total
 
 
-func _spawnar_alvo(tipo: String) -> void:
+func _spawnar_alvo(tipo: String, estilo_pedido: String = "") -> void:
 	var modelo: Area2D = null
 
 	match tipo:
@@ -3860,7 +3925,10 @@ func _spawnar_alvo(tipo: String) -> void:
 	novo.monitorable = true
 	novo.monitoring = true
 	novo.input_pickable = true
-	novo.z_index = Z_INDEX_BOMBA if tipo == "bomba" else Z_INDEX_OBJETOS_COMUNS
+	# ordem pela distância (MarVida.z_desenho): o plano comum é Z = 1
+	novo.z_as_relative = false
+	novo.z_index = MarVida.z_desenho(1.0) + (1 if tipo == "bomba" else 0)
+	novo.set_meta("z", 1.0)
 
 	novo.set_meta("tipo_alvo", tipo)
 	novo.set_meta("pontos_alvo", pontos)
@@ -3880,11 +3948,17 @@ func _spawnar_alvo(tipo: String) -> void:
 	alvos_root.add_child(novo)
 	alvos_ativos.append(novo)
 
+	# tamanhos variados (nem todo alvo é do tamanho padrão)
+	escala_base *= randf_range(0.80, 1.24)
+	novo.set_meta("escala_base", escala_base)
 	novo.scale = Vector2.ONE * escala_base
 	_ajustar_collision_shape_por_tipo(novo)
 
-	if partida_iniciada and randf() < float(PROFUNDO_CHANCE.get(tipo, 0.0)):
-		_lancar_do_fundo(novo, tipo, duracao, escala_base)
+	var estilo := _sortear_estilo(tipo) if partida_iniciada else "classico"
+	if estilo_pedido != "":
+		estilo = estilo_pedido
+	if estilo != "classico":
+		_lancar_3d(novo, tipo, estilo, duracao, escala_base)
 		return
 
 	var tela: Vector2 = get_viewport_rect().size
@@ -3911,11 +3985,20 @@ func _spawnar_alvo(tipo: String) -> void:
 
 	_configurar_animacao_spawn(novo)
 
+	# o que cai de cima (vaso, baú e bomba) para no chão do mar e espatifa
+	var ate_o_chao := false
+	if tipo != "aguaviva" and pos_inicial.y < 0.0 and pos_final.y > tela.y:
+		var chao := _chao_na_tela(1.0) - _meia_altura(novo, escala_base) + randf_range(-10.0, 24.0)
+		var s := clampf((chao - pos_inicial.y) / maxf(pos_final.y - pos_inicial.y, 1.0), 0.1, 1.0)
+		pos_final = pos_inicial.lerp(pos_final, s)
+		duracao *= s
+		ate_o_chao = true
+
 	var tween: Tween = create_tween()
 	tween.set_parallel(true)
 	tween.tween_property(novo, "position", pos_final, duracao)\
-		.set_trans(Tween.TRANS_LINEAR)\
-		.set_ease(Tween.EASE_IN_OUT)
+		.set_trans(Tween.TRANS_SINE if ate_o_chao else Tween.TRANS_LINEAR)\
+		.set_ease(Tween.EASE_IN if ate_o_chao else Tween.EASE_IN_OUT)
 
 	if tipo == "bomba":
 		tween.tween_property(novo, "rotation_degrees", novo.rotation_degrees + randf_range(320.0, 560.0), duracao)\
@@ -3933,64 +4016,200 @@ func _spawnar_alvo(tipo: String) -> void:
 			return
 		if bool(novo.get_meta("atingido", false)):
 			return
-		_remover_alvo(novo)
+		if ate_o_chao:
+			_bater_no_chao(novo)
+		else:
+			_remover_alvo(novo)
 	)
 
 
-## 2,5D: o alvo nasce pequenino na porta do templo, lá no fundo, e vem vindo
-## até perto, crescendo e saindo da névoa da água. É perspectiva de verdade
-## (na tela ele anda como 1/distância: devagar longe, rápido perto). Passa um
-## pouco do plano dos outros alvos e some, como quem passou por nós.
-func _lancar_do_fundo(alvo: Area2D, tipo: String, duracao: float, escala: float) -> void:
+func _texturas_fx() -> Dictionary:
+	return {"fumaca": TEX_FUMACA, "onda": TEX_ONDA, "brilho": FundoVivo.brilho_redondo(), "bolha": TEX_BOLHA}
+
+
+func _mostrar_pontos(pos_global: Vector2, pontos: int, de_longe: bool) -> void:
+	if _pontos == null or pontos == 0:
+		return
+	var cor := Color(1.0, 0.86, 0.30) if pontos > 0 else Color(1.0, 0.35, 0.3)
+	if de_longe:
+		cor = Color(0.55, 1.0, 0.95)
+	_pontos.mostrar(get_viewport().get_canvas_transform() * pos_global, ("+%d" % pontos) if pontos > 0 else str(pontos), cor,
+		1.25 if de_longe else 1.0)
+
+
+func _sortear_estilo(tipo: String) -> String:
+	var lista: Array = ESTILOS_3D.get(tipo, [["classico", 1.0]])
+	var r := randf()
+	for par in lista:
+		r -= float(par[1])
+		if r <= 0.0:
+			return String(par[0])
+	return "classico"
+
+
+## Centro da perspectiva: a porta do templo (anda com o fundo na paralaxe).
+func _ponto_de_fuga() -> Vector2:
+	var vida := _vida_fundo()
+	if vida != null and alvos_root != null:
+		return alvos_root.to_local(vida.to_global(MarVida.TEMPLO_PORTA))
+	return get_viewport_rect().size * Vector2(0.43, 0.5)
+
+
+## Onde fica o chão do mar na tela para um objeto à distância z.
+func _chao_na_tela(z: float) -> float:
+	var vp := _ponto_de_fuga()
+	return vp.y + (get_viewport_rect().size.y * CHAO_TELA - vp.y) / z
+
+
+func _meia_altura(alvo: Area2D, escala: float) -> float:
+	var v: Dictionary = _obter_tamanho_visual_do_alvo(alvo)
+	var tam: Vector2 = v.get("size", Vector2(200, 200))
+	return tam.y * 0.40 * escala
+
+
+## 2,5D: o alvo anda num caminho de verdade no espaço (curva de Bézier em X, Y
+## e distância), e a tela mostra a perspectiva: longe é pequeno, lento e com a
+## cor da água; perto é grande e rápido. Os que vêm para o vidro passam bem
+## perto e somem; os que caem batem no chão do mar e espatifam.
+func _lancar_3d(alvo: Area2D, tipo: String, estilo: String, duracao: float, escala: float) -> void:
 	var tela: Vector2 = get_viewport_rect().size
+	var vp := _ponto_de_fuga()
+	var fim_tela := Vector2(randf_range(0.10, 0.90) * tela.x, randf_range(0.34, 0.96) * tela.y)
+	var p3 := Vector3((fim_tela.x - vp.x) * PROFUNDO_VIDRO, (fim_tela.y - vp.y) * PROFUNDO_VIDRO, PROFUNDO_VIDRO)
+	var p0: Vector3
+	var c1: Vector3
+	var c2: Vector3
+	var dur := duracao
+	var cai := false
+	match estilo:
+		"templo":
+			# da porta do templo direto para o vidro
+			var destino := Vector2(randf_range(0.14, 0.86) * tela.x, randf_range(0.30, 0.86) * tela.y) - vp
+			p0 = Vector3(destino.x, destino.y, PROFUNDO_ZMAX)
+			p3 = Vector3(destino.x * 1.1, destino.y * 1.1, PROFUNDO_VIDRO)
+			c1 = p0.lerp(p3, 0.34)
+			c2 = p0.lerp(p3, 0.67)
+			dur *= 1.05
+		"l_cima", "l_lado":
+			var zf := randf_range(1.7, 3.0)
+			var canto_tela := Vector2(randf_range(0.18, 0.82) * tela.x, randf_range(0.30, 0.60) * tela.y)
+			var canto := Vector3((canto_tela.x - vp.x) * zf, (canto_tela.y - vp.y) * zf, zf)
+			if estilo == "l_cima":
+				p0 = Vector3(canto.x, (-160.0 - vp.y) * zf, zf)
+			else:
+				var lado := -1.0 if randf() < 0.5 else 1.0
+				var x_ini := -170.0 if lado < 0.0 else tela.x + 170.0
+				p0 = Vector3((x_ini - vp.x) * zf, canto.y + randf_range(-40.0, 40.0) * zf, zf)
+			# canto bem marcado (um L), depois vem para o vidro
+			c1 = canto
+			c2 = canto.lerp(p3, 0.22)
+			dur *= 1.25
+		_:
+			# queda: do alto até o chão, longe ou perto
+			cai = true
+			var zq := randf_range(1.0, 3.0)
+			var x := (randf_range(0.12, 0.88) * tela.x - vp.x) * zq
+			var y_chao := tela.y * CHAO_TELA - vp.y - _meia_altura(alvo, escala) + randf_range(-8.0, 16.0)
+			p0 = Vector3(x, (-170.0 - vp.y) * zq, zq)
+			p3 = Vector3(x + randf_range(-60.0, 60.0) * zq, y_chao, zq)
+			c1 = p0.lerp(p3, 0.34)
+			c2 = p0.lerp(p3, 0.67)
+			dur *= randf_range(0.78, 0.95) * (0.82 + 0.12 * zq)
 	alvo.set_meta("profundo", true)
+	alvo.set_meta("estilo", estilo)
 	alvo.set_meta("escala_perto", escala)
-	alvo.set_meta("destino", Vector2(randf_range(0.14, 0.86) * tela.x, randf_range(0.30, 0.86) * tela.y))
-	var giro: float = randf_range(320.0, 560.0) if tipo == "bomba" else randf_range(-14.0, 14.0)
+	alvo.set_meta("cai", cai)
+	alvo.set_meta("curva", [p0, c1, c2, p3])
+	var giro: float = randf_range(320.0, 560.0) if tipo == "bomba" else randf_range(-16.0, 16.0)
 	alvo.set_meta("rot_ini", randf_range(-180.0, 180.0) if tipo == "bomba" else randf_range(-6.0, 6.0))
 	alvo.set_meta("rot_giro", giro)
+	alvo.set_meta("balanco", randf() * TAU)
 	_configurar_animacao_spawn(alvo)
-	_mover_do_fundo(0.0, alvo)
+	_mover_3d(0.0, alvo)
 
 	# o tween é do próprio alvo: se ele sair da cena, o tween vai junto
 	var tween: Tween = alvo.create_tween()
-	tween.tween_method(_mover_do_fundo.bind(alvo), 0.0, 1.0, duracao * 1.15)
+	tween.tween_method(_mover_3d.bind(alvo), 0.0, 1.0, dur)
 	alvo.set_meta("tween_queda", tween)
 	tween.finished.connect(func() -> void:
 		if not is_instance_valid(alvo):
 			return
 		if bool(alvo.get_meta("atingido", false)):
 			return
-		_remover_alvo(alvo)
+		if cai:
+			_bater_no_chao(alvo)
+		else:
+			_remover_alvo(alvo)
 	)
 
 
-func _mover_do_fundo(t: float, alvo: Area2D) -> void:
+func _mover_3d(t: float, alvo: Area2D) -> void:
 	if not is_instance_valid(alvo) or bool(alvo.get_meta("atingido", false)):
 		return
-	var vida := _vida_fundo()
-	var tela: Vector2 = get_viewport_rect().size
-	var vp: Vector2 = tela * 0.5
-	if vida != null and alvos_root != null:
-		vp = alvos_root.to_local(vida.to_global(MarVida.TEMPLO_PORTA))
-	var z: float = lerpf(PROFUNDO_Z0, PROFUNDO_Z1, t)
-	var destino: Vector2 = alvo.get_meta("destino", tela * 0.5)
-	alvo.position = vp + (destino - vp) / z
+	var curva: Array = alvo.get_meta("curva", [])
+	if curva.size() < 4:
+		return
+	var cai: bool = alvo.get_meta("cai", false)
+	# a queda acelera um pouco (a água segura); o resto anda igual
+	var u: float = t * t * 0.35 + t * 0.65 if cai else t
+	var v := 1.0 - u
+	var p: Vector3 = curva[0] * (v * v * v) + curva[1] * (3.0 * v * v * u) + curva[2] * (3.0 * v * u * u) + curva[3] * (u * u * u)
+	var z: float = maxf(p.z, 0.2)
+	var vp := _ponto_de_fuga()
+	var balanco: float = alvo.get_meta("balanco", 0.0)
+	var sway := Vector2(sin(t * 7.0 + balanco) * 10.0, 0.0) if cai else Vector2.ZERO
+	# a porta anda com o fundo; o alvo anda o que a distância dele manda
+	var desloca: Vector2 = _profundo.paralaxe_no_fundo(z) if _profundo != null else Vector2.ZERO
+	alvo.position = vp + Vector2(p.x, p.y) / z + sway / z + desloca
+	alvo.set_meta("z", z)
 	var esc: float = float(alvo.get_meta("escala_perto", 1.0)) / z
 	alvo.scale = Vector2.ONE * esc
 	alvo.set_meta("escala_base", esc)
-	alvo.rotation_degrees = float(alvo.get_meta("rot_ini", 0.0)) + float(alvo.get_meta("rot_giro", 0.0)) * t
-	var longe: float = clampf((z - 1.0) / (PROFUNDO_Z0 - 1.0), 0.0, 1.0)
+	alvo.rotation_degrees = float(alvo.get_meta("rot_ini", 0.0)) + float(alvo.get_meta("rot_giro", 0.0)) * t \
+		+ (sin(t * 9.0 + balanco) * 6.0 if cai else 0.0)
+	var longe: float = clampf((z - 1.0) / (PROFUNDO_ZMAX - 1.0), 0.0, 1.0)
 	alvo.set_meta("longe", longe)
 	# de longe ele tem a cor da água e deixa o fundo passar (névoa)
 	var nevoa: float = pow(longe, 0.7) * 0.85
-	var a: float = smoothstep(0.0, 0.08, t) * (1.0 - smoothstep(0.90, 1.0, t))
+	var a: float = smoothstep(0.0, 0.07, t)
+	if not cai:
+		a *= 1.0 - smoothstep(0.86, 1.0, t)
 	var c: Color = Color.WHITE.lerp(COR_NEVOA_ALVO, nevoa)
 	alvo.modulate = Color(c.r, c.g, c.b, a * lerpf(1.0, 0.55, nevoa))
 	# já passou por nós e sumiu: não pega mais tiro
 	alvo.visible = t < 0.5 or a > 0.05
-	var base_z: int = Z_INDEX_BOMBA if String(alvo.get_meta("tipo_alvo", "")) == "bomba" else Z_INDEX_OBJETOS_COMUNS
-	alvo.z_index = base_z - 1 - int(longe * 10.0)
+	alvo.z_index = MarVida.z_desenho(z) + (1 if String(alvo.get_meta("tipo_alvo", "")) == "bomba" else 0)
+
+
+## Vaso, baú ou bomba que caiu até o chão do mar: espatifa (sem ponto e sem
+## castigo: só a chance perdida). A bomba explode lá mesmo.
+func _bater_no_chao(alvo: Area2D) -> void:
+	if not is_instance_valid(alvo) or bool(alvo.get_meta("atingido", false)):
+		return
+	alvo.set_meta("atingido", true)
+	_parar_movimento_do_alvo(alvo)
+	var tipo: String = String(alvo.get_meta("tipo_alvo", ""))
+	var k: float = _perto_do_alvo(alvo)
+	var esc: float = float(alvo.get_meta("escala_base", 1.0))
+	var chao: Vector2 = alvo.global_position + Vector2(0.0, _meia_altura(alvo, esc))
+	var volume := linear_to_db(clampf(k, 0.25, 1.0))
+	match tipo:
+		"bomba":
+			MarExplosao.criar(self, chao, k, true, _texturas_fx(), alvo.z_index + 2)
+			if som_bomba_xploit_stream != null:
+				_tocar_som(som_bomba_xploit_stream, -6.0 + volume, randf_range(0.9, 1.0), 0.0)
+			if k > 0.6:
+				_tremida_rapida(4.0 * k, 3, 0.03)
+		"vaso":
+			MarAcerto.criar(self, alvo, chao, tipo, chao.y)
+			_tocar_som(som_vaso_hit_stream, -6.0 + volume, randf_range(0.92, 1.05), inicio_vaso_hit_seg)
+		"bau":
+			MarAcerto.criar(self, alvo, chao, tipo, chao.y)
+			_tocar_som(som_bau_hit_stream, -5.0 + volume, randf_range(0.92, 1.0), inicio_bau_hit_seg)
+	if _furos != null and tipo != "bomba":
+		_furos.poeira(_furos.to_local(chao), k)
+	alvo.visible = false
+	_remover_alvo(alvo)
 
 
 ## Quanto o alvo está perto (1 = plano normal); bolhas e marcas acompanham.
@@ -4054,6 +4273,23 @@ func _atualizar_idle_aguaviva(alvo: Area2D, delta: float) -> void:
 	anim.position = Vector2(sway_x, sway_y)
 	anim.rotation_degrees = rot
 	anim.scale = Vector2.ONE * pulso
+
+	# brilho bioluminescente atrás do sino, respirando com ele
+	var halo := alvo.get_node_or_null("Brilho") as Sprite2D
+	if halo == null:
+		halo = Sprite2D.new()
+		halo.name = "Brilho"
+		halo.texture = FundoVivo.brilho_redondo()
+		if _mat_soma == null:
+			_mat_soma = CanvasItemMaterial.new()
+			_mat_soma.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
+		halo.material = _mat_soma
+		halo.self_modulate = Color(1.0, 0.38, 0.55) if variante == "a" else Color(0.74, 0.45, 1.0)
+		alvo.add_child(halo)
+		alvo.move_child(halo, 0)
+	halo.position = Vector2(sway_x, sway_y - 46.0)
+	halo.scale = Vector2.ONE * (12.5 * (1.0 + (pulso - 1.0) * 4.0))
+	halo.modulate.a = 0.42 + 0.18 * sin((t * aguaviva_freq_pulso) + seed * 0.41)
 
 	var bubble_t: float = float(alvo.get_meta("aguaviva_bubble_t", 0.18)) - delta
 	if bubble_t <= 0.0:
@@ -4170,6 +4406,11 @@ func _detectar_alvo_no_ponto_visual(pos_global: Vector2) -> Area2D:
 	# (entre os do mesmo plano, o mais novo, como sempre)
 	var melhor: Area2D = null
 	var melhor_longe := 2.0
+	# atrás de uma pedra o tiro pega a pedra, não o alvo
+	var z_pedra := INF
+	var vida := _vida_fundo()
+	if vida != null:
+		z_pedra = vida.z_da_pedra_em(vida.to_local(pos_global))
 	for i in range(alvos_ativos.size() - 1, -1, -1):
 		var alvo: Area2D = alvos_ativos[i]
 
@@ -4182,6 +4423,8 @@ func _detectar_alvo_no_ponto_visual(pos_global: Vector2) -> Area2D:
 		if not alvo.monitoring:
 			continue
 
+		if float(alvo.get_meta("z", 1.0)) > z_pedra:
+			continue
 		if _ponto_esta_sobre_sprite_do_alvo(alvo, pos_global):
 			var longe: float = float(alvo.get_meta("longe", 0.0))
 			if longe < melhor_longe:
@@ -4799,25 +5042,18 @@ func _acertar_alvo(alvo: Area2D, pos_impacto: Vector2 = Vector2.ZERO) -> void:
 		elif som_bomba_explode_stream != null:
 			_tocar_som(som_bomba_explode_stream, -0.1, randf_range(0.97, 1.0), 0.0)
 
-		_flash_tela(Color(1.0, 0.10, 0.08, 0.24))
+		# o vermelho do castigo vem por baixo da explosão (mais fraco), para ela
+		# aparecer inteira
+		_flash_tela(Color(1.0, 0.45, 0.2, 0.10))
 		_efeito_dano_bomba_forte()
 		_tremida_rapida(12.0, 7, 0.022)
 
 		_aplicar_animacao_hit(alvo)
-		_registrar_fx_explosao_bomba(impacto)
+		# explosão debaixo d'água: clarão, anéis de choque, bolha de gás,
+		# água espalhando, fumaça e estilhaços (scripts/mar_explosao.gd)
+		MarExplosao.criar(self, impacto, _perto_do_alvo(alvo), false, _texturas_fx(), alvo.z_index + 2)
 
-		for i in range(3):
-			_registrar_fx_estilhacos(
-				impacto + Vector2(randf_range(-18.0, 18.0), randf_range(-18.0, 18.0)),
-				"bau"
-			)
-
-		for i in range(10):
-			_registrar_fx_agua(
-				impacto + Vector2(randf_range(-24.0, 24.0), randf_range(-24.0, 24.0))
-			)
-
-		var tw_bomba: Tween = create_tween()
+		var tw_bomba: Tween = alvo.create_tween()   # do próprio alvo (some junto com ele)
 		tw_bomba.set_parallel(true)
 		tw_bomba.tween_property(alvo, "scale", Vector2.ONE * (escala_base * 1.35), 0.08).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 		tw_bomba.tween_property(alvo, "rotation_degrees", alvo.rotation_degrees + randf_range(-70.0, 70.0), 0.10)
@@ -4892,8 +5128,21 @@ func _acertar_alvo(alvo: Area2D, pos_impacto: Vector2 = Vector2.ZERO) -> void:
 
 	# pedaços do próprio alvo, brilhos, anéis e bolhas (antes de trocar a
 	# animação: os pedaços saem do quadro que estava na tela)
-	MarAcerto.criar(self, alvo, impacto, tipo)
-	var duracao_hit_anim: float = _aplicar_animacao_hit(alvo)
+	# água-viva e vaso: o efeito é todo nosso (pedaços da própria imagem, a
+	# nuvem de luz da água-viva, o cavalo-marinho saindo do vaso); o baú
+	# ainda abre com a animação dele
+	MarAcerto.criar(self, alvo, impacto, tipo, INF, TEX_CAVALO if tipo == "vaso" else null)
+	var duracao_hit_anim := 0.2
+	if tipo == "aguaviva" or tipo == "vaso":
+		var anim_h := _obter_animated_do_alvo(alvo)
+		if anim_h != null:
+			anim_h.visible = false
+		var halo_h := alvo.get_node_or_null("Brilho") as CanvasItem
+		if halo_h != null:
+			halo_h.visible = false
+	else:
+		duracao_hit_anim = _aplicar_animacao_hit(alvo)
+	_mostrar_pontos(impacto, pontos, de_longe)
 
 	_registrar_fx_agua(impacto)
 
@@ -4905,7 +5154,7 @@ func _acertar_alvo(alvo: Area2D, pos_impacto: Vector2 = Vector2.ZERO) -> void:
 		"bau":
 			_registrar_fx_moedas(impacto)
 
-	var tw: Tween = create_tween()
+	var tw: Tween = alvo.create_tween()   # do próprio alvo: se ele sair antes, o tween (e o callback) vão junto
 	tw.set_parallel(true)
 
 	match tipo:

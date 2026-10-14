@@ -2,22 +2,20 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://cfyipocjb053g"
-path.s3tc="res://.godot/imported/MOON.png-6368545e271ae6135aa34647b0060a54.s3tc.ctex"
-path.etc2="res://.godot/imported/MOON.png-6368545e271ae6135aa34647b0060a54.etc2.ctex"
+uid="uid://cxdxbsomqcorb"
+path="res://.godot/imported/fx_furo_pedra.png-5951285d30f0fd345fc9cf12bfa5d78e.ctex"
 metadata={
-"imported_formats": ["s3tc_bptc", "etc2_astc"],
-"vram_texture": true
+"vram_texture": false
 }
 
 [deps]
 
-source_file="res://sprites/MOON.png"
-dest_files=["res://.godot/imported/MOON.png-6368545e271ae6135aa34647b0060a54.s3tc.ctex", "res://.godot/imported/MOON.png-6368545e271ae6135aa34647b0060a54.etc2.ctex"]
+source_file="res://sprites/fx_furo_pedra.png"
+dest_files=["res://.godot/imported/fx_furo_pedra.png-5951285d30f0fd345fc9cf12bfa5d78e.ctex"]
 
 [params]
 
-compress/mode=2
+compress/mode=0
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

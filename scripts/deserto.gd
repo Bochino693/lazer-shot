@@ -31,6 +31,21 @@ class TargetData:
 	var guinada_t: float = 1.0          # até a próxima guinada (muda de rumo de repente)
 	var swap_idade: float = -1.0       # idade no momento da troca (-1 = nunca trocou)
 	var swap_escala_inicio: float = 1.0  # escala no momento da troca
+	# 3D: o brasão vive na cena do fundo. pos é onde ele estaria no plano
+	# Z = 1; na tela fica em fuga + (pos - fuga) / z + paralaxe da câmera,
+	# com tamanho 1/z. Ele vai se afastando com a idade (era o encolhimento).
+	var z: float = 1.0
+	var z_de: float = 1.0          # distância depois da entrada
+	var z_ate: float = 2.2         # distância no fim da vida
+	var z_entrada: float = 1.0     # de onde entra (horizonte: bem longe)
+	var swap_z: float = 1.0        # distância no momento da troca
+	var tam: float = 1.0           # tamanho próprio (nem todos iguais)
+	var estilo: String = "lado"    # lado | horizonte | alto_l | atras
+	var entrada: float = 0.6       # duração da entrada (s)
+	var saida: String = "vidro"    # vidro (vem para perto e some) | longe
+	var l_virou: bool = false      # alto_l: já fez a quina do L
+	var tela: Vector2 = Vector2.ZERO
+	var alfa: float = 1.0
 
 
 var ranking_nome_layer: CanvasLayer = null
@@ -49,6 +64,20 @@ var spawn_timer_continuo: float = 0.0
 var intervalo_spawn_continuo: float = 0.85
 
 const TeiaAlvo := preload("res://scripts/teia_alvo.gd")
+
+# 3D: estilos de entrada (pesos), quanto dura a saída, a partir de que
+# distância o acerto vale "DE LONGE!" e o bônus dele
+const ESTILOS_3D := {"lado": 0.32, "horizonte": 0.30, "alto_l": 0.24, "atras": 0.14}
+const SAIDA_TEMPO := 0.55
+const Z_DE_LONGE := 2.0
+const BONUS_DE_LONGE := 0.5
+# de trás de quem um brasão "atras" pode sair (px da imagem do fundo)
+const SAIDAS_DE_TRAS := [Vector2(507, 760), Vector2(209, 880), Vector2(812, 880)]
+var TEX_FURO_AREIA: Texture2D = load("res://sprites/fx_furo_areia.png")
+var TEX_FURO_PEDRA: Texture2D = load("res://sprites/fx_furo_pedra.png")
+var TEX_FUMACA: Texture2D = load("res://sprites/fx_fumaca.png")
+var _furos: Furos = null
+var _pontos: PontosVoando = null
 const Pincel := preload("res://scripts/pincel.gd")
 const FONTE_TEXTO: String = "res://fonts/Exo2-Bold.ttf"
 # Títulos: mesma família do jogo (todos os acentos, letras alinhadas).
@@ -142,7 +171,7 @@ const COR_LUA: Color = Color(0.56, 0.84, 1.0, 1.0)
 const COR_HUD_BG: Color = Color(0.04, 0.06, 0.10, 0.98)
 const COR_HUD_CARD: Color = Color(0.07, 0.10, 0.17, 0.98)
 
-@export var offset_sprite_lua: Vector2 = Vector2(0.0, -15.0)
+@export var offset_sprite_lua: Vector2 = Vector2.ZERO   # o brasão novo já é centrado
 
 const JANELA_COMBO: float = 2.2
 
@@ -333,6 +362,8 @@ func _process(delta: float) -> void:
 		Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 
 	_atualizar_mira_hibrida(delta)
+	if _vivo != null:
+		_vivo.mira = mira_pos      # a câmera 3D do fundo anda com a mira
 
 	if ranking_nome_ativo and nome_ranking != null:
 		nome_ranking.mira(mira_pos)
@@ -668,6 +699,15 @@ func _configurar_background() -> void:
 
 	_vivo = DesertoVivo.new()
 	(background_video_root if background_video_root != null else self).add_child(_vivo)
+	# furos de bala na areia e na pedra, com a poeira que fica pairando
+	# (no fundo: andam com a câmera junto com o chão)
+	_furos = Furos.new()
+	_furos.name = "Furos"
+	_furos.tex_areia = TEX_FURO_AREIA
+	_furos.tex_pedra = TEX_FURO_PEDRA
+	_furos.tex_fumaca = TEX_FUMACA
+	_furos.deslocar = _vivo.deslocamento_no_chao
+	_vivo.add_child(_furos)
 
 	if target_root != null:
 		target_root.z_index = 50
@@ -907,6 +947,11 @@ func _configurar_fx_frontal() -> void:
 	fx_front_layer.add_child(fx_front_overlay)
 
 	fx_front_overlay.draw.connect(_desenhar_fx_frontais)
+
+	# "+100" saltando do brasão acertado
+	_pontos = PontosVoando.new()
+	_pontos.fonte = fonte_luckiest
+	fx_front_layer.add_child(_pontos)
 
 
 func _desenhar_mira() -> void:
@@ -1702,7 +1747,7 @@ func _processar_tiro(pos_global: Vector2) -> void:
 		# pedra lasca, areia levanta; marca de bala só na pedra e na areia
 		var mat: String = _vivo.impacto(pos_global) if _vivo != null else "areia"
 		if mat == "pedra" or mat == "areia":
-			_registrar_marca_tiro_errado(pos_global)
+			_furar_fundo(pos_global, mat)
 		_set_status("ERRO!", Color(1.0, 0.28, 0.22, 1.0), 1.2)
 
 
@@ -1885,12 +1930,22 @@ func _ponto_esta_sobre_colisao_do_alvo(area: Area2D, pos_global: Vector2) -> boo
 	return false
 
 
+## O brasão no ponto do tiro: o mais perto que esteja ali e que não esteja
+## escondido atrás de alguma coisa do fundo (cristal, obelisco, coluna).
 func _achar_alvo_no_ponto(pos_global: Vector2) -> int:
+	var melhor: int = -1
+	var melhor_z: float = INF
+	var inv_fundo: float = _vivo.inv_z_na_tela(pos_global) if _vivo != null else 0.0
 	for i in range(alvos_ativos.size() - 1, -1, -1):
 		var alvo: TargetData = alvos_ativos[i]
 		if alvo == null or alvo.node == null or not is_instance_valid(alvo.node):
 			continue
-		if not alvo.node.visible:
+		if not alvo.node.visible or alvo.alfa < 0.5:
+			continue
+		if alvo.z >= melhor_z:
+			continue
+		# atrás de algo do fundo que está mais perto: o tiro pega a coisa
+		if inv_fundo > 1.0 / alvo.z + 0.03:
 			continue
 
 		var anim: AnimatedSprite2D = _obter_animado(alvo.node)
@@ -1919,9 +1974,10 @@ func _achar_alvo_no_ponto(pos_global: Vector2) -> int:
 		)
 
 		if rect.has_point(pos_global):
-			return i
+			melhor = i
+			melhor_z = alvo.z
 
-	return -1
+	return melhor
 
 
 func _resolver_acerto(indice: int) -> void:
@@ -1940,7 +1996,10 @@ func _resolver_acerto(indice: int) -> void:
 	alvos_ativos.remove_at(indice)
 
 	if alvo.tipo == modo_atual:
-		pontuacao_total += alvo.valor_correto
+		# acertar lá longe (pequeno, no meio da névoa) vale mais
+		var de_longe: bool = alvo.z >= Z_DE_LONGE
+		var bonus_longe: int = int(round(alvo.valor_correto * BONUS_DE_LONGE / 10.0)) * 10 if de_longe else 0
+		pontuacao_total += alvo.valor_correto + bonus_longe
 		total_acertos += 1
 		_registrar_hit_combo(alvo.tipo)
 		if _vivo != null:
@@ -1951,10 +2010,14 @@ func _resolver_acerto(indice: int) -> void:
 			bonus_combo = combo_qtd * 5
 			pontuacao_total += bonus_combo
 
-		if bonus_combo > 0:
-			_set_status("%s %s   COMBO +%d" % [alvo.tipo.to_upper(), _texto_resultado(alvo.valor_correto), bonus_combo], Color(0.56, 1.0, 0.60, 1.0), 1.55)
+		var cor_ok := Color(0.56, 1.0, 0.60, 1.0)
+		if de_longe:
+			_set_status("DE LONGE! +%d" % (alvo.valor_correto + bonus_longe), Color(1.0, 0.86, 0.30, 1.0), 1.55)
+		elif bonus_combo > 0:
+			_set_status("%s %s   COMBO +%d" % [alvo.tipo.to_upper(), _texto_resultado(alvo.valor_correto), bonus_combo], cor_ok, 1.55)
 		else:
-			_set_status("%s %s" % [alvo.tipo.to_upper(), _texto_resultado(alvo.valor_correto)], Color(0.56, 1.0, 0.60, 1.0), 1.45)
+			_set_status("%s %s" % [alvo.tipo.to_upper(), _texto_resultado(alvo.valor_correto)], cor_ok, 1.45)
+		_mostrar_pontos(alvo.tela, alvo.valor_correto + bonus_longe + bonus_combo, de_longe)
 	else:
 		pontuacao_total -= alvo.penalidade_errado
 		total_erros += 1
@@ -1962,6 +2025,7 @@ func _resolver_acerto(indice: int) -> void:
 		if _vivo != null:
 			_vivo.evento("astro_errado", MiraGlobal.pos)
 		_set_status("%s -%d" % [alvo.tipo.to_upper(), alvo.penalidade_errado], Color(1.0, 0.26, 0.22, 1.0), 1.75)
+		_mostrar_pontos(alvo.tela, -alvo.penalidade_errado, false)
 
 	_explodir_alvo_visual(alvo)
 
@@ -2003,7 +2067,6 @@ func _trocar_modo() -> void:
 func _atualizar_alvos(delta: float) -> void:
 	if alvos_ativos.is_empty():
 		return
-	var tela: Vector2 = get_viewport_rect().size
 	for i in range(alvos_ativos.size() - 1, -1, -1):
 		var alvo: TargetData = alvos_ativos[i]
 		if alvo == null:
@@ -2022,34 +2085,48 @@ func _atualizar_alvos(delta: float) -> void:
 		if alvo.idade >= alvo.vida:
 			_remover_alvo(i)
 			continue
+		_profundidade_do_alvo(alvo)
+		var entrando: bool = alvo.idade < alvo.entrada
+		var saindo: bool = alvo.idade > alvo.vida - SAIDA_TEMPO
 		var pos: Vector2 = alvo.pos
 		var vel: Vector2 = alvo.vel
+		# alto em L: desce reto e, na quina, vira de lado
+		if alvo.estilo == "alto_l" and not alvo.l_virou and alvo.idade >= alvo.entrada * 0.8:
+			alvo.l_virou = true
+			var lado: float = 1.0 if pos.x < _fuga().x else -1.0
+			vel = Vector2(lado, randf_range(-0.18, 0.12)).normalized() * alvo.vel_base
 		# guinada: de tempos em tempos o alvo muda de rumo de repente
-		alvo.guinada_t -= delta
-		if alvo.guinada_t <= 0.0:
-			alvo.guinada_t = randf_range(0.55, 1.3) / sqrt(nivel_dificuldade)
-			vel = vel.rotated(deg_to_rad(randf_range(35.0, 85.0)) * (1.0 if randf() < 0.5 else -1.0))
+		if not entrando:
+			alvo.guinada_t -= delta
+			if alvo.guinada_t <= 0.0:
+				alvo.guinada_t = randf_range(0.55, 1.3) / sqrt(nivel_dificuldade)
+				vel = vel.rotated(deg_to_rad(randf_range(35.0, 85.0)) * (1.0 if randf() < 0.5 else -1.0))
 		var raio_col: float = _raio_colisao_alvo(alvo)
-		# BORDAS: invertem com pequena guinada aleatória pra não cair em loop
-		if pos.x < raio_col:
-			pos.x = raio_col
-			vel.x = abs(vel.x) + randf_range(20.0, 70.0)
-			vel.y += randf_range(-60.0, 60.0)
-		if pos.x > tela.x - raio_col:
-			pos.x = tela.x - raio_col
-			vel.x = -(abs(vel.x) + randf_range(20.0, 70.0))
-			vel.y += randf_range(-60.0, 60.0)
-		if pos.y < faixa_spawn_topo + raio_col:
-			pos.y = faixa_spawn_topo + raio_col
-			vel.y = abs(vel.y) + randf_range(20.0, 70.0)
-			vel.x += randf_range(-60.0, 60.0)
-		if pos.y > tela.y - faixa_spawn_base_margem - raio_col:
-			pos.y = tela.y - faixa_spawn_base_margem - raio_col
-			vel.y = -(abs(vel.y) + randf_range(20.0, 70.0))
-			vel.x += randf_range(-60.0, 60.0)
+		# BORDAS da tela na distância do brasão (no plano Z = 1 a área cresce
+		# com z): invertem com pequena guinada pra não cair em loop. Longe, o
+		# chão sobe (o brasão não entra na areia). Na entrada e na saída, livre.
+		var lim := _limites_no_plano(alvo.z, raio_col)
+		if not entrando and not saindo:
+			var empurra: float = alvo.z
+			if pos.x < lim.position.x:
+				pos.x = lim.position.x
+				vel.x = abs(vel.x) + randf_range(20.0, 70.0) * empurra
+				vel.y += randf_range(-60.0, 60.0)
+			if pos.x > lim.end.x:
+				pos.x = lim.end.x
+				vel.x = -(abs(vel.x) + randf_range(20.0, 70.0) * empurra)
+				vel.y += randf_range(-60.0, 60.0)
+			if pos.y < lim.position.y:
+				pos.y = lim.position.y
+				vel.y = abs(vel.y) + randf_range(20.0, 70.0) * empurra
+				vel.x += randf_range(-60.0, 60.0)
+			if pos.y > lim.end.y:
+				pos.y = lim.end.y
+				vel.y = -(abs(vel.y) + randf_range(20.0, 70.0) * empurra)
+				vel.x += randf_range(-60.0, 60.0)
 		# as guinadas das bordas mudam a direção, não a rapidez
 		var velmag: float = vel.length()
-		var vel_teto: float = alvo.vel_base * 1.15
+		var vel_teto: float = alvo.vel_base * (1.35 if entrando else 1.15)
 		if velmag > vel_teto:
 			vel = vel * (vel_teto / velmag)
 			velmag = vel_teto
@@ -2061,43 +2138,27 @@ func _atualizar_alvos(delta: float) -> void:
 			else:
 				vel = vel.normalized() * velocidade_minima_alvo
 		# Detector de "ficou enroscado em um canto"
-		var perto_de_canto: bool = (
-			(pos.x <= raio_col + 8.0 or pos.x >= tela.x - raio_col - 8.0)
+		var perto_de_canto: bool = not entrando and not saindo and (
+			(pos.x <= lim.position.x + 8.0 or pos.x >= lim.end.x - 8.0)
 			and
-			(pos.y <= faixa_spawn_topo + raio_col + 8.0
-				or pos.y >= tela.y - faixa_spawn_base_margem - raio_col - 8.0)
+			(pos.y <= lim.position.y + 8.0 or pos.y >= lim.end.y - 8.0)
 		)
 		if perto_de_canto:
 			alvo.tempo_sem_se_mover += delta
 			if alvo.tempo_sem_se_mover >= 0.35:
 				# expulsa em direção ao centro
-				var ao_centro: Vector2 = (tela * 0.5 - pos).normalized()
+				var ao_centro: Vector2 = (lim.get_center() - pos).normalized()
 				vel = ao_centro * (velocidade_minima_alvo * 2.2)
 				alvo.tempo_sem_se_mover = 0.0
 		else:
 			alvo.tempo_sem_se_mover = 0.0
-		pos += vel * delta
+		# no plano Z = 1 o passo é maior longe; na tela, longe anda um pouco
+		# mais devagar (1/raiz(z)), como coisa distante
+		pos += vel * sqrt(alvo.z) * delta
 		alvo.pos = pos
 		alvo.vel = vel
-
 		var progresso: float = clamp(alvo.idade / max(alvo.vida, 0.01), 0.0, 1.0)
-		# encolhe rápido no começo e passa a maior parte da vida pequeno
-		var encolhe: float = 1.0 - pow(1.0 - progresso, 2.4)
-		alvo.raio = lerp(alvo.raio_inicial, alvo.raio_final, encolhe)
-
-		# ============== ESCALA DO BRASÃO ==============
-		# Comportamento normal: começa em alvo_scale_base e encolhe pra alvo_scale_min.
-		# Pós-troca: começa do tamanho que estava quando trocou e CRESCE de volta pra alvo_scale_base.
-		var escala_atual: float
-		if alvo.swap_idade >= 0.0:
-			var tempo_apos_swap: float = max(alvo.idade - alvo.swap_idade, 0.0)
-			var duracao_crescimento: float = max(alvo.vida - alvo.swap_idade, 0.5)
-			var prog_cresc: float = clamp(tempo_apos_swap / duracao_crescimento, 0.0, 1.0)
-			escala_atual = lerp(alvo.swap_escala_inicio, alvo_scale_base, prog_cresc)
-		else:
-			escala_atual = lerp(alvo_scale_base, alvo_scale_min, encolhe)
-		alvo.node.scale = Vector2.ONE * escala_atual
-		# ==============================================
+		alvo.raio = lerp(alvo.raio_inicial, alvo.raio_final, progresso)
 
 	_resolver_colisoes_entre_alvos()
 
@@ -2106,7 +2167,7 @@ func _atualizar_alvos(delta: float) -> void:
 			continue
 		if alvo.node == null or not is_instance_valid(alvo.node):
 			continue
-		alvo.node.global_position = alvo.pos
+		_posicionar_alvo_3d(alvo)
 		var anim: AnimatedSprite2D = _obter_animado(alvo.node)
 		if anim != null:
 			anim.centered = true
@@ -2119,9 +2180,104 @@ func _atualizar_alvos(delta: float) -> void:
 			alvo.halo.global_position = centro_visual
 		if alvo.brilho != null and is_instance_valid(alvo.brilho):
 			alvo.brilho.global_position = centro_visual
-		if alvo.brilho_frente != null and is_instance_valid(alvo.brilho_frente):
-			alvo.brilho_frente.global_position = centro_visual
 		_atualizar_efeito_alvo(alvo)
+
+
+# ───────────────────────────────────────────── 3D dos brasões
+## Ponto de fuga da cena (pé das pirâmides), na tela.
+func _fuga() -> Vector2:
+	if _vivo != null:
+		return _vivo.ponto_de_fuga()
+	return get_viewport_rect().size * Vector2(0.5, 0.46)
+
+
+## Onde fica no plano Z = 1 um ponto s da tela visto à distância z.
+func _no_plano(s_tela: Vector2, z: float) -> Vector2:
+	var f := _fuga()
+	return f + (s_tela - f) * z
+
+
+## Área livre do brasão no plano Z = 1, na distância z: a tela inteira (menos
+## o placar e o rodapé) e, embaixo, o chão naquela distância.
+func _limites_no_plano(z: float, r: float) -> Rect2:
+	var tela: Vector2 = get_viewport_rect().size
+	var f := _fuga()
+	var baixo: float = tela.y - faixa_spawn_base_margem
+	if _vivo != null:
+		baixo = minf(baixo, f.y + (_vivo.chao_1() - f.y) / maxf(z, 0.3))
+	var a := Vector2(r, faixa_spawn_topo + r)
+	var b := Vector2(tela.x - r, maxf(baixo - r, a.y + 10.0))
+	var pa := f + (a - f) * z
+	var pb := f + (b - f) * z
+	return Rect2(pa, pb - pa)
+
+
+## A distância do brasão agora: entra (do horizonte vem vindo; de trás do
+## cristal sai), vai se afastando com a idade (o antigo encolhimento), depois
+## de trocar de brasão volta para perto, e na saída vem até o vidro ou some
+## lá longe.
+func _profundidade_do_alvo(alvo: TargetData) -> void:
+	var t: float = alvo.idade
+	var fim_corpo: float = maxf(alvo.vida - SAIDA_TEMPO, alvo.entrada + 0.1)
+	var z: float
+	if alvo.swap_idade >= 0.0:
+		var k: float = clampf((t - alvo.swap_idade) / maxf(fim_corpo - alvo.swap_idade, 0.3), 0.0, 1.0)
+		z = lerpf(alvo.swap_z, alvo.z_de, k)
+	else:
+		var p: float = clampf((t - alvo.entrada) / (fim_corpo - alvo.entrada), 0.0, 1.0)
+		z = lerpf(alvo.z_de, alvo.z_ate, 1.0 - pow(1.0 - p, 2.0))
+	var alfa: float = 1.0
+	if t < alvo.entrada:
+		var e: float = t / alvo.entrada
+		e = 1.0 - (1.0 - e) * (1.0 - e)
+		z = lerpf(alvo.z_entrada, z, e)
+		if alvo.estilo == "horizonte" or alvo.estilo == "alto_l":
+			alfa = clampf(t / 0.22, 0.0, 1.0)
+	if t > alvo.vida - SAIDA_TEMPO:
+		var k: float = clampf((t - (alvo.vida - SAIDA_TEMPO)) / SAIDA_TEMPO, 0.0, 1.0)
+		if alvo.saida == "vidro":
+			z = lerpf(z, 0.48, k * k)
+			alfa = 1.0 - smoothstep(0.35, 1.0, k)
+		else:
+			z = lerpf(z, 7.0, k * k)
+			alfa = 1.0 - smoothstep(0.45, 1.0, k)
+	alvo.z = z
+	alvo.alfa = alfa
+
+
+## Põe o brasão na tela pela distância: posição, tamanho, ordem de desenho
+## (o mais perto por cima), névoa e o "esconde atrás" do shader.
+func _posicionar_alvo_3d(alvo: TargetData) -> void:
+	var f := _fuga()
+	var cam: Vector2 = _vivo.paralaxe(alvo.z) if _vivo != null else Vector2.ZERO
+	alvo.tela = f + (alvo.pos - f) / alvo.z + cam
+	alvo.node.global_position = alvo.tela
+	alvo.node.scale = Vector2.ONE * (alvo_scale_base * alvo.tam / alvo.z)
+	alvo.node.z_as_relative = false
+	alvo.node.z_index = _z_desenho(alvo.z)
+	var anim: AnimatedSprite2D = _obter_animado(alvo.node)
+	if anim != null:
+		anim.self_modulate.a = alvo.alfa
+		anim.set_instance_shader_parameter("inv_z", 1.0 / alvo.z)
+		anim.set_instance_shader_parameter("nevoa", _nevoa(alvo.z))
+
+
+func _z_desenho(z: float) -> int:
+	return 100 + clampi(int(round(60.0 / maxf(z, 0.3))), 0, 190)
+
+
+## Névoa da distância: nada até 1,5; longe cobre até a metade.
+func _nevoa(z: float) -> float:
+	return clampf((z - 1.5) / 6.0, 0.0, 0.5)
+
+
+func _sortear_estilo_3d() -> String:
+	var r := randf()
+	for nome: String in ESTILOS_3D:
+		r -= float(ESTILOS_3D[nome])
+		if r <= 0.0:
+			return nome
+	return "lado"
 
 
 func _raio_colisao_alvo(alvo: TargetData) -> float:
@@ -2161,6 +2317,10 @@ func _resolver_colisoes_entre_alvos() -> void:
 				if a.tipo == b.tipo:
 					continue
 				# <
+				# 3D: só esbarra quem está na mesma distância (um passa na
+				# frente do outro) e já entrou de vez
+				if absf(a.z - b.z) > 0.35 or a.alfa < 0.95 or b.alfa < 0.95:
+					continue
 
 				var delta_pos: Vector2 = b.pos - a.pos
 				var dist: float = delta_pos.length()
@@ -2170,9 +2330,10 @@ func _resolver_colisoes_entre_alvos() -> void:
 					dist = 1.0
 
 				var normal: Vector2 = delta_pos / dist
-				var raio_a: float = _raio_colisao_alvo(a)
-				var raio_b: float = _raio_colisao_alvo(b)
-				var dist_min: float = raio_a + raio_b + margem_colisao_alvos
+				# raios no plano Z = 1 (na tela o raio é r; no plano, r * z)
+				var raio_a: float = _raio_colisao_alvo(a) * a.z
+				var raio_b: float = _raio_colisao_alvo(b) * b.z
+				var dist_min: float = raio_a + raio_b + margem_colisao_alvos * (a.z + b.z) * 0.5
 
 				if dist < dist_min:
 					var overlap: float = dist_min - dist
@@ -2202,10 +2363,12 @@ func _aplicar_sensibilidade_global() -> void:
 
 
 func _max_alvos_para_modo() -> int:
-	var base: int = 5
+	# 3D: mais brasões (os de longe são pequenos e se escondem atrás das
+	# coisas, os de perto passam na frente)
+	var base: int = 7
 	if pontuacao_total >= 1500:
 		base += 1
-	return mini(9, base + int(floor(nivel_dificuldade - 1.0)))
+	return mini(11, base + int(floor(nivel_dificuldade - 1.0)))
 
 
 func _gerar_onda_inicial() -> void:
@@ -2234,8 +2397,9 @@ func _spawn_continuo(delta: float) -> void:
 
 	spawn_timer_continuo -= delta
 
-	var intervalo: float = intervalo_spawn_continuo
-	intervalo = max(intervalo_spawn_continuo_min, intervalo - (nivel_dificuldade - 1.0) * 0.07)
+	# 3D: mais brasões ao mesmo tempo (nascem mais seguido)
+	var intervalo: float = intervalo_spawn_continuo * 0.7
+	intervalo = max(intervalo_spawn_continuo_min * 0.8, intervalo - (nivel_dificuldade - 1.0) * 0.07)
 
 	if spawn_timer_continuo <= 0.0:
 		spawn_timer_continuo = randf_range(intervalo * 0.65, intervalo * 1.35)
@@ -2280,68 +2444,81 @@ func _spawn_alvo_interno(tipo: String) -> void:
 		return
 
 	target_root.add_child(alvo_node)
-
-	alvo_node.visible = true
-	alvo_node.process_mode = Node.PROCESS_MODE_INHERIT
-	alvo_node.monitoring = true
-	alvo_node.monitorable = true
-	alvo_node.input_pickable = false
-	alvo_node.z_index = 80
-	alvo_node.modulate = Color(1, 1, 1, 1)
-
-	var anim: AnimatedSprite2D = _obter_animado(alvo_node)
-	if anim != null and anim.sprite_frames != null:
-		var nome_anim: StringName = anim.sprite_frames.get_animation_names()[0]
-		if anim.sprite_frames.has_animation("idle"):
-			nome_anim = &"idle"
-		anim.visible = true
-		anim.centered = true
-		anim.position = Vector2.ZERO
-		anim.play(nome_anim)
-		anim.frame = 0
-
-	for filho in alvo_node.get_children():
-		if filho is CollisionShape2D:
-			(filho as CollisionShape2D).disabled = false
+	_preparar_no_do_alvo(alvo_node)
 
 	var tela: Vector2 = get_viewport_rect().size
-	var side: int = randi() % 4
-	var pos: Vector2 = Vector2.ZERO
-	var vel: Vector2 = Vector2.ZERO
+	var f := _fuga()
 	var y_min: float = faixa_spawn_topo
 	var y_max: float = tela.y - faixa_spawn_base_margem
 
-	match side:
-		0:
-			pos = Vector2(-110.0, randf_range(y_min, y_max))
-			vel = Vector2(randf_range(230.0, 360.0), randf_range(-120.0, 120.0))
-		1:
-			pos = Vector2(tela.x + 110.0, randf_range(y_min, y_max))
-			vel = Vector2(-randf_range(230.0, 360.0), randf_range(-120.0, 120.0))
-		2:
-			pos = Vector2(randf_range(120.0, tela.x - 120.0), tela.y + 110.0)
-			vel = Vector2(randf_range(-140.0, 140.0), -randf_range(240.0, 380.0))
-		_:
-			pos = Vector2(randf_range(120.0, tela.x - 120.0), y_min + 10.0)
-			vel = Vector2(randf_range(-130.0, 130.0), randf_range(180.0, 280.0))
-
-	# só a direção vem do lado de entrada; a rapidez é a do ritmo atual
+	# só a direção vem do jeito de entrar; a rapidez é a do ritmo atual
 	var rapidez: float = randf_range(velocidade_alvo_min, velocidade_alvo_max)
 	rapidez *= 1.0 + (nivel_dificuldade - 1.0) * 0.15
 	if pontuacao_total >= 800:
 		rapidez *= 1.10
-	vel = vel.normalized() * rapidez
 
 	var alvo: TargetData = TargetData.new()
 	alvo.node = alvo_node
 	alvo.tipo = tipo
-	alvo.pos = pos
-	alvo.vel = vel
 	alvo.vel_base = rapidez
 	alvo.idade = 0.0
+	# 3D: cada brasão com o seu tamanho, a sua distância e o seu jeito de
+	# entrar e de sair
+	alvo.tam = randf_range(0.86, 1.16)
+	alvo.z_de = randf_range(0.95, 1.35)
+	alvo.z_ate = randf_range(1.9, 2.9)
+	alvo.saida = "vidro" if randf() < 0.5 else "longe"
+	alvo.estilo = _sortear_estilo_3d()
+	var pos: Vector2
+	var vel: Vector2
+	match alvo.estilo:
+		"horizonte":
+			# nasce lá longe, quase no pé das pirâmides, e vem vindo
+			alvo.entrada = 0.85
+			alvo.z_entrada = randf_range(5.0, 7.0)
+			var s := Vector2(randf_range(150.0, tela.x - 150.0), randf_range(y_min + 80.0, minf(f.y + 260.0, y_max - 120.0)))
+			pos = _no_plano(s, alvo.z_de)
+			vel = Vector2.RIGHT.rotated(randf() * TAU)
+		"alto_l":
+			# cai do alto, reto, e na quina vira de lado (um L)
+			alvo.entrada = 0.8
+			alvo.z_entrada = alvo.z_de
+			var s := Vector2(randf_range(170.0, tela.x - 170.0), y_min - 150.0)
+			pos = _no_plano(s, alvo.z_de)
+			vel = Vector2(randf_range(-0.10, 0.10), 1.0)
+			rapidez *= 1.3
+		"atras":
+			# sai de trás do cristal ou de um obelisco e vem para a frente
+			alvo.entrada = 0.75
+			alvo.z_entrada = randf_range(1.75, 2.2)
+			alvo.z_de = randf_range(0.95, 1.12)
+			var canto: Vector2 = SAIDAS_DE_TRAS[randi() % SAIDAS_DE_TRAS.size()]
+			var s: Vector2 = _vivo.get_global_transform() * canto if _vivo != null else f
+			pos = _no_plano(s, alvo.z_entrada)
+			var lado: float = signf(s.x - f.x) if absf(s.x - f.x) > 40.0 else (1.0 if randf() < 0.5 else -1.0)
+			vel = Vector2(lado, randf_range(-0.7, -0.15))
+		_:
+			# de um lado da tela (ou de baixo), como antes
+			alvo.entrada = 0.6
+			alvo.z_entrada = alvo.z_de
+			var s := Vector2.ZERO
+			match randi() % 3:
+				0:
+					s = Vector2(-90.0, randf_range(y_min + 60.0, y_max - 60.0))
+					vel = Vector2(randf_range(230.0, 360.0), randf_range(-120.0, 120.0))
+				1:
+					s = Vector2(tela.x + 90.0, randf_range(y_min + 60.0, y_max - 60.0))
+					vel = Vector2(-randf_range(230.0, 360.0), randf_range(-120.0, 120.0))
+				_:
+					s = Vector2(randf_range(160.0, tela.x - 160.0), tela.y + 60.0)
+					vel = Vector2(randf_range(-140.0, 140.0), -randf_range(240.0, 380.0))
+			pos = _no_plano(s, alvo.z_de)
+	alvo.z = alvo.z_entrada
+	alvo.pos = pos
+	alvo.vel = vel.normalized() * rapidez
 
 	# tempo de tela suficiente para mirar; encurta um pouco com o nível
-	alvo.vida = max(2.0, randf_range(2.8, 3.6) - (nivel_dificuldade - 1.0) * 0.2)
+	alvo.vida = max(2.4, randf_range(3.0, 3.8) - (nivel_dificuldade - 1.0) * 0.2)
 	alvo.guinada_t = randf_range(0.5, 1.1)
 
 	alvo.raio_inicial = randf_range(42.0, 52.0)
@@ -2379,45 +2556,65 @@ func _spawn_alvo_interno(tipo: String) -> void:
 	# só troca se a vida for longa o bastante para o jogador notar
 	if alvo.vida >= 1.8 and randf() < chance_troca:
 		# Quanto maior a chance, mais cedo a troca acontece (mais cruel).
-		# chance alta -> troca já em 25% da vida; chance baixa -> só lá pelos 70%.
+		# chance alta -> troca já em 35% da vida; chance baixa -> só lá pelos 70%.
 		var t_min: float = lerp(0.55, 0.35, chance_troca / chance_troca_brasao_max)
-		var t_max: float = lerp(0.80, 0.60, chance_troca / chance_troca_brasao_max)
-		alvo.tempo_para_trocar = alvo.vida * randf_range(t_min, t_max)
+		var t_max: float = lerp(0.75, 0.60, chance_troca / chance_troca_brasao_max)
+		alvo.tempo_para_trocar = maxf(alvo.vida * randf_range(t_min, t_max), alvo.entrada + 0.2)
 		alvo.ja_trocou = false
 	else:
 		alvo.tempo_para_trocar = 0.0
 		alvo.ja_trocou = true
 
-	alvo_node.global_position = pos
-	alvo_node.scale = Vector2.ONE * alvo_scale_base
-
-	if tipo == MODO_SOL:
-		alvo.halo = _criar_halo_sol()
-		target_root.add_child(alvo.halo)
-		alvo.halo.visible = true
-		alvo.halo.global_position = pos
-		alvo.halo.z_index = alvo_node.z_index + 1
-
-		alvo.brilho_frente = _criar_faixa_luz_frontal(Color(1.0, 0.82, 0.18, 1.0))
-		target_root.add_child(alvo.brilho_frente)
-		alvo.brilho_frente.visible = true
-		alvo.brilho_frente.global_position = pos
-		alvo.brilho_frente.z_index = alvo_node.z_index + 2
-	else:
-		alvo.brilho = _criar_brilho_lua()
-		target_root.add_child(alvo.brilho)
-		alvo.brilho.visible = true
-		alvo.brilho.global_position = pos
-		alvo.brilho.z_index = alvo_node.z_index + 1
-
-		alvo.brilho_frente = _criar_faixa_luz_frontal(Color(1.0, 1.0, 1.0, 1.0))
-		target_root.add_child(alvo.brilho_frente)
-		alvo.brilho_frente.visible = true
-		alvo.brilho_frente.global_position = pos
-		alvo.brilho_frente.z_index = alvo_node.z_index + 2
-
+	_criar_teia_do_alvo(alvo)
+	_profundidade_do_alvo(alvo)
+	_posicionar_alvo_3d(alvo)
 	_atualizar_efeito_alvo(alvo)
 	alvos_ativos.append(alvo)
+
+
+## Deixa a cópia do modelo pronta: animação do começo, sem física (o tiro é
+## conferido à mão) e com o material 3D (some atrás do que está mais perto).
+func _preparar_no_do_alvo(no: Area2D) -> void:
+	no.visible = true
+	no.process_mode = Node.PROCESS_MODE_INHERIT
+	no.monitoring = false
+	no.monitorable = false
+	no.input_pickable = false
+	no.z_as_relative = false
+	no.z_index = _z_desenho(1.0)
+	no.modulate = Color(1, 1, 1, 1)
+	var anim: AnimatedSprite2D = _obter_animado(no)
+	if anim != null and anim.sprite_frames != null:
+		var nome_anim: StringName = anim.sprite_frames.get_animation_names()[0]
+		if anim.sprite_frames.has_animation("idle"):
+			nome_anim = &"idle"
+		anim.visible = true
+		anim.centered = true
+		anim.position = Vector2.ZERO
+		anim.play(nome_anim)
+		anim.frame = 0
+		if _vivo != null:
+			anim.material = _vivo.material_alvo
+	for filho in no.get_children():
+		if filho is CollisionShape2D:
+			(filho as CollisionShape2D).disabled = true
+
+
+## A teia de luz atrás do brasão (anéis e raios na cor do astro).
+func _criar_teia_do_alvo(alvo: TargetData) -> void:
+	var teia: Node2D
+	if alvo.tipo == MODO_SOL:
+		alvo.halo = _criar_halo_sol()
+		teia = alvo.halo
+	else:
+		alvo.brilho = _criar_brilho_lua()
+		teia = alvo.brilho
+	target_root.add_child(teia)
+	teia.visible = true
+	teia.global_position = alvo.tela
+	teia.z_index = alvo.node.z_index - 1
+	if _vivo != null:
+		teia.material = _vivo.material_alvo
 
 
 func _trocar_tipo_alvo(alvo: TargetData) -> void:
@@ -2427,10 +2624,7 @@ func _trocar_tipo_alvo(alvo: TargetData) -> void:
 		return
 
 	var novo_tipo: String = MODO_LUA if alvo.tipo == MODO_SOL else MODO_SOL
-	var pos_atual: Vector2 = alvo.pos
 	var vel_atual: Vector2 = alvo.vel
-	var escala_atual: Vector2 = alvo.node.scale
-	var z_atual: int = alvo.node.z_index
 
 	# remove halos/brilhos antigos
 	if alvo.halo != null and is_instance_valid(alvo.halo):
@@ -2454,40 +2648,24 @@ func _trocar_tipo_alvo(alvo: TargetData) -> void:
 		return
 
 	target_root.add_child(novo_node)
-	novo_node.visible = true
-	novo_node.process_mode = Node.PROCESS_MODE_INHERIT
-	novo_node.monitoring = true
-	novo_node.monitorable = true
-	novo_node.input_pickable = false
-	novo_node.z_index = z_atual
-	novo_node.global_position = pos_atual
-	novo_node.scale = escala_atual
-
-	var anim: AnimatedSprite2D = _obter_animado(novo_node)
-	if anim != null and anim.sprite_frames != null:
-		var nome_anim: StringName = anim.sprite_frames.get_animation_names()[0]
-		if anim.sprite_frames.has_animation("idle"):
-			nome_anim = &"idle"
-		anim.visible = true
-		anim.centered = true
-		anim.position = Vector2.ZERO
-		anim.play(nome_anim)
-
-	for filho in novo_node.get_children():
-		if filho is CollisionShape2D:
-			(filho as CollisionShape2D).disabled = false
+	_preparar_no_do_alvo(novo_node)
+	novo_node.global_position = node_antigo.global_position
+	novo_node.scale = node_antigo.scale
+	novo_node.z_index = node_antigo.z_index
 
 	# flash branco bem visível avisando a troca
 	novo_node.modulate = Color(2.4, 2.4, 2.4, 1.0)
 	var tw := create_tween()
 	tw.tween_property(novo_node, "modulate", Color.WHITE, 0.40)
 
-	# Snapshot do tamanho atual do brasão que tá morrendo
-	alvo.swap_escala_inicio = max(abs(escala_atual.x), abs(escala_atual.y))
+	# o brasão novo volta para perto (cresce e atrapalha)
+	alvo.swap_escala_inicio = max(abs(node_antigo.scale.x), abs(node_antigo.scale.y))
 	alvo.swap_idade = alvo.idade
+	alvo.swap_z = alvo.z
+	alvo.z_de = randf_range(0.95, 1.15)
 
 	# Dá vida extra pro novo brasão crescer e atrapalhar
-	alvo.vida = alvo.idade + randf_range(1.4, 2.2)
+	alvo.vida = alvo.idade + randf_range(1.4, 2.2) + SAIDA_TEMPO
 
 	node_antigo.queue_free()
 
@@ -2499,31 +2677,11 @@ func _trocar_tipo_alvo(alvo: TargetData) -> void:
 	if novo_tipo == MODO_SOL:
 		alvo.raio_colisao_base = 42.0
 		alvo.raio_miolo_base = 26.0
-		alvo.halo = _criar_halo_sol()
-		target_root.add_child(alvo.halo)
-		alvo.halo.visible = true
-		alvo.halo.global_position = pos_atual
-		alvo.halo.z_index = z_atual - 1
-
-		alvo.brilho_frente = _criar_faixa_luz_frontal(Color(1.0, 0.82, 0.18, 1.0))
-		target_root.add_child(alvo.brilho_frente)
-		alvo.brilho_frente.visible = true
-		alvo.brilho_frente.global_position = pos_atual
-		alvo.brilho_frente.z_index = z_atual + 2
 	else:
 		alvo.raio_colisao_base = 40.0
 		alvo.raio_miolo_base = 24.0
-		alvo.brilho = _criar_brilho_lua()
-		target_root.add_child(alvo.brilho)
-		alvo.brilho.visible = true
-		alvo.brilho.global_position = pos_atual
-		alvo.brilho.z_index = z_atual - 1
-
-		alvo.brilho_frente = _criar_faixa_luz_frontal(Color(1.0, 1.0, 1.0, 1.0))
-		target_root.add_child(alvo.brilho_frente)
-		alvo.brilho_frente.visible = true
-		alvo.brilho_frente.global_position = pos_atual
-		alvo.brilho_frente.z_index = z_atual + 2
+	_criar_teia_do_alvo(alvo)
+	_posicionar_alvo_3d(alvo)
 
 	# pequena guinada na velocidade pra reforçar a troca também visualmente
 	var ang_kick: float = randf_range(-PI * 0.25, PI * 0.25)
@@ -2551,6 +2709,30 @@ func _remover_alvo(indice: int) -> void:
 			alvo.node.queue_free()
 
 	alvos_ativos.remove_at(indice)
+
+func _mostrar_pontos(pos_global: Vector2, pontos: int, de_longe: bool) -> void:
+	if _pontos == null or pontos == 0:
+		return
+	var cor := Color(1.0, 0.86, 0.30) if pontos > 0 else Color(1.0, 0.35, 0.3)
+	if de_longe:
+		cor = Color(1.0, 0.95, 0.55)
+	_pontos.mostrar(get_viewport().get_canvas_transform() * pos_global, ("+%d" % pontos) if pontos > 0 else str(pontos), cor,
+		1.25 if de_longe else 1.0)
+
+
+## Tiro na areia ou na pedra do fundo: furo de bala e a poeira que fica
+## pairando em cima (no fundo, anda com o chão quando a câmera anda).
+func _furar_fundo(pos_global: Vector2, mat: String) -> void:
+	if _furos == null or _vivo == null:
+		return
+	var p: Vector2 = _vivo.ponto_da_imagem(pos_global)
+	# perto (embaixo) o furo é maior; lá no fundo, pequeno
+	var esc: float = lerpf(0.32, 0.78, clampf((p.y - DesertoVivo.HORIZONTE) / 800.0, 0.0, 1.0))
+	var noite: bool = modo_atual == MODO_LUA
+	_furos.cor_poeira = Color(0.40, 0.38, 0.50) if noite else Color(0.98, 0.80, 0.56)
+	var cor := Color(0.46, 0.40, 0.48) if noite else Color(1.0, 0.86, 0.66)
+	_furos.furar(p, mat, esc, cor)
+
 
 func _registrar_marca_tiro_errado(pos: Vector2) -> void:
 	if marcas_tiro_errado.size() >= 60:
@@ -2641,6 +2823,8 @@ func _limpar_alvos() -> void:
 	alvos_ativos.clear()
 	marcas_tiro_errado.clear()
 	fx_cacos.clear()
+	if _furos != null:
+		_furos.limpar()
 
 	if fx_front_overlay != null:
 		fx_front_overlay.queue_redraw()
@@ -2676,7 +2860,7 @@ func _explodir_alvo_visual(alvo: TargetData) -> void:
 		if fps_hit > 0.0 and frames_hit > 0:
 			duracao = max(0.18, float(frames_hit) / fps_hit)
 
-		var tw := create_tween()
+		var tw := area.create_tween()   # do próprio brasão: some junto com ele
 		tw.tween_interval(duracao)
 		tw.tween_callback(func():
 			if is_instance_valid(area):
@@ -2845,12 +3029,16 @@ func _atualizar_efeito_alvo(alvo: TargetData) -> void:
 		teia.visible = true
 		teia.global_position = _centro_visual_efeito_alvo(alvo)
 
-		# ESSENCIAL:
-		# A teia fica ATRÁS e mantém o tamanho original.
-		# O sprite diminui, a teia não diminui junto.
+		# A teia fica ATRÁS do brasão. Com a distância ela diminui menos que o
+		# brasão (longe, a teia continua mostrando onde ele está); some atrás
+		# das coisas junto com ele.
+		teia.z_as_relative = false
 		teia.z_index = alvo.node.z_index - 1
-		teia.scale = Vector2.ONE * alvo_scale_base
+		teia.scale = Vector2.ONE * (alvo_scale_base * alvo.tam / pow(alvo.z, 0.7))
 		teia.rotation += 0.002
+		teia.modulate.a = alvo.alfa
+		teia.set_instance_shader_parameter("inv_z", 1.0 / alvo.z)
+		teia.set_instance_shader_parameter("nevoa", _nevoa(alvo.z) * 0.5)
 
 		if teia.has_method("ajustar_progresso"):
 			teia.ajustar_progresso(cor_teia, progresso)
@@ -2962,7 +3150,7 @@ func _executar_recarga_arma() -> void:
 func _centro_visual_efeito_alvo(alvo: TargetData) -> Vector2:
 	if alvo == null:
 		return Vector2.ZERO
-	return alvo.pos
+	return alvo.tela
 
 
 func _carregar_config_admin_jogo() -> void:

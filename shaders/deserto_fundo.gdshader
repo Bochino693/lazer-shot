@@ -39,6 +39,18 @@ uniform float ouro_brilho = 0.0;          // humor do jogo: > 0 combo (mais vivo
 uniform float ouro_varre = -1.0;          // 0..1: reflexo correndo pelas três pontas (acerto)
 uniform vec3 ouro_toque = vec3(0.0, 0.0, -1.0);   // tiro no ouro: xy = ponto (UV da caixa), z = idade (s)
 
+// Câmera 3D (só no jogo, scripts/deserto_vivo.gd): cada pixel tem a sua
+// distância (sprites/egito_profundidade.png, tirada da própria imagem por
+// tools/gerar_profundidade.py) e anda olhar * (1 - 1/Z) px de tela quando a
+// câmera anda com a mira: o céu e as pirâmides andam com a mira, o chão perto
+// anda contra, o plano dos brasões (Z = 1) fica parado. Paralaxe pixel a
+// pixel; as camadas de cima (sol, raios, águias, cristal) andam igual.
+uniform sampler2D profundidade : filter_linear, repeat_disable;
+uniform vec2 olhar = vec2(0.0);           // quanto a câmera andou (px de tela)
+uniform vec2 px_uv = vec2(0.0);           // 1 px de tela em UV da imagem
+uniform float inv_z_longe = 0.1;          // 1/Z do preto do mapa
+uniform float inv_z_perto = 1.4285714;    // 1/Z do branco do mapa
+
 // No fragment o COLOR já vem multiplicado pela textura; a cor do nó
 // (modulate, usado no cruzamento sol/lua) é guardada aqui no vertex.
 varying vec4 cor_no;
@@ -85,6 +97,12 @@ vec3 ouro(vec3 pedra, vec4 msk, vec2 up) {
 void fragment() {
 	float t = TIME + fase;
 	vec2 uv = uv_vivo;
+
+	if (olhar.x != 0.0 || olhar.y != 0.0) {
+		float inv_z = mix(inv_z_longe, inv_z_perto, texture(profundidade, uv).r);
+		uv -= olhar * (1.0 - inv_z) * px_uv;
+		uv = 1.0 - abs(1.0 - abs(uv));   // na borda, espelha (fica sob o placar)
+	}
 
 	// ar quente tremendo na faixa do horizonte
 	if (uv.y > 0.50 && uv.y < 0.98) {

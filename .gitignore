@@ -6,3 +6,5 @@
 /APK-Pronto/
 *.apk
 *.idsig
+
+__pycache__/
