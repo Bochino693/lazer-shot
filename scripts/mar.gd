@@ -726,7 +726,7 @@ func _process(delta: float) -> void:
 
 func _atualizar_mira_hibrida(_delta: float) -> void:
 	# mira única do jogo (MiraGlobal): mesma em todas as telas, sem saltos
-	alvo_pos = MiraGlobal.pos
+	alvo_pos = MiraGlobal.mira()
 
 
 ## O combo agora é anunciado grande no meio da tela, com a voz de Poseidon
@@ -4406,6 +4406,7 @@ func _processar_tiro_global(pos_global: Vector2, primeiro_tiro: bool = false) ->
 
 	balas_no_cartucho -= 1
 	total_tiros += 1
+	MiraGlobal.coice(0.85)    # arpão debaixo d'água: a água segura um pouco
 	# a bala corta a água: risco claro e rastro de bolhas até a mira
 	Trajetoria.disparar(self, get_viewport().get_canvas_transform() * pos_global, "mar")
 
@@ -5944,7 +5945,7 @@ var tempo_trava_input_arma: float = 0.0
 
 
 func _pos_arma() -> Vector2:
-	return MiraGlobal.pos
+	return MiraGlobal.mira()
 
 
 func _evento_tiro_arma(me: InputEventMouseButton) -> bool:

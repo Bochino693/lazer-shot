@@ -485,7 +485,7 @@ func _process(delta: float) -> void:
 
 func _atualizar_mira_hibrida(_delta: float) -> void:
 	# mira única do jogo (MiraGlobal): mesma em todas as telas, sem saltos
-	mira_pos = MiraGlobal.pos
+	mira_pos = MiraGlobal.mira()
 
 
 func _input(event: InputEvent) -> void:
@@ -1737,6 +1737,7 @@ func _processar_tiro(pos_global: Vector2) -> void:
 
 	balas_no_cartucho -= 1
 	total_tiros += 1
+	MiraGlobal.coice()
 	_tocar_som(_som_do_tiro())
 	# raio de sol de dia, raio de luar de noite (da arma até a mira)
 	Trajetoria.disparar(self, get_viewport().get_canvas_transform() * pos_global, "sol" if modo_atual == MODO_SOL else "lua")

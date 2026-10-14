@@ -543,11 +543,11 @@ func _process(delta: float) -> void:
 
 func _atualizar_mira_hibrida(_delta: float) -> void:
 	# mira única do jogo (MiraGlobal): mesma em todas as telas, sem saltos
-	mira_pos = MiraGlobal.pos
+	mira_pos = MiraGlobal.mira()
 
 
 func _atualizar_mira_xbox(_delta: float) -> void:
-	mira_pos = MiraGlobal.pos
+	mira_pos = MiraGlobal.mira()
 
 
 func _resetar_timer_jogada() -> void:
@@ -822,6 +822,7 @@ func _tentar_atirar(pos_mouse: Vector2) -> void:
 
 	municao_atual -= 1
 	tiros += 1
+	MiraGlobal.coice(0.6)     # laser: tranco leve
 	_tocar_som_tiro()
 	_atualizar_hud()
 	Trajetoria.disparar(self, pos_mouse, "laser")
@@ -3486,7 +3487,7 @@ const BOTAO_RECARGA_3: int = MOUSE_BUTTON_XBUTTON2
 
 
 func _pos_arma() -> Vector2:
-	return MiraGlobal.pos
+	return MiraGlobal.mira()
 
 
 func _evento_tiro_arma(me: InputEventMouseButton) -> bool:

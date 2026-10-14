@@ -22,6 +22,14 @@ extends Node
 ##   vai para onde o ponteiro real está (cobre a tela inteira), e a captura é
 ##   pedida de novo a cada segundo e sempre que o app volta ao foco.
 ## O cursor do sistema fica invisível em qualquer modo (a tela desenha a mira).
+##
+## RECUO (como nos jogos de tiro): o primeiro tiro vai exatamente na mira;
+## tiros em sequência levantam a arma — cada um dá um tranco para cima e um
+## pouco para o lado (mais forte quanto mais rápida a sequência) e a bala do
+## tiro seguinte vai para onde a arma subiu. Sem atirar, a arma volta sozinha
+## para a mira (~0,4 s). As telas desenham a mira e atiram em `mira()` (a
+## mira + o recuo): a bala cai exatamente onde a mira mostra, e o que há lá
+## (alvo, madeira, vidro, pedra, água, nada) responde.
 
 ## No PC o jogo vai a 120 quadros; na TV Box só o vsync manda (ver abaixo).
 const FPS_ALVO: int = 120
@@ -35,6 +43,17 @@ var pos := Vector2.ZERO
 var bruta := Vector2.ZERO
 ## Android: o ponteiro está realmente capturado agora?
 var capturada := true
+
+## Quanto a arma subiu com os tiros em sequência (px da tela).
+var recuo := Vector2.ZERO
+
+const RECUO_PASSO := 26.0       # px para cima por tiro
+const RECUO_LADO := 11.0        # px para o lado (sorteado) por tiro
+const RECUO_SEQUENCIA := 0.45   # s: tiro antes disto depois do outro é sequência
+const RECUO_MAX := 110.0        # px
+const RECUO_VOLTA := 4.5        # 1/s: a arma voltando para a mira
+var _seguidos := 0
+var _ultimo_coice_ms := -100000
 
 var _iniciada := false
 var _sens := 1.0
@@ -220,6 +239,31 @@ func _process(delta: float) -> void:
 	var tela := _tela()
 	pos = Vector2(clampf(pos.x, 0.0, tela.x), clampf(pos.y, 0.0, tela.y))
 	bruta = pos
+	if recuo != Vector2.ZERO:
+		recuo *= exp(-RECUO_VOLTA * delta)
+		if recuo.length_squared() < 0.04:
+			recuo = Vector2.ZERO
+
+
+## Onde a arma aponta agora: a mira mais o recuo dos tiros em sequência.
+## As telas desenham a mira aqui e a bala sai para cá.
+func mira() -> Vector2:
+	_garantir_inicio()
+	var tela := _tela()
+	var p := pos + recuo
+	return Vector2(clampf(p.x, 0.0, tela.x), clampf(p.y, 0.0, tela.y))
+
+
+## A tela chama a cada tiro dado (bala gasta): a arma dá o tranco. `forca`
+## muda com a arma da tela (pistola do bar mais forte, laser da arena leve).
+func coice(forca: float = 1.0) -> void:
+	var agora := Time.get_ticks_msec()
+	var dt := (agora - _ultimo_coice_ms) / 1000.0
+	_ultimo_coice_ms = agora
+	_seguidos = mini(_seguidos + 1, 5) if dt < RECUO_SEQUENCIA else 0
+	var sobe := RECUO_PASSO * (1.0 + 0.1 * _seguidos)
+	var lado := randf_range(-RECUO_LADO, RECUO_LADO) * (1.0 + 0.3 * _seguidos)
+	recuo = (recuo + Vector2(lado, -sobe) * forca).limit_length(RECUO_MAX * forca)
 
 
 func _recapturar() -> void:
@@ -244,6 +288,7 @@ func levar_para(p: Vector2) -> void:
 	_garantir_inicio()
 	pos = p
 	bruta = p
+	recuo = Vector2.ZERO
 
 
 func centralizar() -> void:

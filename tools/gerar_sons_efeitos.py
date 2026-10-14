@@ -34,6 +34,10 @@ Menus
 Bar
   madeira_tiro.wav     bala na madeira: estalo, a tábua soando e farpas
   papel_tiro.wav       bala no cartaz: papel rasgando e a madeira atrás
+  janela_quebra.wav    bala na vidraça da janela: o vidro fino estoura, a
+                       moldura de madeira bate, cacos caindo na tábua de
+                       baixo (vidro quicando na madeira) e os últimos
+                       caquinhos soltando da moldura
 
     python3 tools/gerar_sons_efeitos.py
 """
@@ -502,12 +506,49 @@ def papel_tiro():
     return sala(s, 0.45, 0.2, 5000)
 
 
+def janela_quebra():
+    s = vazio(2.2)
+    # o tiro no vidro fino: estalo bem seco e a vidraça soando (placa fina:
+    # modos mais graves e curtos que os do cristal)
+    colar(s, estalo(0.003, 3000), 0.0, 2.2)
+    colar(s, modos(0.5, [880, 1570, 2410, 3380, 4630, 6100], [1.0, 0.8, 0.6, 0.45, 0.3, 0.2],
+                   [14, 18, 24, 30, 38, 48], 0.003), 0.0, 0.45)
+    # trinca correndo pela vidraça (estalinhos acelerando)
+    t = 0.001
+    for i in range(18):
+        colar(s, som(estalo(0.001, 3500), ressonancia_curta(rng.uniform(3500, 9000), 600, 0.012) * 0.5), t, 0.8 * (1 - i / 26))
+        t += 0.004 * (0.85 ** i) + 0.0006
+    # a moldura de madeira batendo com o tranco
+    colar(s, modos(0.3, [190, 470, 860, 1420], [1.0, 0.6, 0.4, 0.2], [30, 40, 55, 70]), 0.004, 0.5)
+    colar(s, baque(0.06, 600, 45), 0.004, 0.7)
+    # o estouro: chiado largo e granulado do vidro abrindo
+    est = filtro(ruido(0.45), "bandpass", [1800, 13000], 2) * np.exp(-t_(0.45) * 11)
+    est += filtro(ruido(0.45), "bandpass", [600, 2200], 2) * np.exp(-t_(0.45) * 22) * 0.6
+    est *= 0.55 + 0.45 * (rng.random(len(est)) > 0.5)
+    colar(s, est, 0.006, 1.2)
+    # cacos caindo na tábua de baixo: o vidro tilinta e a madeira dá um
+    # toque surdo junto (os maiores primeiro, que caem mais reto)
+    for i in range(10):
+        ini = rng.uniform(0.0, 0.05)
+        queda = rng.uniform(0.30, 0.48)
+        quicar(s, ini, queda, rng.uniform(1500, 2800), rng.uniform(0.35, 0.6), 1.5, 3)
+        colar(s, baque(0.025, 1500, 110), ini + queda, rng.uniform(0.15, 0.3))
+    for i in range(36):
+        quicar(s, rng.uniform(0.0, 0.08), rng.uniform(0.28, 0.6), rng.uniform(3000, 6500), rng.uniform(0.12, 0.35), 1.0, 3)
+    for i in range(50):
+        quicar(s, rng.uniform(0.0, 0.1), rng.uniform(0.3, 0.75), rng.uniform(6000, 11000), rng.uniform(0.05, 0.16), 0.6, 2)
+    # os últimos caquinhos soltando da moldura depois
+    for i in range(5):
+        quicar(s, rng.uniform(0.7, 1.3), rng.uniform(0.3, 0.45), rng.uniform(2500, 6000), rng.uniform(0.08, 0.2), 0.8, 3)
+    return sala(s, 0.6, 0.2)
+
+
 SONS = {
     "cristal_trinca": (cristal_trinca, 0.75), "cristal_quebra": (cristal_quebra, 0.9),
     "cristal_volta": (cristal_volta, 0.6), "ouro_ping": (ouro_ping, 0.65), "areia_tiro": (areia_tiro, 0.6),
     "laser_parede": (laser_parede, 0.65), "arena_vapor": (arena_vapor, 0.5), "arena_faisca": (arena_faisca, 0.55),
     "arena_troca": (arena_troca, 0.7), "lanterna_sobe": (lanterna_sobe, 0.55), "lanterna_desce": (lanterna_desce, 0.55),
-    "madeira_tiro": (madeira_tiro, 0.7), "papel_tiro": (papel_tiro, 0.6),
+    "madeira_tiro": (madeira_tiro, 0.7), "papel_tiro": (papel_tiro, 0.6), "janela_quebra": (janela_quebra, 0.85),
     "tiro_sol": (tiro_sol, 0.8), "tiro_lua": (tiro_lua, 0.8), "tiro_mar": (tiro_mar, 0.85), "tiro_menu": (tiro_menu, 0.75),
 }
 

@@ -229,6 +229,7 @@ var alvo_layer: CanvasLayer = null
 var alvo_overlay: Control = null
 var combo_hud_label: Label
 var _anuncio: ComboAnuncio      # o combo grande no meio da tela, com a voz do locutor
+var _janela: BarJanela          # a janela do fundo: vidraças que estouram com o tiro
 
 var partida_iniciada: bool = false
 var intro_cenario_em_execucao: bool = false
@@ -685,7 +686,7 @@ func _process(delta: float) -> void:
 
 func _atualizar_mira_hibrida(_delta: float) -> void:
 	# mira única do jogo (MiraGlobal): mesma em todas as telas, sem saltos
-	alvo_pos = MiraGlobal.pos
+	alvo_pos = MiraGlobal.mira()
 
 
 func _draw() -> void:
@@ -830,6 +831,7 @@ func _processar_tiro_global(pos_global: Vector2) -> void:
 
 	balas_no_cartucho -= 1
 	total_tiros += 1
+	MiraGlobal.coice(1.2)     # pistola: o tranco mais forte do jogo
 	alvo_anim_t += 0.35
 	_marcar_hud_sujo()
 
@@ -847,6 +849,14 @@ func _processar_tiro_global(pos_global: Vector2) -> void:
 	total_erros += 1
 	erros_seguidos += 1
 	_resetar_combo()
+
+	# vidraça da janela: o vidro estoura (sem furo de bala; no buraco a bala
+	# sai lá para fora)
+	if _janela != null and _janela.tiro(pos_global):
+		_set_status_erro("ERROU!")
+		_marcar_hud_sujo()
+		queue_redraw()
+		return
 
 	# lascas da madeira (ou o cartaz do barril rasgando) e o furo que fica
 	var material := BarTiro.material_em(fundo, pos_global)
@@ -1909,7 +1919,13 @@ func _tocar_vidro_apos_tiro_async() -> void:
 
 
 func _criar_luz_do_sol() -> void:
-	if fundo == null or fundo.get_node_or_null("Sol") != null:
+	if fundo == null:
+		return
+	# a janela vem antes do sol: o feixe soma por cima dos buracos
+	if fundo.get_node_or_null("Janela") == null and fundo.texture != null:
+		_janela = BarJanela.new()
+		fundo.add_child(_janela)
+	if fundo.get_node_or_null("Sol") != null:
 		return
 	var sol := Node2D.new()
 	sol.name = "Sol"
@@ -5380,7 +5396,7 @@ const BOTAO_RECARGA_3: int = MOUSE_BUTTON_XBUTTON2
 
 
 func _pos_arma() -> Vector2:
-	return MiraGlobal.pos
+	return MiraGlobal.mira()
 
 
 func _debug_botao_arma(me: InputEventMouseButton) -> void:
