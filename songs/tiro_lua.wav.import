@@ -2,13 +2,13 @@
 
 importer="wav"
 type="AudioStreamWAV"
-uid="uid://bsxiv4edpmxp4"
-path="res://.godot/imported/raio_lua.wav-c6c7efac99fdc139f7f12aca0252e321.sample"
+uid="uid://b0mlsbnof3eu2"
+path="res://.godot/imported/tiro_lua.wav-206d515351d2eaec92a1609fe2ac957a.sample"
 
 [deps]
 
-source_file="res://songs/raio_lua.wav"
-dest_files=["res://.godot/imported/raio_lua.wav-c6c7efac99fdc139f7f12aca0252e321.sample"]
+source_file="res://songs/tiro_lua.wav"
+dest_files=["res://.godot/imported/tiro_lua.wav-206d515351d2eaec92a1609fe2ac957a.sample"]
 
 [params]
 

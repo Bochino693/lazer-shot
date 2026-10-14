@@ -193,7 +193,8 @@ var mira_desvio_bomba: Vector2 = Vector2.ZERO
 @export var margem_spawn_x: float = 90.0
 @export var overscan_background: float = 1.06
 
-@export var som_tiro_path: String = "res://songs/tiro-de-pistola.wav"
+# tiro debaixo d'água (arpão abafado e bolhas); a pistola é do Bar
+@export var som_tiro_path: String = "res://songs/tiro_mar.wav"
 @export var som_vaso_hit_path: String = "res://songs/vaso_hit.wav"
 @export var som_bau_hit_path: String = "res://songs/bau_hit.wav"
 @export var som_pirate_path: String = "res://songs/pirate.mp3"

@@ -2,13 +2,13 @@
 
 importer="wav"
 type="AudioStreamWAV"
-uid="uid://c1a50e6tkpwav"
-path="res://.godot/imported/bolhas_tiro.wav-ad16a3990b6b016994f9c43e63214513.sample"
+uid="uid://dja2kywkpipqp"
+path="res://.godot/imported/tiro_sol.wav-b770054baa2b9d64c739c1a87d566ec0.sample"
 
 [deps]
 
-source_file="res://songs/bolhas_tiro.wav"
-dest_files=["res://.godot/imported/bolhas_tiro.wav-ad16a3990b6b016994f9c43e63214513.sample"]
+source_file="res://songs/tiro_sol.wav"
+dest_files=["res://.godot/imported/tiro_sol.wav-b770054baa2b9d64c739c1a87d566ec0.sample"]
 
 [params]
 

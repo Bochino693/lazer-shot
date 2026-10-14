@@ -14,8 +14,10 @@ Egito
   cristal_volta.wav    o cristal se refaz: brilho que cresce e fecha num sino
   ouro_ping.wav        bala no ouro: "tim" metálico e o ricochete
   areia_tiro.wav       bala na areia: baque abafado e areia espirrando
-  raio_sol.wav         raio de sol: sopro quente com brilho
-  raio_lua.wav         raio de luar: brilho frio e cristalino
+  tiro_sol.wav         o tiro de dia (Rodada 15): baque, o raio de sol saindo
+                       num acorde dourado que sobe, chama e faíscas
+  tiro_lua.wav         o tiro de noite: baque leve, sino de cristal que
+                       desce, sopro de ar frio e brilhos gelados
 Arena
   laser_parede.wav     laser no aço: chiado de queima e o metal soando
   arena_vapor.wav      baforada de vapor do cano
@@ -24,7 +26,11 @@ Arena
   lanterna_sobe.wav    lanterna subindo no furo: motor e trava
   lanterna_desce.wav   lanterna descendo: destrava e motor
 Mar
-  bolhas_tiro.wav      bala na água: baque abafado e rastro de bolhas
+  tiro_mar.wav         o tiro debaixo d'água (arpão): "tuum" abafado,
+                       cavitação e rastro de bolhas subindo
+Menus
+  tiro_menu.wav        tiro dos menus e da abertura: disparo de laser curto
+                       (a pistola fica só no Bar)
 Bar
   madeira_tiro.wav     bala na madeira: estalo, a tábua soando e farpas
   papel_tiro.wav       bala no cartaz: papel rasgando e a madeira atrás
@@ -385,15 +391,90 @@ def bolha(f0, dur=0.05):
     return np.sin(2 * np.pi * np.cumsum(f) / TAXA) * np.exp(-t * (60 + f0 * 0.02))
 
 
-def bolhas_tiro():
+# ───────────────────────────────────────────── estampidos (Rodada 15)
+def encorpar(x, g=2.5):
+    """Saturação suave: o estampido fica cheio (perto da pistola) sem estourar."""
+    x = x / (np.abs(x).max() + 1e-9)
+    return np.tanh(x * g) / np.tanh(g)
+
+
+def _soco(f0, f1, dur, d):
+    """Baque de impacto: seno grave caindo de tom (o corpo do disparo)."""
+    t = t_(dur)
+    f = f1 + (f0 - f1) * np.exp(-t * 25)
+    return np.sin(2 * np.pi * np.cumsum(f) / TAXA) * np.exp(-t * d) * np.clip(t / 0.002, 0, 1)
+
+
+def tiro_sol():
     s = vazio(0.9)
-    colar(s, baque(0.1, 350, 30), 0.0, 0.8)
-    cav = filtro(ruido(0.18), "bandpass", [500, 2200], 2) * np.exp(-t_(0.18) * 18)
-    colar(s, cav, 0.0, 0.5)
-    for i in range(18):
-        colar(s, bolha(rng.uniform(350, 1300)), 0.03 + (i / 18) * 0.45 + rng.uniform(-0.02, 0.02), rng.uniform(0.15, 0.45))
-    s = filtro(s, "lowpass", 3200, 2)          # tudo abafado: está debaixo d'água
-    return sala(s, 0.7, 0.35, 2500)
+    colar(s, _soco(130, 55, 0.18, 22), 0.0, 0.9)
+    colar(s, estalo(0.003, 2500), 0.0, 0.9)
+    # o raio saindo: acorde dourado (lá maior) subindo um pouco e sumindo
+    t = t_(0.55)
+    env = np.clip(t / 0.006, 0, 1) * np.exp(-t * 10)
+    sobe = 1 + 0.10 * (1 - np.exp(-t * 18))
+    acorde = np.zeros_like(t)
+    for k, (f, a) in enumerate(((440, 1.0), (554.4, 0.7), (659.3, 0.6), (880, 0.45), (1318.5, 0.25))):
+        fase = 2 * np.pi * np.cumsum(f * sobe) / TAXA
+        acorde += a * (np.sin(fase + k) + 0.3 * np.sin(2 * fase + k))
+    acorde *= env * (1 + 0.25 * np.sin(2 * np.pi * 23 * t))
+    colar(s, acorde, 0.002, 0.30)
+    # chama: sopro que abre (raio de sol de antes, por baixo)
+    colar(s, raio_sol(), 0.0, 0.75)
+    # faíscas douradas
+    for i in range(5):
+        colar(s, modos(0.2, [rng.uniform(3200, 6800)], [1.0], [30]), rng.uniform(0.03, 0.22), rng.uniform(0.06, 0.12))
+    return sala(encorpar(s), 0.5, 0.2)
+
+
+def tiro_lua():
+    s = vazio(1.1)
+    colar(s, _soco(170, 80, 0.12, 30), 0.0, 0.6)
+    colar(s, estalo(0.002, 4000), 0.0, 0.7)
+    # sino de cristal (modos fora da série) descendo de tom
+    t = t_(0.9)
+    desce = 1 - 0.14 * (1 - np.exp(-t * 6))
+    sino = np.zeros_like(t)
+    for f, a, d in ((1320, 1.0, 9.0), (1320 * 2.76, 0.55, 13.0), (1320 * 5.40, 0.3, 18.0), (1320 * 1.005, 0.5, 9.5)):
+        sino += a * np.sin(2 * np.pi * np.cumsum(f * desce) / TAXA) * np.exp(-t * d)
+    sino *= np.clip(t / 0.004, 0, 1)
+    colar(s, sino, 0.0, 0.32)
+    # ar frio passando (raio de luar de antes, por baixo)
+    colar(s, raio_lua(), 0.0, 0.6)
+    for i in range(4):
+        colar(s, modos(0.2, [rng.uniform(4500, 9000)], [1.0], [28]), 0.04 + i * 0.07 + rng.uniform(0, 0.03), rng.uniform(0.04, 0.09))
+    return sala(encorpar(s), 0.6, 0.25)
+
+
+def tiro_mar():
+    s = vazio(1.0)
+    # "tuum" grave e abafado (a pressão do disparo na água)
+    colar(s, _soco(95, 38, 0.30, 11), 0.0, 1.0)
+    colar(s, baque(0.16, 320, 22), 0.0, 0.9)
+    # cavitação: chiado que borbulha
+    t = t_(0.22)
+    cav = filtro(ruido(0.22), "bandpass", [600, 2600], 2) * np.exp(-t * 14)
+    cav *= 0.6 + 0.4 * np.sin(2 * np.pi * 38 * t + 3 * np.sin(2 * np.pi * 7 * t))
+    colar(s, cav, 0.004, 0.5)
+    # o rastro de bolhas subindo: primeiro grandes (graves), depois miúdas
+    for i in range(24):
+        k = i / 24
+        colar(s, bolha(rng.uniform(300, 650) + 900 * k), 0.02 + k * 0.6 + rng.uniform(-0.02, 0.02), rng.uniform(0.18, 0.42) * (1 - 0.5 * k))
+    s = filtro(s, "lowpass", 2800, 2)          # debaixo d'água: tudo abafado
+    return sala(encorpar(s, 2.0), 0.7, 0.3, 2000)
+
+
+def tiro_menu():
+    s = vazio(0.5)
+    # "piu" de laser: seno que cai rápido de tom, com um pouco de serra
+    t = t_(0.22)
+    f = 300 + 2400 * np.exp(-t * 22)
+    fase = 2 * np.pi * np.cumsum(f) / TAXA
+    zap = (np.sin(fase) + 0.35 * np.sin(2 * fase) + 0.18 * np.sin(3 * fase)) * np.clip(t / 0.002, 0, 1) * np.exp(-t * 16)
+    colar(s, zap, 0.0, 0.8)
+    colar(s, _soco(150, 70, 0.10, 35), 0.0, 0.5)
+    colar(s, filtro(ruido(0.08), "bandpass", [3000, 9000], 2) * np.exp(-t_(0.08) * 45), 0.0, 0.3)
+    return sala(encorpar(s, 2.0), 0.35, 0.15, 6000)
 
 
 # ───────────────────────────────────────────── Bar
@@ -421,20 +502,20 @@ def papel_tiro():
     return sala(s, 0.45, 0.2, 5000)
 
 
+SONS = {
+    "cristal_trinca": (cristal_trinca, 0.75), "cristal_quebra": (cristal_quebra, 0.9),
+    "cristal_volta": (cristal_volta, 0.6), "ouro_ping": (ouro_ping, 0.65), "areia_tiro": (areia_tiro, 0.6),
+    "laser_parede": (laser_parede, 0.65), "arena_vapor": (arena_vapor, 0.5), "arena_faisca": (arena_faisca, 0.55),
+    "arena_troca": (arena_troca, 0.7), "lanterna_sobe": (lanterna_sobe, 0.55), "lanterna_desce": (lanterna_desce, 0.55),
+    "madeira_tiro": (madeira_tiro, 0.7), "papel_tiro": (papel_tiro, 0.6),
+    "tiro_sol": (tiro_sol, 0.8), "tiro_lua": (tiro_lua, 0.8), "tiro_mar": (tiro_mar, 0.85), "tiro_menu": (tiro_menu, 0.75),
+}
+
 if __name__ == "__main__":
-    gravar(cristal_trinca(), "cristal_trinca.wav", 0.75)
-    gravar(cristal_quebra(), "cristal_quebra.wav", 0.9)
-    gravar(cristal_volta(), "cristal_volta.wav", 0.6)
-    gravar(ouro_ping(), "ouro_ping.wav", 0.65)
-    gravar(areia_tiro(), "areia_tiro.wav", 0.6)
-    gravar(raio_sol(), "raio_sol.wav", 0.5)
-    gravar(raio_lua(), "raio_lua.wav", 0.45)
-    gravar(laser_parede(), "laser_parede.wav", 0.65)
-    gravar(arena_vapor(), "arena_vapor.wav", 0.5)
-    gravar(arena_faisca(), "arena_faisca.wav", 0.55)
-    gravar(arena_troca(), "arena_troca.wav", 0.7)
-    gravar(lanterna_sobe(), "lanterna_sobe.wav", 0.55)
-    gravar(lanterna_desce(), "lanterna_desce.wav", 0.55)
-    gravar(bolhas_tiro(), "bolhas_tiro.wav", 0.6)
-    gravar(madeira_tiro(), "madeira_tiro.wav", 0.7)
-    gravar(papel_tiro(), "papel_tiro.wav", 0.6)
+    # sem argumento: todos; com nomes, só esses (ex.: tiro_sol tiro_mar).
+    # Cada som tem a sua semente: gerar um não muda os outros.
+    import sys
+    for nome in (sys.argv[1:] or list(SONS)):
+        f, pico = SONS[nome]
+        rng = np.random.default_rng(sum(map(ord, nome)) * 7919)
+        gravar(f(), nome + ".wav", pico)
