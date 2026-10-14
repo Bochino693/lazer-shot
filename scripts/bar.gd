@@ -374,6 +374,10 @@ var garrafas_pos_base: Vector2 = Vector2.ZERO
 func _ready() -> void:
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 	randomize()
+	# fundo em alta (scripts/hd.gd): o mesmo tamanho para o jogo, o dobro de
+	# detalhe na tela
+	if fundo != null:
+		fundo.texture = Hd.textura("res://sprites/back_new.png")
 	# Efeitos do _draw usam o Pincel (textura com mipmaps).
 	texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 

@@ -1,0 +1,41 @@
+extends SceneTree
+## tools/hd/<nome>@2x.png (tools/gerar_hd.py) -> sprites/hd/<nome>.res
+##
+## Reduz o 2x (EDSR) para 1,5x em Lanczos (na TV 1080p cada texel fica quase
+## do tamanho do pixel: nítido e sem cintilar quando a câmera anda; numa saída
+## 4K continua bem mais nítido que antes), comprime em ETC2 (a Mali-G31 lê
+## direto, sem descompactar: carrega rápido e gasta menos memória que o PNG
+## sem perda) e guarda junto o tamanho do original: scripts/hd.gd monta a
+## textura com size_override nele, então o jogo continua vendo 1024x1536 e
+## todas as coordenadas em px continuam valendo.
+##
+##     godot --headless --path . -s tools/gerar_hd.gd
+
+const ESCALA := 1.5
+
+
+func _initialize() -> void:
+	DirAccess.make_dir_recursive_absolute("res://sprites/hd")
+	var pasta := ProjectSettings.globalize_path("res://tools/hd")
+	for f in DirAccess.get_files_at(pasta):
+		if not f.ends_with("@2x.png"):
+			continue
+		var nome := f.trim_suffix("@2x.png")
+		var original := Image.load_from_file(ProjectSettings.globalize_path("res://sprites/%s.png" % nome))
+		var img := Image.load_from_file(pasta.path_join(f))
+		if original == null or img == null:
+			push_error("faltou " + nome)
+			continue
+		var tam := Vector2i(original.get_width(), original.get_height())
+		var alvo := Vector2i(int(round(tam.x * ESCALA / 4.0)) * 4, int(round(tam.y * ESCALA / 4.0)) * 4)
+		img.resize(alvo.x, alvo.y, Image.INTERPOLATE_LANCZOS)
+		if original.detect_alpha() == Image.ALPHA_NONE:
+			img.convert(Image.FORMAT_RGB8)
+		img.compress(Image.COMPRESS_ETC2, Image.COMPRESS_SOURCE_GENERIC)
+		# o tamanho do original vai junto (scripts/hd.gd põe no size_override)
+		img.set_meta("tamanho", tam)
+		var destino := "res://sprites/hd/%s.res" % nome
+		var erro := ResourceSaver.save(img, destino)
+		print("%-22s %s -> %s  %s  (%.1f MB)" % [nome, tam, alvo, "ok" if erro == OK else "ERRO %d" % erro,
+			FileAccess.get_file_as_bytes(destino).size() / 1048576.0])
+	quit()

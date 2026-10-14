@@ -388,6 +388,9 @@ var intro_contagem_valor: int = 3
 func _ready() -> void:
 	randomize()
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
+	# fundo em alta (scripts/hd.gd): o mesmo tamanho para o jogo
+	if background is Sprite2D and (background as Sprite2D).texture == null:
+		(background as Sprite2D).texture = Hd.textura("res://sprites/arena.png")
 
 	_aplicar_sensibilidade_global()
 

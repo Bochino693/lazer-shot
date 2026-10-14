@@ -23,7 +23,7 @@ const SHADER := preload("res://shaders/fundo_vivo.gdshader")
 # load() e não preload(): o Godot 4.6 nunca descarrega um script já carregado,
 # e o que ele pré-carrega ficava na memória depois da primeira partida.
 var MASCARA: Texture2D = load("res://sprites/arena_mascara.png")
-var FUNDO_FIXA: Texture2D = load("res://sprites/arena_fixa.png")
+var FUNDO_FIXA: Texture2D = Hd.textura("res://sprites/arena_fixa.png")
 const Pincel := preload("res://scripts/pincel.gd")
 const FONTE := preload("res://fonts/Exo2-ExtraBold.ttf")
 const SOM_VAPOR := preload("res://songs/arena_vapor.wav")

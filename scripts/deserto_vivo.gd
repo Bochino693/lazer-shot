@@ -58,10 +58,11 @@ const IMG := Vector2(1024, 1536)
 # primeira partida). Assim tudo some com a fase. A troca de tela já pede
 # estes arquivos numa thread (scripts/precarga.gd): o load() acha pronto.
 # fundo sem as coisas em pé (reconstruído atrás delas) e a folha dos planos
-var FUNDO_SOL: Texture2D = load("res://sprites/egito_fundo_sol.png")
-var FUNDO_LUA: Texture2D = load("res://sprites/egito_fundo_lua.png")
-var PLANOS_SOL: Texture2D = load("res://sprites/egito_planos_sol.png")
-var PLANOS_LUA: Texture2D = load("res://sprites/egito_planos_lua.png")
+# fundos e planos em alta (scripts/hd.gd): o mesmo tamanho para o jogo
+var FUNDO_SOL: Texture2D = Hd.textura("res://sprites/egito_fundo_sol.png")
+var FUNDO_LUA: Texture2D = Hd.textura("res://sprites/egito_fundo_lua.png")
+var PLANOS_SOL: Texture2D = Hd.textura("res://sprites/egito_planos_sol.png")
+var PLANOS_LUA: Texture2D = Hd.textura("res://sprites/egito_planos_lua.png")
 var PLANOS_BRILHO: Texture2D = load("res://sprites/egito_planos_brilho.png")
 var LUZ_FUNDO: Texture2D = load("res://sprites/egito_fundo_luz.png")
 # Sol e lua em 4x (tools/gerar_astros.py), camadas comuns sem shader:

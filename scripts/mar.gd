@@ -528,6 +528,9 @@ func _ready() -> void:
 	encerrado = false
 
 	background = get_node_or_null("Sprite2D") as Sprite2D
+	if background != null and background.texture == null:
+		# fundo em alta (scripts/hd.gd): o mesmo tamanho para o jogo
+		background.texture = Hd.textura(caminho_background)
 	alvos_root = get_node_or_null("Alvos") as Node2D
 	aguaviva_modelo = get_node_or_null("Alvos/Aguaviva20") as Area2D
 	vaso_modelo = get_node_or_null("Alvos/Vaso80") as Area2D
@@ -3277,7 +3280,8 @@ func _ajustar_background_fullscreen() -> void:
 		return
 
 	if background.texture == null and ResourceLoader.exists(caminho_background):
-		background.texture = load(caminho_background)
+		# fundo em alta (scripts/hd.gd)
+		background.texture = Hd.textura(caminho_background)
 
 	if background.texture == null:
 		return

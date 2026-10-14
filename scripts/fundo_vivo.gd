@@ -75,7 +75,7 @@ func _criar_camada(chave: String) -> void:
 	var dados: Array = FUNDOS[chave]
 	var camada := TextureRect.new()
 	camada.name = "Fundo_" + chave
-	camada.texture = load(dados[0])
+	camada.texture = Hd.textura(dados[0])
 	camada.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	camada.stretch_mode = TextureRect.STRETCH_SCALE
 	camada.mouse_filter = Control.MOUSE_FILTER_IGNORE
