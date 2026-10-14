@@ -20,8 +20,14 @@ var ALGA: Texture2D = load("res://sprites/mar_frente_alga.png")
 var PEIXE: Texture2D = load("res://sprites/mar_frente_peixe.png")
 var BOLHA: Texture2D = load("res://sprites/mar_bolha.png")
 
-const FUNDO_PASSO := 12.0      # px que o fundo anda com a mira no canto da tela
-const FRENTE_PASSO := 36.0     # px que a frente anda (ao contrário)
+# Câmera: com a mira no canto, ela anda CAMERA_PASSO px; uma coisa à
+# distância Z anda CAMERA_PASSO * (1 - 1/Z) na tela (Z = 1, o plano dos alvos,
+# fica parado; longe anda com a mira, perto anda contra). O fundo inteiro anda
+# como a parte mais longe (Z_FUNDO) e o shader do fundo dá a cada pixel a
+# diferença da distância dele (shaders/fundo_profundo.gdshader).
+const CAMERA_PASSO := 20.0
+const Z_FUNDO := 8.0
+const Z_FRENTE := 0.32
 const SUAVE := 2.6             # quanto mais alto, mais rápido segue a mira
 # algas de cada canto: x (fração da largura), escala, inclinação (graus), cor
 const ALGAS := [
@@ -35,7 +41,12 @@ var fundo: Node2D = null
 var fundo_base := Vector2.ZERO
 var mira := Vector2.ZERO
 
+## Chamado a cada quadro com (câmera em px de tela, 1/Z do fundo): o fundo
+## vivo (scripts/mar_vida.gd) move as pedras, cada uma na distância dela.
+var ao_mover: Callable
+
 var _tela := Vector2.ZERO
+var _c := Vector2.ZERO          # quanto a câmera andou (px de tela)
 var _olhar := Vector2.ZERO     # -1..1, suavizado
 var _t := 0.0
 var _algas: Array = []         # {no, rot, fase, freq, amp}
@@ -109,11 +120,17 @@ func _process(delta: float) -> void:
 	var meio := _tela * 0.5
 	var alvo := ((mira - meio) / meio).clamp(Vector2(-1, -1), Vector2(1, 1))
 	_olhar = _olhar.lerp(alvo, 1.0 - exp(-delta * SUAVE))
+	_c = _olhar * CAMERA_PASSO
 	# a frente anda contra a mira; o fundo, a favor (e balança na água)
-	position = -_olhar * FRENTE_PASSO
+	position = paralaxe(Z_FRENTE)
 	if fundo != null and is_instance_valid(fundo):
 		var balanco := Vector2(4.0 * sin(_t * 0.31), 3.0 * sin(_t * 0.23 + 1.2))
-		fundo.position = fundo_base + _olhar * FUNDO_PASSO + balanco
+		fundo.position = fundo_base + paralaxe(Z_FUNDO) + balanco
+		var mat := fundo.material as ShaderMaterial
+		if mat != null:
+			mat.set_shader_parameter("olhar", _c)
+		if ao_mover.is_valid():
+			ao_mover.call(_c, 1.0 / Z_FUNDO)
 
 	for a in _algas:
 		var no: Sprite2D = a["no"]
@@ -121,6 +138,17 @@ func _process(delta: float) -> void:
 			+ a["amp"] * 0.4 * sin(_t * a["freq"] * 2.3 + a["fase"] * 1.7)
 
 	_animar_peixe(delta)
+
+
+## Quanto uma coisa à distância z anda na tela agora (px).
+func paralaxe(z: float) -> Vector2:
+	return _c * (1.0 - 1.0 / maxf(z, 0.05))
+
+
+## O mesmo, descontado o que o fundo inteiro já andou (para o que é medido em
+## cima do fundo, como a porta do templo).
+func paralaxe_no_fundo(z: float) -> Vector2:
+	return _c * (1.0 / Z_FUNDO - 1.0 / maxf(z, 0.05))
 
 
 ## A sombra de um peixe grande passa bem perto, de um lado ao outro, na metade

@@ -55,7 +55,7 @@ Ele abre o jogo, espera 40 s e salva `build/android/LOGCAT-TVBOX.txt` e a
 pasta `build/android/caixa_preta`. Com `-Instalar`, o mesmo acontece logo
 depois de instalar o APK novo.
 
-A versão do APK aparece em Configurações > Apps da TV Box (1.16.0, código 18).
+A versão do APK aparece em Configurações > Apps da TV Box (1.17.0, código 19).
 
 ## Tela em pé na TV Box
 
@@ -955,6 +955,61 @@ borda de baixo quebrada no lado aceso). O ouro reage ao jogo:
   (51 → 59), sem shader novo pesado e sem aumento de processamento.
 
 APK 1.16.0 (código 18).
+
+## Rodada 17: cenários em 3D de verdade (a imagem decide a profundidade)
+
+A ideia: cada fundo continua sendo uma imagem 2D, mas agora cada pixel sabe a
+sua distância. A distância sai da própria imagem (`tools/gerar_profundidade.py`:
+o chão em perspectiva até o ponto de fuga, e cada coisa em pé — pedra,
+coluna, estátua, obelisco, cristal — com a distância do pé dela, recortada
+pelo contorno medido na imagem). Com isso:
+- **Câmera 3D:** a câmera anda um pouco com a mira e cada pixel do fundo anda
+  conforme a distância dele (paralaxe pixel a pixel no shader do fundo). Longe
+  anda com a mira, perto anda contra, o plano dos alvos fica parado.
+- **Alvos dentro da cena:** cada alvo tem a sua distância. Tamanho, rapidez
+  na tela, névoa e ordem de desenho vêm dela; o mais perto passa na frente,
+  o tiro pega o mais perto, e quem está atrás de uma pedra, coluna, estátua,
+  obelisco ou do cristal fica escondido de verdade (o tiro pega a coisa da
+  frente).
+
+**Mar** (`scripts/mar.gd`, `mar_vida.gd`, `mar_profundo.gd`,
+`shaders/fundo_profundo.gdshader`, `sprites/mar_profundidade.png`):
+- Alvos entram de jeitos diferentes: do fundo (porta do templo), do alto em
+  L, de lado, caindo; tamanhos variados. Para sumir, chegam perto do vidro.
+- O que cai bate no chão e espatifa conforme o objeto (vaso em cacos, baú
+  com moedas quicando, bomba explode no chão com coluna de areia).
+- Explosão nova (`scripts/mar_explosao.gd`): clarão, bola de fogo, anéis de
+  choque, bolha de gás que incha e colapsa, fumaça escura espalhando a água,
+  jatos, bolhas e estilhaços.
+- Água-viva (nuvem de luz e esporos) e vaso (cavalo-marinho de jade subindo)
+  com efeitos novos; furos de bala na areia com a poeira que fica pairando
+  (`scripts/furos.gd`); pontos saltando do alvo (`scripts/pontos_voando.gd`).
+- Mar em movimento: luz cáustica no chão (`shaders/mar_caustica.gdshader`),
+  fachos de luz e neve marinha.
+
+**Egito** (`scripts/deserto.gd`, `deserto_vivo.gd`,
+`shaders/egito_alvo.gdshader`, `sprites/egito_profundidade.png`):
+- Brasões em 3D: nascem lá no horizonte e vêm vindo, caem do alto em L,
+  entram de lado ou saem de trás do cristal/obelisco; vão se afastando com a
+  idade (era o encolhimento); somem chegando no vidro ou sumindo lá longe.
+  Mais brasões ao mesmo tempo (até 11). Acerto lá longe vale "DE LONGE!"
+  (+50%).
+- Furos de bala na areia e na pedra, com poeira; pontos saltando do brasão.
+- Brasões novos em alta definição (`tools/gerar_brasoes.py`): lua de prata
+  com as fases no aro e o Olho de Hórus; sol de ouro com o Olho de Rá; os
+  dois em prata/ouro com esmalte de lápis-lazúli.
+- Sol e lua do céu (`tools/gerar_astros.py`): o olho comprido, de borda a
+  borda do astro, desenhado como o Wadjet clássico (a cauda são as duas
+  linhas do olho seguindo juntas e fechando na ponta; a lágrima e a espiral
+  saem da linha de baixo), íris maior, tudo fundido ao astro; o sol ficou
+  dourado (antes avermelhado).
+
+**Leve para a TV Box:** efeitos desenhados em lote (`scripts/triangulos.gd`:
+moedas, grãos, fios e estilhaços num desenho só). Medido na partida do Mar:
+calmo ~60 chamadas de desenho (igual à 1.16); com efeitos ~82 (pico ~105).
+Egito: 59 → 71. Memória estável no teste longo (todas as telas, 7 min).
+
+APK 1.17.0 (código 19).
 
 ## Para testar no PC como se fosse a TV Box
 

@@ -28,6 +28,15 @@ extends Node2D
 ##   diamante            arco-íris nas arestas de dia, vermelho de noite
 ##   brilhos             estrelas que piscam no diamante, nas pontas e no
 ##                       disco; estrelas no céu e estrela cadente de noite
+##   câmera 3D           a câmera anda um pouco com a mira e cada pixel da foto
+##                       anda conforme a sua distância (mapa de profundidade
+##                       tirado da imagem, tools/gerar_profundidade.py): céu e
+##                       pirâmides com a mira, chão perto contra, o plano dos
+##                       brasões parado. As camadas de cima andam junto (céu e
+##                       cristal, cada uma na sua distância) e os brasões, que
+##                       vivem nessa mesma cena, somem atrás do cristal, dos
+##                       obeliscos, das estátuas e das colunas
+##                       (shaders/egito_alvo.gdshader, material_alvo).
 ##
 ## Uso: var vivo := DesertoVivo.new(); pai.add_child(vivo)
 ## (sem zoom: a imagem só cobre a tela, como as outras fases)
@@ -58,7 +67,9 @@ var SOM_AGUIA_NOITE: AudioStream = load("res://songs/aguia_noite.wav")
 var PONTAS: Texture2D = load("res://sprites/egito_pontas.png")
 var CRISTAL: Texture2D = load("res://sprites/egito_cristal_mascara.png")
 var ESTRELA: Texture2D = load("res://sprites/egito_estrela.png")
+var PROFUNDIDADE: Texture2D = load("res://sprites/egito_profundidade.png")
 const SHADER_FUNDO := preload("res://shaders/deserto_fundo.gdshader")
+const SHADER_ALVO := preload("res://shaders/egito_alvo.gdshader")
 const SHADER_RAIOS := preload("res://shaders/egito_raios.gdshader")
 const SHADER_CRISTAL := preload("res://shaders/egito_cristal.gdshader")
 
@@ -74,8 +85,8 @@ const PONTAS_CAIXA := Rect2(180, 438, 644, 148)
 # lugar da íris, topo da pálpebra e quanto ela desce para fechar, centro da
 # pálpebra de baixo em repouso e quanto ela sobe no máximo.
 # Sol: Olho de Rá (o direito); lua: Olho de Hórus (o esquerdo, espelho).
-const ASTRO_SOL := {"olho": Vector2(-70.7, -13.0), "u": 372.0, "iris": Vector2(0.0, -14.9), "palpebra_y": -442.8, "abre": 312.6, "baixo_y": 440.6, "sobe": 260.4}
-const ASTRO_LUA := {"olho": Vector2(70.7, -13.0), "u": 372.0, "iris": Vector2(0.0, -14.9), "palpebra_y": -442.8, "abre": 312.6, "baixo_y": 440.6, "sobe": 260.4}
+const ASTRO_SOL := {"olho": Vector2(-47.9, -12.0), "u": 342.2, "ux": 479.1, "iris": Vector2(0.0, -13.7), "palpebra_y": -383.4, "abre": 263.6, "baixo_y": 394.9, "sobe": 239.6}
+const ASTRO_LUA := {"olho": Vector2(47.9, -12.0), "u": 342.2, "ux": 479.1, "iris": Vector2(0.0, -13.7), "palpebra_y": -383.4, "abre": 263.6, "baixo_y": 394.9, "sobe": 239.6}
 
 # Humor dos olhos. topo: quanto a pálpebra de cima desce (0 aberta, 1
 # fechada); baixo: quanto a de baixo sobe (fração de "sobe"; a beirada curva
@@ -129,6 +140,18 @@ const BRILHOS_CRISTAL := [Vector2(506, 634), Vector2(466, 721), Vector2(548, 721
 		Vector2(527, 846), Vector2(505, 893), Vector2(461, 944), Vector2(551, 944)]
 const BRILHOS_PONTAS := [Vector2(229, 520), Vector2(509, 448), Vector2(774, 520)]
 const TEMPO_TROCA := 1.6
+# Câmera 3D: com a mira no canto ela anda CAMERA_PASSO px; uma coisa à
+# distância Z anda CAMERA_PASSO * (1 - 1/Z) (Z = 1 é o plano dos brasões).
+# O mapa vai de Z = 10 (preto: céu, pirâmides) a Z = 0,7 (branco: chão perto).
+const CAMERA_PASSO := 20.0
+const CAMERA_SUAVE := 2.6
+const Z_LONGE := 10.0
+const Z_PERTO := 0.7
+const Z_CRISTAL := 1.2
+# ponto de fuga (pé das pirâmides) e o chão a Z = 1, em px da imagem
+# (os mesmos de tools/gerar_profundidade.py)
+const HORIZONTE := 700.0
+const CHAO_1 := 1300.0
 # Águias (tools/gerar_aguias.py): 11 quadros (0 planando, 1..10 batendo asa);
 # voam no céu acima das pirâmides, entre as colunas (px da imagem).
 const AGUIA_QUADROS := 11
@@ -182,6 +205,15 @@ var _cadente_para := Vector2.ZERO
 #  vida, bat, fase, inclin, grito, ruido, vento, espera}
 var _aguias: Array = []
 var _grito_espera := 4.0
+
+# câmera 3D
+var mira := Vector2.INF        # posição da mira (o jogo atualiza; INF = parada)
+var camera := Vector2.ZERO     # quanto a câmera andou agora (px de tela)
+var material_alvo: ShaderMaterial = null
+var _olhar := Vector2.ZERO
+var _camada_ceu: Node2D
+var _camada_perto: Node2D
+var _prof: Image = null
 
 var _morto: Node2D
 var _fx_n: Node2D
@@ -246,6 +278,7 @@ func _init() -> void:
 	_cadente.material = soma
 	_cadente.visible = false
 	add_child(_cadente)
+	_montar_camera()
 	_definir_noite(0.0)
 
 
@@ -336,7 +369,7 @@ func _criar_astro(tex: Array, dados: Dictionary, c: Vector2) -> Node2D:
 	var h: Dictionary = HUMORES["calmo"]
 	_olhos.append({"astro": astro, "disco": disco, "halo": halo, "iris": iris, "palpebra": palpebra, "baixo": baixo,
 		"iris_0": iris.position, "palpebra_0": palpebra.position, "baixo_0": baixo.position,
-		"u": dados["u"], "abre": dados["abre"], "sobe": dados["sobe"],
+		"u": dados["u"], "ux": dados.get("ux", dados["u"]), "abre": dados["abre"], "sobe": dados["sobe"],
 		"olhar": Vector2.ZERO, "alvo": Vector2.ZERO, "prox_olhar": randf_range(0.6, 1.5),
 		"piscar": 0.0, "prox_piscar": randf_range(1.5, 3.5), "fase": -1.0, "dupla": false,
 		"topo_v": h["topo"], "baixo_v": h["baixo"]})
@@ -597,6 +630,119 @@ func _aplicar_camera() -> void:
 	# sem zoom: só cobre a tela (âncora no alto: o sol não entra no placar)
 	scale = Vector2.ONE * esc
 	position = Vector2((tela.x - IMG.x * esc) * 0.5, minf(0.0, (tela.y - IMG.y * esc) * 0.5))
+	var px := Vector2(1.0 / (IMG.x * esc), 1.0 / (IMG.y * esc))
+	for fundo: Sprite2D in [_fundo_sol, _fundo_lua]:
+		(fundo.material as ShaderMaterial).set_shader_parameter("px_uv", px)
+	if is_inside_tree():
+		var g := get_global_transform()
+		material_alvo.set_shader_parameter("fundo_origem", g.origin)
+		material_alvo.set_shader_parameter("fundo_tam", IMG * g.get_scale())
+
+
+# ───────────────────────────────────────────── câmera 3D
+## As camadas de cima andam com a câmera, cada uma na sua distância: o céu
+## (raios, sol/lua, águias, estrelas, brilhos das pontas) como o céu da foto e
+## o cristal (diamante, trincas, cacos) como o cristal da foto.
+func _montar_camera() -> void:
+	_prof = PROFUNDIDADE.get_image() if PROFUNDIDADE != null else null
+	if _prof != null and _prof.is_compressed():
+		_prof.decompress()
+	for fundo: Sprite2D in [_fundo_sol, _fundo_lua]:
+		var mf := fundo.material as ShaderMaterial
+		mf.set_shader_parameter("profundidade", PROFUNDIDADE)
+		mf.set_shader_parameter("inv_z_longe", 1.0 / Z_LONGE)
+		mf.set_shader_parameter("inv_z_perto", 1.0 / Z_PERTO)
+	material_alvo = ShaderMaterial.new()
+	material_alvo.shader = SHADER_ALVO
+	material_alvo.set_shader_parameter("profundidade", PROFUNDIDADE)
+	material_alvo.set_shader_parameter("inv_z_longe", 1.0 / Z_LONGE)
+	material_alvo.set_shader_parameter("inv_z_perto", 1.0 / Z_PERTO)
+
+	var ceu: Array[Node] = [_raios_sol, _raios_lua, _disco_sol, _disco_lua]
+	for a in _aguias:
+		ceu.append(a["no"])
+	ceu.append(_ceu_noite)
+	var perto: Array[Node] = [_cristal, _morto, _fx_n, _fx_s]
+	for b in _brilhos:
+		(perto if b["tipo"] == "cristal" else ceu).append(b["no"])
+	ceu.append(_cadente)
+	_camada_ceu = Node2D.new()
+	_camada_ceu.name = "CamadaCeu"
+	add_child(_camada_ceu)
+	move_child(_camada_ceu, 2)            # logo depois das duas imagens
+	_camada_perto = Node2D.new()
+	_camada_perto.name = "CamadaCristal"
+	add_child(_camada_perto)
+	move_child(_camada_perto, 3)
+	for no in ceu:
+		remove_child(no)
+		_camada_ceu.add_child(no)
+	for no in perto:
+		remove_child(no)
+		_camada_perto.add_child(no)
+
+
+func _animar_camera(delta: float) -> void:
+	var alvo := Vector2.ZERO
+	if mira != Vector2.INF:
+		var meio := get_viewport_rect().size * 0.5
+		alvo = ((mira - meio) / meio).clamp(Vector2(-1, -1), Vector2(1, 1))
+	_olhar = _olhar.lerp(alvo, 1.0 - exp(-delta * CAMERA_SUAVE))
+	# na vertical anda menos (o céu de cima fica sob o placar)
+	camera = _olhar * CAMERA_PASSO * Vector2(1.0, 0.7)
+	var esc := scale.x
+	_camada_ceu.position = camera * (1.0 - 1.0 / Z_LONGE) / esc
+	_camada_perto.position = camera * (1.0 - 1.0 / Z_CRISTAL) / esc
+	for fundo: Sprite2D in [_fundo_sol, _fundo_lua]:
+		if fundo.visible:
+			(fundo.material as ShaderMaterial).set_shader_parameter("olhar", camera)
+	material_alvo.set_shader_parameter("olhar", camera)
+
+
+## Ponto de fuga (pé das pirâmides) na tela.
+func ponto_de_fuga() -> Vector2:
+	return get_global_transform() * Vector2(IMG.x * 0.5, HORIZONTE)
+
+
+## y (tela) do chão a Z = 1: um brasão à distância z não desce abaixo de
+## fuga.y + (chao_1 - fuga.y) / z (senão estaria enterrado).
+func chao_1() -> float:
+	return (get_global_transform() * Vector2(0.0, CHAO_1)).y
+
+
+## Quanto uma coisa à distância z anda na tela agora (px).
+func paralaxe(z: float) -> Vector2:
+	return camera * (1.0 - 1.0 / maxf(z, 0.05))
+
+
+## 1/Z do fundo no ponto p da imagem (px da imagem).
+func _inv_z_local(p: Vector2) -> float:
+	if _prof == null:
+		return 1.0 / Z_LONGE
+	var w := _prof.get_width()
+	var h := _prof.get_height()
+	var x := clampi(int(p.x / IMG.x * w), 0, w - 1)
+	var y := clampi(int(p.y / IMG.y * h), 0, h - 1)
+	return lerpf(1.0 / Z_LONGE, 1.0 / Z_PERTO, _prof.get_pixel(x, y).r)
+
+
+## O ponto da imagem que aparece agora no ponto p da tela (desfaz a câmera).
+func ponto_da_imagem(p_global: Vector2) -> Vector2:
+	var p: Vector2 = get_global_transform().affine_inverse() * p_global
+	var esc := maxf(scale.x, 0.001)
+	var inv := _inv_z_local(p)
+	return p - camera * (1.0 - _inv_z_local(p - camera * (1.0 - inv) / esc)) / esc
+
+
+## 1/Z do que aparece no ponto p da tela (para saber se um brasão está atrás).
+func inv_z_na_tela(p_global: Vector2) -> float:
+	return _inv_z_local(ponto_da_imagem(p_global))
+
+
+## Quanto um ponto do chão (px da imagem) anda agora, em px da imagem
+## (furos de bala e poeira grudados no chão).
+func deslocamento_no_chao(p: Vector2) -> Vector2:
+	return camera * (1.0 - _inv_z_local(p)) / maxf(scale.x, 0.001)
 
 
 # ───────────────────────────────────────────── animação
@@ -611,6 +757,9 @@ func _definir_noite(v: float) -> void:
 		no.visible = par[1] > 0.001
 		no.modulate.a = par[1]
 	(_cristal.material as ShaderMaterial).set_shader_parameter("noite", _noite)
+	# névoa da distância nos brasões: areia quente de dia, azul-escuro de noite
+	var nevoa := Color(0.96, 0.74, 0.46).lerp(Color(0.16, 0.18, 0.30), _noite)
+	material_alvo.set_shader_parameter("cor_nevoa", Vector3(nevoa.r, nevoa.g, nevoa.b))
 	_ceu_noite.visible = _noite > 0.01
 	_faiscas.color = Color(1.0, 0.80, 0.42).lerp(Color(1.0, 0.42, 0.40), _noite)
 	_poeira.color = Color(1.0, 0.86, 0.6, 0.55).lerp(Color(0.75, 0.85, 1.0, 0.45), _noite)
@@ -618,6 +767,7 @@ func _definir_noite(v: float) -> void:
 
 func _process(delta: float) -> void:
 	_t += delta
+	_animar_camera(delta)
 	var som := Maquina.pulso_vivo()
 	if som.y > 0.55 and _onda > 0.62:
 		_onda = 0.0
@@ -763,7 +913,8 @@ func _olhar_para(o: Dictionary, p_tela: Vector2, alcance: float) -> Vector2:
 	var centro: Vector2 = (o["astro"] as Node2D).get_global_transform_with_canvas().origin
 	var d := p_tela - centro
 	var u: float = o["u"]
-	return Vector2(clampf(d.x / 320.0, -1.0, 1.0) * 0.30 * alcance, clampf(d.y / 420.0, -1.0, 1.0) * 0.05) * u
+	var ux: float = o["ux"]   # o olho é comprido: na horizontal a íris anda mais
+	return Vector2(clampf(d.x / 320.0, -1.0, 1.0) * 0.36 * alcance * ux, clampf(d.y / 420.0, -1.0, 1.0) * 0.05 * u)
 
 
 ## Olho vivo: a íris passeia (calma desliza, atenta salta e segue a mira), as
@@ -801,7 +952,7 @@ func _animar_olhos(delta: float) -> void:
 					var escolhas := [Vector2(0, 0), Vector2(-0.30, 0.0), Vector2(0.30, 0.0), Vector2(-0.22, -0.04),
 						Vector2(0.22, -0.04), Vector2(-0.18, 0.04), Vector2(0.18, 0.04), Vector2(0.0, -0.04)]
 					var e: Vector2 = escolhas[randi() % escolhas.size()]
-					o["alvo"] = Vector2(e.x * alcance, e.y) * u
+					o["alvo"] = Vector2(e.x * alcance * float(o["ux"]) * 1.2, e.y * u)
 		var olhar: Vector2 = o["olhar"]
 		olhar = olhar.lerp(o["alvo"] + Vector2(0.0, float(h["iris_y"]) * u), 1.0 - exp(-delta * float(h["vel"])))
 		o["olhar"] = olhar
@@ -932,7 +1083,7 @@ func material_em(p: Vector2) -> String:
 ## Tiro que não pegou alvo: cada lugar responde do seu jeito. Devolve o
 ## material (a fase decide se ainda deixa a marca de tiro).
 func impacto(pos_global: Vector2) -> String:
-	var p: Vector2 = get_global_transform().affine_inverse() * pos_global
+	var p: Vector2 = ponto_da_imagem(pos_global)
 	var mat := material_em(p)
 	match mat:
 		"cristal":
