@@ -25,7 +25,7 @@ var BOLHA: Texture2D = load("res://sprites/mar_bolha.png")
 # fica parado; longe anda com a mira, perto anda contra). O fundo inteiro anda
 # como a parte mais longe (Z_FUNDO) e o shader do fundo dá a cada pixel a
 # diferença da distância dele (shaders/fundo_profundo.gdshader).
-const CAMERA_PASSO := 20.0
+const CAMERA_PASSO := 26.0
 const Z_FUNDO := 8.0
 const Z_FRENTE := 0.32
 const SUAVE := 2.6             # quanto mais alto, mais rápido segue a mira

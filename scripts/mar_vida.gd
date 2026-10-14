@@ -1,7 +1,7 @@
 extends Node2D
 
 # Vida do fundo do mar. Fica como filho do Sprite2D do fundo, com a origem no
-# canto da textura: todas as posições aqui são pixels de atlantis_jogo.png
+# canto da textura: todas as posições aqui são pixels de atlantis_fundo.png
 # (1024x1536). Contornos e caixas vêm de tools/gerar_mar.py.
 #
 #   cachoeiras   escorrendo (mesmo material e textura: um desenho só)
@@ -49,6 +49,10 @@ var LODO: Texture2D = load("res://sprites/mar_lodo.png")
 var FARPA: Texture2D = load("res://sprites/mar_farpa.png")
 var MASCARA_PEDRA_ESQ: Texture2D = load("res://sprites/mar_pedra_esq_mascara.png")
 var MASCARA_PEDRA_DIR: Texture2D = load("res://sprites/mar_pedra_dir_mascara.png")
+# as pedras recortadas (o fundo, atlantis_fundo.png, não tem mais as pedras:
+# atrás delas ele foi reconstruído; tools/gerar_camadas.py)
+var TEX_PEDRA_ESQ: Texture2D = load("res://sprites/mar_pedra_esq.png")
+var TEX_PEDRA_DIR: Texture2D = load("res://sprites/mar_pedra_dir.png")
 const SOM_BALEIA := preload("res://songs/baleia.wav")
 const SOM_NAVIO_DESCE := preload("res://songs/navio_desce.wav")
 const SOM_NAVIO_IMPACTO := preload("res://songs/navio_impacto.wav")
@@ -118,6 +122,7 @@ const BASE_TEMPLO := 790.0   # daqui para cima, tudo longe
 static func z_desenho(z: float) -> int:
 	return 100 + int(round(60.0 / maxf(z, 0.05)))
 const MAX_DANOS := 12
+const FOLGA_PEDRA := 24.0    # tools/gerar_camadas.py MAR_FOLGA
 
 var _baleias: Array = []
 var _pedras: Array = []          # {no, mat, img, canto, tam, danos}
@@ -577,25 +582,26 @@ func _pousar() -> void:
 
 # ───────────────────────────────────────────── pedras com escritas
 func _criar_pedras() -> void:
-	var fundo := get_parent() as Sprite2D
-	if fundo == null or fundo.texture == null:
-		return
-	var tex_tam := fundo.texture.get_size()
 	for d in PEDRAS:
-		var mascara: Texture2D = MASCARA_PEDRA_ESQ if d["mascara"] == "esq" else MASCARA_PEDRA_DIR
+		var esq: bool = d["mascara"] == "esq"
+		var mascara: Texture2D = MASCARA_PEDRA_ESQ if esq else MASCARA_PEDRA_DIR
 		var canto: Vector2 = d["canto"]
 		var tam: Vector2 = d["tam"]
+		var tex: Texture2D = TEX_PEDRA_ESQ if esq else TEX_PEDRA_DIR
+		# a textura é a caixa da máscara com FOLGA_PEDRA px em volta (cortada
+		# na borda da imagem): o contorno de verdade passa da máscara
+		var tex_canto := Vector2(maxf(canto.x - FOLGA_PEDRA, 0.0), maxf(canto.y - FOLGA_PEDRA, 0.0))
+		var tex_tam := tex.get_size()
+		var desloc := canto - tex_canto
 		var s := Sprite2D.new()
 		s.name = "Pedra_" + d["mascara"]
-		s.texture = fundo.texture
+		s.texture = tex
 		s.centered = false
-		s.region_enabled = true
-		s.region_rect = Rect2(canto, tam)
-		s.position = canto
+		s.position = tex_canto
 		var mat := ShaderMaterial.new()
 		mat.shader = SHADER_PEDRA
 		mat.set_shader_parameter("mascara", mascara)
-		mat.set_shader_parameter("regiao", Vector4(canto.x / tex_tam.x, canto.y / tex_tam.y, tam.x / tex_tam.x, tam.y / tex_tam.y))
+		mat.set_shader_parameter("regiao", Vector4(desloc.x / tex_tam.x, desloc.y / tex_tam.y, tam.x / tex_tam.x, tam.y / tex_tam.y))
 		mat.set_shader_parameter("aspecto", tam.x / tam.y)
 		mat.set_shader_parameter("fase", d["fase"])
 		mat.set_shader_parameter("n_danos", 0)
@@ -605,7 +611,13 @@ func _criar_pedras() -> void:
 		s.z_as_relative = false
 		s.z_index = z_desenho(d["z"])
 		add_child(s)
-		_pedras.append({"no": s, "mat": mat, "img": mascara.get_image(), "canto": canto, "tam": tam, "danos": [], "z": d["z"]})
+		var img := tex.get_image()
+		if img != null and img.is_compressed():
+			img.decompress()
+		# canto/tam: a caixa da textura; desloc: onde a caixa da máscara (das
+		# runas e dos buracos) começa dentro dela
+		_pedras.append({"no": s, "mat": mat, "img": img, "canto": tex_canto, "tam": tex_tam, "desloc": desloc,
+			"tam_mascara": tam, "danos": [], "z": d["z"]})
 
 
 ## Tiro em `pos` (px da textura). Se for numa pedra: buraco, lascas, poeira e
@@ -617,7 +629,7 @@ func acertar_pedra(pos: Vector2) -> bool:
 		if local.x < 0.0 or local.y < 0.0 or local.x >= tam.x or local.y >= tam.y:
 			continue
 		var img: Image = p["img"]
-		if img == null or img.get_pixel(int(local.x), int(local.y)).b < 0.5:
+		if img == null or img.get_pixel(int(local.x), int(local.y)).a < 0.5:
 			continue
 		_quebrar(p, pos, local)
 		return true
@@ -633,7 +645,7 @@ func z_da_pedra_em(pos: Vector2) -> float:
 		if local.x < 0.0 or local.y < 0.0 or local.x >= tam.x or local.y >= tam.y:
 			continue
 		var img: Image = p["img"]
-		if img != null and img.get_pixel(int(local.x), int(local.y)).b >= 0.5:
+		if img != null and img.get_pixel(int(local.x), int(local.y)).a >= 0.5:
 			z = minf(z, float(p["z"]))
 	return z
 
@@ -668,10 +680,12 @@ func deslocamento_no_chao(p: Vector2) -> Vector2:
 
 
 func _quebrar(p: Dictionary, pos: Vector2, local: Vector2) -> void:
-	var tam: Vector2 = p["tam"]
+	# o buraco é marcado na caixa da máscara (o shader desenha lá)
+	var tam: Vector2 = p["tam_mascara"]
+	var lm: Vector2 = local - p["desloc"]
 	var raio := randf_range(13.0, 18.0)
 	var danos: Array = p["danos"]
-	danos.append(Vector4(local.x / tam.x, local.y / tam.y, raio / tam.x, randf()))
+	danos.append(Vector4(lm.x / tam.x, lm.y / tam.y, raio / tam.x, randf()))
 	while danos.size() > MAX_DANOS:
 		danos.pop_front()
 	var arr := PackedVector4Array()
@@ -684,9 +698,11 @@ func _quebrar(p: Dictionary, pos: Vector2, local: Vector2) -> void:
 	mat.set_shader_parameter("n_danos", danos.size())
 
 	# a pedra que sai do buraco (recortada do próprio lugar) + lasquinhas
-	_soltar_lasca(pos, raio * 1.05, true)
+	var tex_pedra: Texture2D = (p["no"] as Sprite2D).texture
+	_soltar_lasca(pos, raio * 1.05, true, tex_pedra, local)
 	for i in 4:
-		_soltar_lasca(pos + Vector2(randf_range(-6, 6), randf_range(-6, 6)), raio * randf_range(0.28, 0.45), false)
+		var v := Vector2(randf_range(-6, 6), randf_range(-6, 6))
+		_soltar_lasca(pos + v, raio * randf_range(0.28, 0.45), false, tex_pedra, local + v)
 	_poeira_pedra.position = pos
 	_poeira_pedra.restart()
 	_poeira_pedra.emitting = true

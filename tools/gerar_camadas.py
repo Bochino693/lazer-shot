@@ -83,17 +83,19 @@ def mascara_poligono(pol, forma, E=2):
     return (np.asarray(m.resize((w, h), Image.LANCZOS)) > 127).astype(np.uint8)
 
 
-def refinar(img, pm):
+def refinar(img, pm, folga=14):
     """Contorno de verdade da coisa: GrabCut começando do polígono (miolo =
-    certeza, beirada = provável, anel em volta = provável fundo)."""
+    certeza, beirada = provável, anel de `folga` px em volta = provável
+    fundo)."""
     ys, xs = np.where(pm)
     h, w = pm.shape
-    x0, x1 = max(xs.min() - 30, 0), min(xs.max() + 31, w)
-    y0, y1 = max(ys.min() - 30, 0), min(ys.max() + 31, h)
+    mg = max(30, folga + 16)
+    x0, x1 = max(xs.min() - mg, 0), min(xs.max() + mg + 1, w)
+    y0, y1 = max(ys.min() - mg, 0), min(ys.max() + mg + 1, h)
     crop = np.ascontiguousarray(img[y0:y1, x0:x1])
     p = pm[y0:y1, x0:x1]
     dent = cv2.erode(p, k(7))
-    fora = cv2.dilate(p, k(14))
+    fora = cv2.dilate(p, k(folga))
     m = np.full(p.shape, cv2.GC_BGD, np.uint8)
     m[fora > 0] = cv2.GC_PR_BGD
     m[p > 0] = cv2.GC_PR_FGD
@@ -282,26 +284,49 @@ const PLANOS := [
 MAR_PEDRAS = [("esq", (0, 466), (238, 471)), ("dir", (523, 523), (428, 710))]
 
 
+# a textura de cada pedra é a caixa da máscara dela com esta folga em volta
+# (o contorno de verdade passa um pouco da máscara antiga); scripts/mar_vida.gd
+# usa a mesma folga
+MAR_FOLGA = 24
+
+
 def mar():
     img = ler("atlantis_jogo.png")
     H, W = img.shape[:2]
-    tira = np.zeros((H, W), np.uint8)
+    bgr = cv2.cvtColor(img, cv2.COLOR_RGB2BGR).copy()
     print("Mar: pedras")
     for nome, canto, tam in MAR_PEDRAS:
         msk = np.asarray(Image.open(os.path.join(SP, "mar_pedra_%s_mascara.png" % nome)).convert("RGBA"))
-        b = msk[..., 2].astype(np.float32) / 255.0
         x0, y0 = canto
         w, h = tam
-        corte = img[y0:y0 + h, x0:x0 + w].astype(np.float32)
-        alfa = np.clip((b - 0.35) / 0.3, 0, 1)
+        pm = np.zeros((H, W), np.uint8)
+        pm[y0:y0 + h, x0:x0 + w] = (msk[..., 2] > 127).astype(np.uint8)
+        m = refinar(img, pm, folga=30)
+        tx0, ty0 = max(x0 - MAR_FOLGA, 0), max(y0 - MAR_FOLGA, 0)
+        tx1, ty1 = min(x0 + w + MAR_FOLGA, W), min(y0 + h + MAR_FOLGA, H)
+        alfa = cv2.GaussianBlur(m.astype(np.float32), (0, 0), 0.8)[ty0:ty1, tx0:tx1]
+        corte = img[ty0:ty1, tx0:tx1].astype(np.float32)
         gravar(np.dstack([corte, alfa * 255]), "mar_pedra_%s.png" % nome)
-        t = (b > 0.25).astype(np.uint8)
-        tira[y0:y0 + h, x0:x0 + w] |= cv2.dilate(t, k(4))
-    bgr = cv2.inpaint(cv2.cvtColor(img, cv2.COLOR_RGB2BGR), tira * 255, 7, cv2.INPAINT_TELEA)
-    rec = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB).astype(np.float32)
-    ruido = cv2.GaussianBlur(np.random.default_rng(5).standard_normal((H, W)).astype(np.float32), (0, 0), 0.8) * 5.0
-    rec = rec + (ruido * cv2.GaussianBlur(tira.astype(np.float32), (0, 0), 2.0))[..., None]
-    gravar(np.clip(rec, 0, 255), "atlantis_fundo.png")
+        # atrás da pedra: remendos da própria imagem (água, areia, corais),
+        # com folga para não sobrar contorno escuro da pedra (é só a borda
+        # que aparece quando a câmera anda)
+        tira = cv2.dilate(m, k(7))
+        ys, xs = np.where(tira)
+        mg = 140
+        cx0, cx1 = max(xs.min() - mg, 0), min(xs.max() + mg, W)
+        cy0, cy1 = max(ys.min() - mg, 0), min(ys.max() + mg, H)
+        t = np.ascontiguousarray(tira[cy0:cy1, cx0:cx1])
+        c = np.ascontiguousarray(bgr[cy0:cy1, cx0:cx1])
+        out = np.zeros_like(c)
+        cv2.xphoto.inpaint(c, ((1 - t) * 255).astype(np.uint8), out, cv2.xphoto.INPAINT_SHIFTMAP)
+        # o que o remendo deixou preto (sem fonte perto da borda da imagem)
+        preto = ((out.astype(np.int32).sum(2) < 24) & (t > 0)).astype(np.uint8)
+        if preto.any():
+            simples = cv2.inpaint(c, t * 255, 9, cv2.INPAINT_TELEA)
+            out[preto > 0] = simples[preto > 0]
+        suave = np.maximum(cv2.GaussianBlur(t.astype(np.float32), (0, 0), 1.2), t)[..., None]
+        bgr[cy0:cy1, cx0:cx1] = (out * suave + c * (1 - suave)).astype(np.uint8)
+    gravar(cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB), "atlantis_fundo.png")
 
 
 # ───────────────────────────────────────────── luz da energia

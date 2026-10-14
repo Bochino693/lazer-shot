@@ -1,8 +1,8 @@
 shader_type canvas_item;
 
-// Pedra com escritas do fundo do mar (scripts/mar_vida.gd). Desenha a própria
-// pedra por cima do fundo (mesma textura, recortada pela máscara), então tudo
-// que acontece aqui fica preso nela:
+// Pedra com escritas do fundo do mar (scripts/mar_vida.gd). Desenha a pedra
+// recortada (sprites/mar_pedra_*.png, o contorno no alfa) por cima do fundo
+// sem ela, então tudo que acontece aqui fica preso nela:
 //   - as runas acendem com uma faixa de luz que desce do topo à base, e as
 //     que a luz já passou ficam acesas um pouco;
 //   - cada tiro abre um buraco (fundo escuro, parede iluminada pela luz de
@@ -11,7 +11,7 @@ shader_type canvas_item;
 // B = pedra, A = halo das runas.
 
 uniform sampler2D mascara : filter_linear, repeat_disable;
-uniform vec4 regiao = vec4(0.0, 0.0, 1.0, 1.0);   // caixa da pedra em UV da textura
+uniform vec4 regiao = vec4(0.0, 0.0, 1.0, 1.0);   // caixa da máscara em UV da textura da pedra
 uniform float aspecto = 0.5;                       // largura / altura da caixa
 uniform float periodo = 4.6;
 uniform float fase = 0.0;
@@ -26,7 +26,9 @@ void vertex() {
 
 void fragment() {
 	vec2 luv = (UV - regiao.xy) / regiao.zw;
-	vec4 m = texture(mascara, luv);
+	// fora da caixa da máscara (a folga do recorte) não há runas
+	float dentro = step(0.0, luv.x) * step(luv.x, 1.0) * step(0.0, luv.y) * step(luv.y, 1.0);
+	vec4 m = texture(mascara, luv) * dentro;
 	vec4 base = texture(TEXTURE, UV);
 	vec3 col = base.rgb;
 
@@ -64,5 +66,5 @@ void fragment() {
 	vec3 ciano = vec3(0.32, 0.95, 1.0);
 	col += ciano * (m.r * acende * 0.85 + m.a * acende * 0.28);
 	col += ciano * faixa * m.b * 0.035;   // a luz passando de leve pela pedra
-	COLOR = vec4(col, m.b * base.a) * cor_no;
+	COLOR = vec4(col, base.a) * cor_no;
 }

@@ -39,7 +39,7 @@ var fx_redraw_timer: float = 0.0
 @export var tiro_sem_tremida_no_erro: bool = true
 
 
-@export var caminho_background: String = "res://sprites/atlantis_jogo.png"
+@export var caminho_background: String = "res://sprites/atlantis_fundo.png"
 @export var tempo_partida: float = 120.0
 @export var som_aguaviva_hit_path: String = "res://songs/buble_hit.wav"
 @export var som_bomba_xploit_path: String = "res://songs/xploit.wav"

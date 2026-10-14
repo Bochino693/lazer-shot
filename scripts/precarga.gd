@@ -125,7 +125,9 @@ const LISTA := {
 		"res://sprites/fundo_init_mascara.png",
 	],
 	"res://scenes/mar.tscn": [
-		"res://sprites/atlantis_jogo.png",
+		"res://sprites/atlantis_fundo.png",
+		"res://sprites/mar_pedra_esq.png",
+		"res://sprites/mar_pedra_dir.png",
 		"res://songs/buble_hit.wav",
 		"res://songs/xploit.wav",
 		"res://songs/recharge.wav",

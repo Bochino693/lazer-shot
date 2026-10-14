@@ -6,7 +6,8 @@ para a porta do templo (o ponto de fuga) e cada coisa em pé tem a distância
 do ponto onde ela encosta no chão. Daqui sai, para cada pixel do fundo, a
 distância Z (Z = 1 é o plano dos alvos comuns):
   chão          em perspectiva: Z = (chão perto - fuga) / (y na tela - fuga)
-  pedras        constante, a do pé de cada uma (as duas pedras grandes)
+  pedras        fora do mapa: são planos recortados à parte, cada um na
+                distância do pé dele (scripts/mar_vida.gd)
   templo e céu  longe (Z = 10)
 O shader do fundo (shaders/fundo_profundo.gdshader) move cada pixel conforme
 essa distância quando a mira anda (paralaxe de verdade, pixel a pixel), e
@@ -73,10 +74,9 @@ def mar():
     z = np.where(yy > PE_TEMPLO, z_chao(yy), Z_LONGE)
     templo = mascara("mar_frente_navio_mascara.png", (195, 530), 0)
     z = np.where(templo > 0.5, np.minimum(z, float(z_chao(PE_TEMPLO))), z)
-    for nome, canto, pe in (("mar_pedra_esq_mascara.png", (0, 466), PE_PEDRA_ESQ),
-                            ("mar_pedra_dir_mascara.png", (523, 523), PE_PEDRA_DIR)):
-        m = mascara(nome, canto)
-        z = np.where(m > 0.5, float(z_chao(pe)), z)
+    # as duas pedras com escritas não entram: são planos à parte
+    # (sprites/mar_pedra_*.png, tools/gerar_camadas.py) e o fundo atrás delas
+    # foi reconstruído (atlantis_fundo.png), então ali o fundo é chão
     inv = 1.0 / z
     t = (inv - 1 / Z_LONGE) / (1 / Z_PERTO - 1 / Z_LONGE)
     peq = Image.fromarray((np.clip(t, 0, 1) * 255 + 0.5).astype(np.uint8), "L").resize((TEX[0] // 4, TEX[1] // 4), Image.BILINEAR)
