@@ -6,8 +6,11 @@ extends Node2D
 ##   água-viva  vira pó de luz: a própria imagem se desfaz em grãos a partir
 ##              do ponto do tiro (como uma onda), que se espalham, sobem
 ##              devagar brilhando e somem; anéis na água, nuvem de luz e bolhas
-##   vaso       cacos de cerâmica (da própria imagem) voando e afundando, pó
-##              de barro, grãos caindo, brilhos verdes do cristal e bolhas
+##   vaso       cerâmica de verdade: a trinca corre pelo vaso inteiro (linhas
+##              tortas, como barro quebrando) e só então os cacos se soltam,
+##              devagar (a água segura), tombam mostrando o lado de dentro
+##              (barro sem verniz) e a espessura da borda, e afundam; pó de
+##              barro, grãos caindo, brilhos verdes do cristal e bolhas
 ##   baú        tábuas do baú voando e afundando, estrelas de ouro, anel
 ##              dourado, pó de madeira e bolhas
 ## Os pedaços nascem da rachadura no ponto do tiro (pequenos perto dele).
@@ -32,6 +35,19 @@ const FORMAS := {
 }
 
 var _brilho: Texture2D = null
+
+# Silhueta do vaso (fração do quadro idle de sprites_vaso.png, tirada do
+# alfa da imagem): os cacos saem só de onde há vaso. Abaixo de BASE_VASO é o
+# cascalho em volta do pé (cai como pedra, não vira caco de cerâmica).
+const CONTORNO_VASO := [
+	Vector2(0.849, 0.628), Vector2(0.832, 0.666), Vector2(0.808, 0.700), Vector2(0.884, 0.782), Vector2(0.892, 0.858), Vector2(0.812, 0.868),
+	Vector2(0.748, 0.876), Vector2(0.687, 0.873), Vector2(0.636, 0.873), Vector2(0.588, 0.877), Vector2(0.540, 0.870), Vector2(0.485, 0.881),
+	Vector2(0.427, 0.879), Vector2(0.358, 0.875), Vector2(0.284, 0.858), Vector2(0.235, 0.811), Vector2(0.340, 0.709), Vector2(0.312, 0.671),
+	Vector2(0.292, 0.628), Vector2(0.277, 0.578), Vector2(0.263, 0.521), Vector2(0.269, 0.462), Vector2(0.298, 0.409), Vector2(0.345, 0.367),
+	Vector2(0.357, 0.267), Vector2(0.440, 0.261), Vector2(0.516, 0.258), Vector2(0.588, 0.261), Vector2(0.660, 0.261), Vector2(0.735, 0.264),
+	Vector2(0.764, 0.353), Vector2(0.814, 0.385), Vector2(0.850, 0.430), Vector2(0.867, 0.482), Vector2(0.870, 0.535), Vector2(0.861, 0.584),
+]
+const BASE_VASO := 0.8
 
 var _tipo := ""
 # no máximo 4 efeitos ao mesmo tempo (rajada não pesa na TV Box); a contagem é
@@ -58,6 +74,8 @@ var _aneis: Array[Dictionary] = []
 var _clarao := {}
 var _fios: Array[Dictionary] = []
 var _po: Array[Dictionary] = []      # grãos da água-viva (pedacinhos da imagem)
+var _trincas: Array[PackedVector2Array] = []   # trincas do vaso (tela), antes de abrir
+const TRINCA_ABRE := 0.09            # o vaso trincado fica inteiro esse tempo
 var _cor_po := Color.WHITE
 var _abriu := false
 var _chao_bau := 0.0
@@ -135,6 +153,29 @@ func _montar(anim: AnimatedSprite2D, quadro: Texture2D, impacto: Vector2, tipo: 
 	elif _chao_y != INF:
 		# o vaso parte em poucos pedaços grandes que rolam e afundam na areia
 		_rachar(f, regiao, folha, xf, canto, tiro, corpo, r, 4, 0.0)
+	elif tipo == "vaso":
+		var silhueta := PackedVector2Array()
+		for q: Vector2 in CONTORNO_VASO:
+			silhueta.append(q * regiao.size)
+		var acima := PackedVector2Array([Vector2(-10, -10), Vector2(regiao.size.x + 10, -10),
+			Vector2(regiao.size.x + 10, BASE_VASO * regiao.size.y), Vector2(-10, BASE_VASO * regiao.size.y)])
+		var vaso := Geometry2D.intersect_polygons(silhueta, acima)
+		_rachar_ceramica(regiao, folha, xf, canto, tiro.clamp(c - r * 0.6, c + r * 0.6), vaso[0] if not vaso.is_empty() else corpo, r)
+		# o cascalho do pé: três pedras que só caem
+		for pedra in Geometry2D.clip_polygons(silhueta, acima):
+			var x0 := regiao.size.x * 0.2
+			var larg := regiao.size.x * 0.24
+			for k in 3:
+				var faixa := PackedVector2Array([Vector2(x0 + larg * k, 0), Vector2(x0 + larg * (k + 1), 0),
+					Vector2(x0 + larg * (k + 1), regiao.size.y), Vector2(x0 + larg * k, regiao.size.y)])
+				for pedaco in Geometry2D.intersect_polygons(pedra, faixa):
+					var antes := _cacos.size()
+					_novo_caco(pedaco, regiao, folha, xf, canto, tiro)
+					if _cacos.size() > antes:
+						var cc: Dictionary = _cacos[-1]
+						cc.erase("tomba")
+						cc["vel"] = Vector2(randf_range(-40.0, 40.0), randf_range(10.0, 50.0)) * _k
+						cc["giro"] = randf_range(-0.8, 0.8)
 	else:
 		_rachar(f, regiao, folha, xf, canto, tiro, corpo, r)
 
@@ -187,6 +228,54 @@ func _rachar(f: Dictionary, regiao: Rect2, folha: Vector2, xf: Transform2D, cant
 					setor.append(tiro + Vector2(cos(a), sin(a)) * ri)
 			for peca in Geometry2D.intersect_polygons(setor, corpo):
 				_novo_caco(peca, regiao, folha, xf, canto, tiro)
+
+
+## Cerâmica: trincas tortas saindo do tiro (cada uma uma linha quebrada,
+## dividida pelos dois cacos vizinhos, então eles se encaixam) e um anel
+## torto em volta: dentro dele os cacos são menores. As trincas ficam
+## guardadas para aparecer no vaso inteiro antes de ele abrir.
+func _rachar_ceramica(regiao: Rect2, folha: Vector2, xf: Transform2D, canto: Vector2, tiro: Vector2,
+		corpo: PackedVector2Array, r: Vector2) -> void:
+	var n := randi_range(5, 6)
+	var a0 := randf() * TAU
+	var longe := r.length() * 2.5
+	var passos := 7
+	var trincas: Array[PackedVector2Array] = []
+	for i in n:
+		var a := a0 + TAU * (i + randf_range(-0.28, 0.28)) / n
+		var linha := PackedVector2Array([tiro])
+		var desvio := 0.0
+		for k in range(1, passos + 1):
+			var d := longe * pow(float(k) / passos, 1.35)
+			desvio = clampf(desvio + randf_range(-0.16, 0.16), -0.3, 0.3)
+			linha.append(tiro + Vector2.from_angle(a + desvio) * d)
+		trincas.append(linha)
+	# anel torto (os cacos de dentro dele são os menores)
+	var anel := PackedVector2Array()
+	var raio_anel := maxf(r.x, r.y) * randf_range(0.34, 0.44)
+	for k in 20:
+		var a := TAU * k / 20.0
+		anel.append(tiro + Vector2(cos(a), sin(a)) * raio_anel * randf_range(0.82, 1.15))
+	for i in n:
+		var t0: PackedVector2Array = trincas[i]
+		var t1: PackedVector2Array = trincas[(i + 1) % n]
+		var setor := PackedVector2Array(t0)
+		for k in range(t1.size() - 1, 0, -1):
+			setor.append(t1[k])
+		for parte in Geometry2D.intersect_polygons(setor, corpo):
+			for dentro in Geometry2D.intersect_polygons(parte, anel):
+				_novo_caco(dentro, regiao, folha, xf, canto, tiro)
+			for fora in Geometry2D.clip_polygons(parte, anel):
+				_novo_caco(fora, regiao, folha, xf, canto, tiro)
+	# as trincas que aparecem no vaso (só a parte que passa por ele)
+	for linha in trincas:
+		var tela := PackedVector2Array()
+		for p in linha:
+			if tela.size() > 1 and not Geometry2D.is_point_in_polygon(p, corpo):
+				break
+			tela.append(xf * (canto + p))
+		if tela.size() >= 2:
+			_trincas.append(tela)
 
 
 ## O alvo inteiro como um pedaço só (o baú que bate no chão).
@@ -268,9 +357,10 @@ func _novo_caco(peca: PackedVector2Array, regiao: Rect2, folha: Vector2, xf: Tra
 			vida = randf_range(0.7, 1.1)
 			giro = randf_range(-3.0, 3.0)
 		"vaso":
-			veloc = randf_range(150.0, 360.0)
-			vida = randf_range(1.0, 1.5)
-			giro = randf_range(-7.0, 7.0)
+			# a água segura: os cacos se abrem devagar e tombam
+			veloc = randf_range(55.0, 140.0)
+			vida = randf_range(1.6, 2.2)
+			giro = randf_range(-2.2, 2.2)
 		_:
 			veloc = randf_range(170.0, 380.0)
 			vida = randf_range(1.0, 1.5)
@@ -284,12 +374,20 @@ func _novo_caco(peca: PackedVector2Array, regiao: Rect2, folha: Vector2, xf: Tra
 		vida = randf_range(2.4, 2.8)
 		giro = giro * 0.45
 		chao = _chao_y + randf_range(-16.0, 26.0) * _k
-	_cacos.append({
+	var caco := {
 		"pos": xf * (canto + centro),
 		"vel": vel0,
 		"ang": 0.0, "giro": giro, "t": 0.0, "vida": vida,
 		"rel": rel, "uvs": uvs, "tri": tri, "chao": chao, "afunda": 0.0, "amassa": 0.0,
-	})
+	}
+	if _tipo == "vaso" and _chao_y == INF:
+		# cerâmica: solta depois da trinca (os de perto do tiro primeiro) e
+		# tomba em 3D, mostrando o lado de dentro
+		caco["solta"] = TRINCA_ABRE + clampf(xf.basis_xform(centro - tiro).length() / (220.0 * _k), 0.0, 1.0) * 0.07
+		caco["tomba"] = 0.0
+		caco["tomba_vel"] = randf_range(-4.5, 4.5)
+		caco["vida"] = vida + caco["solta"]
+	_cacos.append(caco)
 
 
 func _montar_aguaviva(anim: AnimatedSprite2D, xf: Transform2D, canto: Vector2, c: Vector2, r: Vector2, impacto: Vector2) -> void:
@@ -316,8 +414,8 @@ func _montar_aguaviva(anim: AnimatedSprite2D, xf: Transform2D, canto: Vector2, c
 
 
 func _montar_vaso(impacto: Vector2) -> void:
-	_freio = 0.10
-	_grav = 320.0
+	_freio = 0.16
+	_grav = 240.0
 	for i in 8:
 		_poeira.append({
 			"pos": impacto + Vector2(randf_range(-20, 20), randf_range(-20, 20)) * _k,
@@ -457,6 +555,10 @@ func _process(delta: float) -> void:
 	var freio := pow(_freio, delta)
 	for c in _cacos:
 		c["t"] += delta
+		if _t < float(c.get("solta", 0.0)):
+			continue
+		if c.has("tomba"):
+			c["tomba"] += c["tomba_vel"] * delta
 		if c["chao"] != INF and c["pos"].y >= c["chao"] and c["vel"].y >= 0.0:
 			# bateu na areia: quica baixinho (amassa um pouco), escorrega, para
 			# e afunda devagar
@@ -572,6 +674,12 @@ func _draw() -> void:
 		var amassa: float = c["amassa"]
 		var esc := Vector2(cresce * (1.0 + 0.12 * amassa), cresce * (1.0 - 0.18 * amassa) * (1.0 - 0.35 * afunda))
 		var desce := Vector2(0.0, 14.0 * _k * afunda)
+		if c.has("tomba"):
+			# tombando: afina e, de costas, mostra o barro sem verniz
+			var face := cos(float(c["tomba"]))
+			esc.x *= maxf(0.18, absf(face))
+			if face < 0.0:
+				cor = Color(0.62, 0.48, 0.36, cor.a)
 		var ini := pontos.size()
 		var rel: PackedVector2Array = c["rel"]
 		var uv: PackedVector2Array = c["uvs"]
@@ -584,6 +692,8 @@ func _draw() -> void:
 	if not indices.is_empty():
 		RenderingServer.canvas_item_add_triangle_array(get_canvas_item(), indices, pontos, cores, uvs,
 			PackedInt32Array(), PackedFloat32Array(), _tex.get_rid())
+	if _tipo == "vaso":
+		_desenhar_ceramica()
 
 	for p in _poeira:
 		var k: float = p["t"] / p["vida"]
@@ -630,6 +740,33 @@ func _draw() -> void:
 			draw_texture_rect(BOLHA, Rect2(b["pos"] - Vector2(s, s) * 0.5, Vector2(s, s)), false,
 				Color(0.88, 0.96, 1.0, 0.9 * (1.0 - k * k)))
 	_desenhar_cavalo()
+
+
+## Cerâmica: as trincas no vaso ainda inteiro e, nos cacos soltos, a borda
+## quebrada com a espessura do barro (linha escura e fina).
+func _desenhar_ceramica() -> void:
+	if _t < TRINCA_ABRE + 0.05 and not _trincas.is_empty():
+		var a := clampf(1.0 - (_t - TRINCA_ABRE) / 0.05, 0.0, 1.0)
+		var corre := clampf(_t / (TRINCA_ABRE * 0.7), 0.15, 1.0)
+		for linha in _trincas:
+			var n := maxi(2, int(ceil(linha.size() * corre)))
+			var parte := linha.slice(0, n)
+			draw_polyline(parte, Color(0.18, 0.12, 0.08, 0.85 * a), 2.6 * _k, true)
+			draw_polyline(parte, Color(1.0, 0.97, 0.88, 0.6 * a), 0.9 * _k, true)
+	for c in _cacos:
+		if not c.has("tomba") or _t < float(c["solta"]):
+			continue
+		var resta: float = c["vida"] - c["t"]
+		if resta <= 0.0:
+			continue
+		var al := clampf(resta / 0.4, 0.0, 1.0)
+		var face := cos(float(c["tomba"]))
+		var borda := PackedVector2Array()
+		var rel: PackedVector2Array = c["rel"]
+		for v in rel:
+			borda.append(c["pos"] + (Vector2(v.x * maxf(0.18, absf(face)), v.y)).rotated(c["ang"]))
+		borda.append(borda[0])
+		draw_polyline(borda, Color(0.26, 0.17, 0.11, 0.45 * al), 1.5 * _k, true)
 
 
 ## Cavalo-marinho espírito: sai do vaso num clarão, sobe nadando em S com a
