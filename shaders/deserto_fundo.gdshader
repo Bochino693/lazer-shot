@@ -45,6 +45,10 @@ uniform float ouro_noite = 0.0;           // 0 = ouro ao sol, 1 = ouro claro, pr
 uniform float ouro_brilho = 0.0;          // humor do jogo: > 0 combo (mais vivo), < 0 erros (apagado)
 uniform float ouro_varre = -1.0;          // 0..1: reflexo correndo pelas três pontas (acerto)
 uniform vec3 ouro_toque = vec3(0.0, 0.0, -1.0);   // tiro no ouro: xy = ponto (UV da caixa), z = idade (s)
+// cada ponta de ouro é ligada a um cristal: x = pirâmide da esquerda (cristal
+// do obelisco esquerdo), y = do meio (cristal do meio), z = da direita. 0 =
+// cristal quebrado: a ponta para de brilhar e fica ouro velho, apagado.
+uniform vec3 pontas_acesas = vec3(1.0);
 
 // Câmera 3D (só no jogo, scripts/deserto_vivo.gd): no jogo este é só o
 // fundo (céu, pirâmides e chão, com as coisas em pé tiradas e reconstruídas
@@ -87,6 +91,11 @@ vec3 ouro(vec3 pedra, vec4 msk, vec2 up) {
 	vec3 col = mix(pedra, tom * l * 1.06, 0.62);
 	float aceso = smoothstep(0.30, 0.80, l);
 	vec3 luz = mix(vec3(1.0, 0.92, 0.66), vec3(0.80, 0.88, 1.0), ouro_noite);
+	// qual ponta é esta (pelo x na caixa) e se o cristal dela está aceso
+	float wl = smoothstep(0.32, 0.22, up.x);
+	float wr = smoothstep(0.68, 0.78, up.x);
+	float acesa = dot(vec3(wl, 1.0 - wl - wr, wr), pontas_acesas);
+	luz *= acesa;
 	col += luz * quina * (0.05 + 0.09 * batida + 0.04 * grave + 0.14 * max(ouro_brilho, 0.0)) * (0.4 + aceso);
 	// reflexo correndo de pirâmide em pirâmide (a cada acerto)
 	if (ouro_varre >= 0.0) {
@@ -104,6 +113,9 @@ vec3 ouro(vec3 pedra, vec4 msk, vec2 up) {
 		float clarao = exp(-dd * dd * 2600.0) * max(0.0, 1.0 - idade * 3.0);
 		col += luz * (anel * 1.2 + clarao * 2.2);
 	}
+	// apagada: ouro velho e escuro, sem brilho nenhum
+	vec3 velho = mix(pedra * 0.7, vec3(0.42, 0.33, 0.20) * l * 1.1, 0.4);
+	col = mix(velho, col, acesa);
 	return mix(pedra, col, cob);
 }
 

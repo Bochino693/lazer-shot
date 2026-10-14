@@ -16,11 +16,13 @@ const SHADER := preload("res://shaders/egito_feixe.gdshader")
 const Z_CRISTAL := 1.2
 const Z_OBELISCO := 1.554
 # [ponta no cristal, ponta no obelisco, lado (0 = esq, 1 = dir)]
+# (a ponta do cristal fica por dentro dele: o feixe passa por trás do cristal,
+# então ele sai da própria pedra, sem fresta)
 const FEIXES := [
-	[Vector2(470, 668), Vector2(207, 783), 0],
-	[Vector2(550, 670), Vector2(815, 783), 1],
-	[Vector2(463, 858), Vector2(224, 992), 0],
-	[Vector2(556, 866), Vector2(800, 992), 1],
+	[Vector2(488, 664), Vector2(207, 783), 0],
+	[Vector2(528, 666), Vector2(815, 783), 1],
+	[Vector2(482, 856), Vector2(224, 992), 0],
+	[Vector2(536, 862), Vector2(800, 992), 1],
 ]
 # cristais das pontas dos obeliscos (de onde saem os raios da descarga)
 const PONTAS := [Vector2(209, 792), Vector2(813, 792)]

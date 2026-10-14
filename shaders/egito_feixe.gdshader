@@ -20,7 +20,8 @@ void fragment() {
 	pulso = pulso * pulso * pulso;
 	// estalos com a carga: o miolo treme
 	float estalo = carga * carga * (0.5 + 0.5 * sin(t * 47.0 + UV.x * 90.0)) * exp(-y * y * 14.0);
-	float pontas = smoothstep(0.0, 0.06, UV.x) * smoothstep(1.0, 0.94, UV.x);
+	// sai de dentro do cristal (sem esmaecer) e chega inteiro no obelisco
+	float pontas = smoothstep(0.0, 0.012, UV.x) * smoothstep(1.0, 0.985, UV.x);
 	float k = (miolo * (0.75 + 0.9 * pulso + 0.4 * grave) + halo * (0.6 + 0.6 * pulso) + estalo) * pontas;
 	COLOR = vec4(COLOR.rgb * k * COLOR.a, 1.0);
 }

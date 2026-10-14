@@ -243,6 +243,7 @@ var carga := 0.0
 var _nuvens := 0.35
 var _fase_nuvens := 0.0
 var _poeira_perto: CPUParticles2D
+var _pontas_acesas := Vector3.ONE        # pontas de ouro (esq, meio, dir) ligadas aos cristais
 
 # câmera 3D
 var mira := Vector2.INF        # posição da mira (o jogo atualiza; INF = parada)
@@ -1088,6 +1089,8 @@ func _animar_brilhos(delta: float) -> void:
 			b["espera"] -= delta
 			if b["espera"] <= 0.0 and b["tipo"] == "cristal" and _energia < 0.6:
 				b["espera"] = randf_range(0.5, 1.5)
+			elif b["espera"] <= 0.0 and b["tipo"] == "ponta" and _ponta_apagada(s.position):
+				b["espera"] = randf_range(0.5, 1.5)   # ponta de ouro apagada não cintila
 			elif b["espera"] <= 0.0:
 				b["t"] = 0.0
 				b["dur"] = randf_range(0.55, 0.95)
@@ -1115,6 +1118,12 @@ func _animar_brilhos(delta: float) -> void:
 		s.modulate = cor
 		s.scale = Vector2.ONE * b["escala"] * (0.35 + 0.65 * env)
 		s.rotation += delta * 0.6
+
+
+## A ponta de ouro mais perto do ponto p (px da imagem) está apagada?
+func _ponta_apagada(p: Vector2) -> bool:
+	var i := 0 if p.x < 380.0 else (2 if p.x > 640.0 else 1)
+	return _pontas_acesas[i] < 0.5
 
 
 func _animar_ceu(delta: float) -> void:
@@ -1564,10 +1573,13 @@ func _atualizar_tiros_fundo(delta: float) -> void:
 	_feixes.energia = _energia
 	# a luz some de tudo com o cristal do meio; de um lado, com a ponta dele
 	var lados := Vector2(1.0 - float(_pontas[0]["morte"]), 1.0 - float(_pontas[1]["morte"]))
+	# cada ponta de ouro acende com o seu cristal (o do meio manda nas três)
+	_pontas_acesas = Vector3(_energia * lados.x, _energia, _energia * lados.y)
 	for fundo: Sprite2D in [_fundo_sol, _fundo_lua]:
 		var mf := fundo.material as ShaderMaterial
 		mf.set_shader_parameter("energia", _energia)
 		mf.set_shader_parameter("luz_lados", lados)
+		mf.set_shader_parameter("pontas_acesas", _pontas_acesas)
 	for pl in _planos:
 		if pl["lua"] != null:
 			continue

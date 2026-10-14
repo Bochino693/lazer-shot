@@ -23,9 +23,11 @@ void fragment() {
 	float s = fract(t * 0.17);
 	float d = (UV.y + UV.x * 0.55) - (1.35 - s * 1.9);
 	float faixa = exp(-d * d * 220.0);
-	float cel = floor(UV.x * 4.0) + floor(UV.y * 9.0) * 5.0;
-	float cint = 0.5 + 0.5 * sin(t * 2.3 + cel * 1.7);
-	cint = cint * cint * cint; cint *= cint; cint *= cint;
+	// facetas acendendo aos poucos: ondas suaves que passam pelo cristal
+	// (antes eram células retangulares, que apareciam como quadradinhos)
+	float onda = sin(t * 2.3 + UV.x * 9.0 + UV.y * 17.0 + 2.0 * sin(UV.y * 11.0 - t * 0.9));
+	float cint = 0.5 + 0.5 * onda;
+	cint = cint * cint * cint; cint *= cint;
 
 	vec3 arco = 0.5 + 0.5 * cos(6.2831 * (UV.y * 1.6 + UV.x * 0.9 - t * 0.33 + vec3(0.0, 0.33, 0.67)));
 	vec3 dia = arco * (m.g * (0.30 + 1.0 * faixa) + m.r * cint * 0.22)
