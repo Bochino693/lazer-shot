@@ -11,8 +11,13 @@ Parte de sprites/atlantis.png (a foto do menu, que não muda) e gera:
                                      Atlântida em ruínas ao longe, com luz de
                                      cristal na porta
   sprites/mar_navio.png              o navio recortado (só o navio) para cair
-  sprites/mar_navio_pouso.png        a foto na caixa do navio: entra quando ele
-                                     pousa (o cenário volta a ser a foto)
+  sprites/mar_frente_navio_mascara.png
+                                     o que fica na frente do navio quando ele
+                                     afunda lá atrás: o templo, o Poseidon, as
+                                     pedras e corais em volta, o poneglifo
+                                     pequeno e a ilha de pedras na frente dele
+                                     (o jogo desenha esse pedaço do próprio
+                                     fundo por cima do navio)
   sprites/mar_pedra_esq_mascara.png  pedras com escritas, 1x da caixa de cada
   sprites/mar_pedra_dir_mascara.png  uma: R=runas G=altura (0 topo, 1 base)
                                      B=pedra A=halo das runas
@@ -185,7 +190,8 @@ def _luz(alt, forca=1.0):
 
 
 def templo_atlantida(bg):
-    """bg: float RGB 1x. Devolve (nova imagem, máscara 0..1 do que mudou)."""
+    """bg: float RGB 1x. Devolve (nova imagem, máscara 0..1 do que mudou,
+    máscara 0..1 do templo que fica na frente do navio)."""
     # 1) fundo refeito com a textura da própria foto (sem borrar)
     u8 = np.ascontiguousarray((bg[..., ::-1] * 255).astype(np.uint8))
     buraco = poligono(TEMPLO_AREA, 2) > 0.3
@@ -408,7 +414,12 @@ def templo_atlantida(bg):
 
     mud = buraco.astype(np.float32)
     mud[q.y0:q.y0 + q.h // q.ss, q.x0:q.x0 + q.w // q.ss] = np.maximum(mud[q.y0:q.y0 + q.h // q.ss, q.x0:q.x0 + q.w // q.ss], a1)
-    return np.clip(out, 0, 1), mud
+    # o que fica na frente do navio (ele afunda atrás do templo): tudo do
+    # templo menos a rocha de trás
+    frente = np.clip(np.maximum.reduce([interior, porta, ent, deg, col, ped, corpo, tridente, rocha, coral, alga]), 0, 1)
+    frente1 = np.zeros((H, W), np.float32)
+    frente1[q.y0:q.y0 + q.h // q.ss, q.x0:q.x0 + q.w // q.ss] = q.reduzir(frente)
+    return np.clip(out, 0, 1), mud, frente1
 
 
 # ───────────────────────────────────────────── navio recortado
@@ -419,16 +430,12 @@ SO_NAVIO = [(188, 535), (330, 478), (395, 445), (470, 438), (520, 436), (500, 52
             (300, 912), (230, 905), (198, 760), (186, 640)]
 
 
-def recortar_navio(orig, bg, bg_jogo=None, mudou=None):
-    """Dois recortes do navio (orig/bg em float RGB):
-    - mar_navio.png: só o navio, com a cor da foto, para cair limpo pela água
-      (sem placa de fundo em volta). Alfa = quanto o pixel é mais escuro que a
-      água atrás dele (o fundo sem navio, borrado); o que é água entre cordas e
-      velas fica transparente.
-    - mar_navio_pouso.png: a foto original na caixa do navio (alfa = contorno).
-      Quando o navio pousa, a areia sobe e este recorte entra no lugar: o
-      cenário volta a ser exatamente a foto (com o templo do fundo do jogo
-      atrás do navio, onde ele foi pintado: bg_jogo/mudou)."""
+def recortar_navio(orig, bg):
+    """mar_navio.png (orig/bg em float RGB): só o navio, com a cor da foto,
+    para cair limpo pela água (sem placa de fundo em volta). Alfa = quanto o
+    pixel é mais escuro que a água atrás dele (o fundo sem navio, borrado); o
+    que é água entre cordas e velas fica transparente. Ele afunda longe, atrás
+    do templo (mar_frente_navio_mascara.png fica por cima)."""
     P = poligono(NAVIO, 4)
     S = ndi.gaussian_filter(poligono(SO_NAVIO, 4), 2.5)
     pe = poligono(PEDRA_ESQ) > 0.5
@@ -450,14 +457,28 @@ def recortar_navio(orig, bg, bg_jogo=None, mudou=None):
     x0, y0, x1, y1 = xs.min() - 4, ys.min() - 4, xs.max() + 5, ys.max() + 5
     sl = (slice(y0, y1), slice(x0, x1))
     gravar_img(np.dstack([F[sl], a[sl]]), "mar_navio.png", "RGBA")
-    pouso = np.clip(ndi.gaussian_filter(ndi.binary_dilation(P > 0.5, iterations=4).astype(np.float32), 1.5), 0, 1)
-    foto = orig
-    if bg_jogo is not None:
-        # onde o fundo do jogo mudou (templo), o que não é navio vem dele
-        m = mudou[..., None]
-        foto = orig * (1 - m) + (orig * a[..., None] + bg_jogo * (1 - a[..., None])) * m
-    gravar_img(np.dstack([foto[sl], pouso[sl]]), "mar_navio_pouso.png", "RGBA")
     print("   navio: canto (%d, %d)  tamanho %dx%d" % (x0, y0, x1 - x0, y1 - y0))
+
+
+# ───────────────────────────────────────────── na frente do navio
+# O preenchimento deixou um poneglifo pequeno ao lado da pedra da esquerda,
+# com uma ilha de pedras e algas na frente dele (px de atlantis_jogo.png).
+PONEGLIFO_PEQ = [(197, 640), (200, 618), (213, 607), (233, 598), (260, 598), (270, 601), (274, 612),
+                 (278, 609), (292, 609), (296, 618), (299, 640), (301, 660), (302, 680), (305, 700),
+                 (309, 720), (310, 740), (312, 760), (314, 778), (205, 778), (200, 707)]
+ILHA = [(205, 775), (230, 767), (250, 770), (270, 780), (290, 793), (310, 803), (330, 817), (343, 827),
+        (357, 833), (370, 847), (390, 857), (410, 867), (427, 875), (427, 881), (383, 878), (337, 874),
+        (290, 884), (277, 900), (260, 908), (217, 908)]
+
+
+def frente_do_navio(frente_templo):
+    """Máscara (1x da caixa) do que fica na frente do navio: o jogo desenha o
+    próprio fundo nessa caixa, recortado por ela, por cima do navio."""
+    m = np.maximum.reduce([frente_templo, poligono(PONEGLIFO_PEQ, 4), poligono(ILHA, 4)])
+    ys, xs = np.nonzero(m > 0.01)
+    x0, y0, x1, y1 = xs.min(), ys.min(), xs.max() + 1, ys.max() + 1
+    gravar_img(m[y0:y1, x0:x1], "mar_frente_navio_mascara.png", "L")
+    print("   frente do navio: canto (%d, %d)  tamanho %dx%d" % (x0, y0, x1 - x0, y1 - y0))
 
 
 def mascara_pedra(orig, contorno, nome):
@@ -712,9 +733,10 @@ def main():
     bg_bgr = tirar_peixes(fundo_sem_navio(orig_bgr))
     orig = orig_bgr[..., ::-1].astype(np.float32) / 255
     bg = bg_bgr[..., ::-1].astype(np.float32) / 255
-    jogo, mudou = templo_atlantida(bg)
+    jogo, _mudou, frente_templo = templo_atlantida(bg)
     gravar_img(jogo, "atlantis_jogo.png")
-    recortar_navio(orig, bg, jogo, mudou)
+    recortar_navio(orig, bg)
+    frente_do_navio(frente_templo)
     mascara_pedra(orig, PEDRA_ESQ, "mar_pedra_esq_mascara.png")
     mascara_pedra(orig, PEDRA_DIR, "mar_pedra_dir_mascara.png")
     peixe()

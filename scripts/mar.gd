@@ -4,6 +4,7 @@ const Pincel := preload("res://scripts/pincel.gd")
 # preload: o script do fundo vivo vem junto com a cena, na thread do
 # carregamento (com load() ele era compilado na hora, ~250 ms parados na TV Box)
 const MarVida := preload("res://scripts/mar_vida.gd")
+const MarProfundo := preload("res://scripts/mar_profundo.gd")
 const RankingManagerScript := preload("res://scripts/RankingManager.gd")
 var ranking_manager := RankingManagerScript.new()
 
@@ -445,6 +446,16 @@ var mouse_delta_acumulado: Vector2 = Vector2.ZERO
 const SEGUNDO_NAVIO := 9.0
 var _navio_caiu := false
 
+# ── 2,5D: profundidade (scripts/mar_profundo.gd faz o fundo e a frente andarem
+# com a mira; aqui, parte dos alvos vem lá do fundo, da porta do templo)
+const PROFUNDO_CHANCE := {"aguaviva": 0.35, "vaso": 0.35, "bau": 0.40, "bomba": 0.25}
+const PROFUNDO_Z0 := 6.0        # distância onde nasce (1 = plano dos outros alvos)
+const PROFUNDO_Z1 := 0.85       # passa um pouco do plano dos outros e some (passou por nós)
+const PROFUNDO_BONUS := 0.45    # acertar ainda longe (mais que isso) vale o dobro
+const PROFUNDO_RAIO_MIN := 30.0 # px: de longe o alvo é pequeno; um mínimo justo para a mira
+const COR_NEVOA_ALVO := Color(0.52, 0.80, 0.95)
+var _profundo: Node2D = null
+
 
 func _ready() -> void:
 	randomize()
@@ -495,6 +506,12 @@ func _ready() -> void:
 
 	_preparar_modelos()
 	_carregar_audios()
+
+	# frente da cena (algas, bolhas, peixe grande): por cima dos alvos, por
+	# baixo do placar e dos efeitos
+	_profundo = MarProfundo.new()
+	_profundo.z_index = 200
+	add_child(_profundo)
 
 	_criar_fx_overlay()
 	_criar_hud()
@@ -567,6 +584,8 @@ func _process(delta: float) -> void:
 	_ocultar_overlays_apagados()
 
 	_atualizar_mira_hibrida(delta)
+	if _profundo != null:
+		_profundo.mira = alvo_pos
 
 	if ranking_nome_ativo and nome_ranking != null:
 		nome_ranking.mira(alvo_pos)
@@ -3259,6 +3278,10 @@ func _ajustar_background_fullscreen() -> void:
 	background.position = Vector2(floor(tela.x * 0.5), floor(tela.y * 0.5))
 	background.scale = Vector2.ONE * escala
 	background.z_index = -100
+	if _profundo != null:
+		_profundo.fundo = background
+		_profundo.fundo_base = background.position
+		_profundo.montar(tela)
 
 	# Cachoeiras escorrendo e baleias nadando (origem no canto da textura).
 	var vida := background.get_node_or_null("Vida") as Node2D
@@ -3287,8 +3310,9 @@ func _acertar_pedra(pos_global: Vector2) -> bool:
 
 
 func _ao_navio_pousar() -> void:
-	_tremida_rapida(7.0, 6, 0.035)
-	_flash_tela(Color(0.55, 0.78, 1.0, 0.14))
+	# ele bate lá longe, atrás do templo: tremor e clarão pequenos
+	_tremida_rapida(3.0, 5, 0.035)
+	_flash_tela(Color(0.55, 0.78, 1.0, 0.08))
 
 
 func _encerrar_partida() -> void:
@@ -3859,6 +3883,10 @@ func _spawnar_alvo(tipo: String) -> void:
 	novo.scale = Vector2.ONE * escala_base
 	_ajustar_collision_shape_por_tipo(novo)
 
+	if partida_iniciada and randf() < float(PROFUNDO_CHANCE.get(tipo, 0.0)):
+		_lancar_do_fundo(novo, tipo, duracao, escala_base)
+		return
+
 	var tela: Vector2 = get_viewport_rect().size
 	var margem_fora: float = 140.0
 
@@ -3907,6 +3935,69 @@ func _spawnar_alvo(tipo: String) -> void:
 			return
 		_remover_alvo(novo)
 	)
+
+
+## 2,5D: o alvo nasce pequenino na porta do templo, lá no fundo, e vem vindo
+## até perto, crescendo e saindo da névoa da água. É perspectiva de verdade
+## (na tela ele anda como 1/distância: devagar longe, rápido perto). Passa um
+## pouco do plano dos outros alvos e some, como quem passou por nós.
+func _lancar_do_fundo(alvo: Area2D, tipo: String, duracao: float, escala: float) -> void:
+	var tela: Vector2 = get_viewport_rect().size
+	alvo.set_meta("profundo", true)
+	alvo.set_meta("escala_perto", escala)
+	alvo.set_meta("destino", Vector2(randf_range(0.14, 0.86) * tela.x, randf_range(0.30, 0.86) * tela.y))
+	var giro: float = randf_range(320.0, 560.0) if tipo == "bomba" else randf_range(-14.0, 14.0)
+	alvo.set_meta("rot_ini", randf_range(-180.0, 180.0) if tipo == "bomba" else randf_range(-6.0, 6.0))
+	alvo.set_meta("rot_giro", giro)
+	_configurar_animacao_spawn(alvo)
+	_mover_do_fundo(0.0, alvo)
+
+	# o tween é do próprio alvo: se ele sair da cena, o tween vai junto
+	var tween: Tween = alvo.create_tween()
+	tween.tween_method(_mover_do_fundo.bind(alvo), 0.0, 1.0, duracao * 1.15)
+	alvo.set_meta("tween_queda", tween)
+	tween.finished.connect(func() -> void:
+		if not is_instance_valid(alvo):
+			return
+		if bool(alvo.get_meta("atingido", false)):
+			return
+		_remover_alvo(alvo)
+	)
+
+
+func _mover_do_fundo(t: float, alvo: Area2D) -> void:
+	if not is_instance_valid(alvo) or bool(alvo.get_meta("atingido", false)):
+		return
+	var vida := _vida_fundo()
+	var tela: Vector2 = get_viewport_rect().size
+	var vp: Vector2 = tela * 0.5
+	if vida != null and alvos_root != null:
+		vp = alvos_root.to_local(vida.to_global(MarVida.TEMPLO_PORTA))
+	var z: float = lerpf(PROFUNDO_Z0, PROFUNDO_Z1, t)
+	var destino: Vector2 = alvo.get_meta("destino", tela * 0.5)
+	alvo.position = vp + (destino - vp) / z
+	var esc: float = float(alvo.get_meta("escala_perto", 1.0)) / z
+	alvo.scale = Vector2.ONE * esc
+	alvo.set_meta("escala_base", esc)
+	alvo.rotation_degrees = float(alvo.get_meta("rot_ini", 0.0)) + float(alvo.get_meta("rot_giro", 0.0)) * t
+	var longe: float = clampf((z - 1.0) / (PROFUNDO_Z0 - 1.0), 0.0, 1.0)
+	alvo.set_meta("longe", longe)
+	# de longe ele tem a cor da água e deixa o fundo passar (névoa)
+	var nevoa: float = pow(longe, 0.7) * 0.85
+	var a: float = smoothstep(0.0, 0.08, t) * (1.0 - smoothstep(0.90, 1.0, t))
+	var c: Color = Color.WHITE.lerp(COR_NEVOA_ALVO, nevoa)
+	alvo.modulate = Color(c.r, c.g, c.b, a * lerpf(1.0, 0.55, nevoa))
+	# já passou por nós e sumiu: não pega mais tiro
+	alvo.visible = t < 0.5 or a > 0.05
+	var base_z: int = Z_INDEX_BOMBA if String(alvo.get_meta("tipo_alvo", "")) == "bomba" else Z_INDEX_OBJETOS_COMUNS
+	alvo.z_index = base_z - 1 - int(longe * 10.0)
+
+
+## Quanto o alvo está perto (1 = plano normal); bolhas e marcas acompanham.
+func _perto_do_alvo(alvo: Area2D) -> float:
+	if not alvo.has_meta("profundo"):
+		return 1.0
+	return clampf(float(alvo.get_meta("escala_base", 1.0)) / maxf(float(alvo.get_meta("escala_perto", 1.0)), 0.01), 0.15, 1.2)
 
 
 func _atualizar_movimento_aguavivas(delta: float) -> void:
@@ -3977,22 +4068,25 @@ func _emitir_bolhas_idle_aguaviva(alvo: Area2D, visual_offset: Vector2 = Vector2
 		return
 
 	var qtd: int = randi_range(aguaviva_bolhas_por_onda_min + 1, aguaviva_bolhas_por_onda_max + 2)
-	var base: Vector2 = alvo.global_position + visual_offset
+	var k: float = _perto_do_alvo(alvo)
+	if k < 0.999:
+		qtd = maxi(1, int(round(qtd * k)))
+	var base: Vector2 = alvo.global_position + visual_offset * k
 
 	for i in range(qtd):
-		var lateral: float = randf_range(-26.0, 26.0)
-		var vertical: float = randf_range(-10.0, 28.0)
+		var lateral: float = randf_range(-26.0, 26.0) * k
+		var vertical: float = randf_range(-10.0, 28.0) * k
 		var pos_bolha: Vector2 = base + Vector2(lateral, vertical)
 
 		fx_agua.append({
 			"pos": pos_bolha,
 			"vel": Vector2(
-				randf_range(-12.0, 12.0),
-				randf_range(-92.0, -34.0)
+				randf_range(-12.0, 12.0) * k,
+				randf_range(-92.0, -34.0) * k
 			),
 			"idade": 0.0,
 			"vida": randf_range(0.60, 1.25),
-			"tam": randf_range(5.0, 11.5)
+			"tam": randf_range(5.0, 11.5) * k
 		})
 
 
@@ -4072,6 +4166,10 @@ func _processar_tiro_global(pos_global: Vector2, primeiro_tiro: bool = false) ->
 
 
 func _detectar_alvo_no_ponto_visual(pos_global: Vector2) -> Area2D:
+	# com alvos vindo do fundo, um pode estar atrás do outro: vale o mais perto
+	# (entre os do mesmo plano, o mais novo, como sempre)
+	var melhor: Area2D = null
+	var melhor_longe := 2.0
 	for i in range(alvos_ativos.size() - 1, -1, -1):
 		var alvo: Area2D = alvos_ativos[i]
 
@@ -4085,9 +4183,12 @@ func _detectar_alvo_no_ponto_visual(pos_global: Vector2) -> Area2D:
 			continue
 
 		if _ponto_esta_sobre_sprite_do_alvo(alvo, pos_global):
-			return alvo
+			var longe: float = float(alvo.get_meta("longe", 0.0))
+			if longe < melhor_longe:
+				melhor = alvo
+				melhor_longe = longe
 
-	return null
+	return melhor
 
 
 func _obter_collision_shape_do_alvo(alvo: Node) -> CollisionShape2D:
@@ -4300,6 +4401,11 @@ func _emitir_bolhas_movimento_objeto(alvo: Area2D, intensidade: float = 1.0) -> 
 	var tipo: String = String(alvo.get_meta("tipo_alvo", ""))
 	var qtd: int = randi_range(bolha_objeto_qtd_min + 1, bolha_objeto_qtd_max + 2)
 	var base: Vector2 = alvo.global_position
+	# alvo vindo do fundo: bolhas do tamanho dele (pequenas e poucas lá longe)
+	var k: float = _perto_do_alvo(alvo)
+	if k < 0.999:
+		qtd = maxi(1, int(round(qtd * k)))
+		intensidade *= k
 
 	var spread_x: float = 22.0
 	var spread_y: float = 22.0
@@ -4333,14 +4439,14 @@ func _emitir_bolhas_movimento_objeto(alvo: Area2D, intensidade: float = 1.0) -> 
 
 	for i in range(qtd):
 		fx_agua.append({
-			"pos": base + Vector2(randf_range(-spread_x, spread_x), randf_range(-spread_y, spread_y)),
+			"pos": base + Vector2(randf_range(-spread_x, spread_x), randf_range(-spread_y, spread_y)) * k,
 			"vel": Vector2(
 				randf_range(-16.0, 16.0) * intensidade,
 				randf_range(vel_y_min, vel_y_max) * intensidade
 			),
 			"idade": 0.0,
 			"vida": randf_range(0.60, 1.22),
-			"tam": randf_range(tam_min, tam_max)
+			"tam": randf_range(tam_min, tam_max) * k
 		})
 
 
@@ -4464,6 +4570,11 @@ func _obter_tamanho_visual_do_alvo(alvo: Area2D) -> Dictionary:
 
 
 func _ponto_esta_sobre_sprite_do_alvo(alvo: Area2D, pos_global: Vector2) -> bool:
+	# de longe o alvo é pequeno: um mínimo justo em volta dele (a bomba não
+	# ganha esse mínimo: ela só pune)
+	if alvo.has_meta("profundo") and String(alvo.get_meta("tipo_alvo", "")) != "bomba":
+		if alvo.global_position.distance_to(pos_global) <= PROFUNDO_RAIO_MIN:
+			return true
 	var visual: Dictionary = _obter_tamanho_visual_do_alvo(alvo)
 	if visual.is_empty():
 		return false
@@ -4740,6 +4851,11 @@ func _acertar_alvo(alvo: Area2D, pos_impacto: Vector2 = Vector2.ZERO) -> void:
 		return
 
 	combo_bombas_acertadas = 0
+	# acertou ainda lá no fundo: vale o dobro
+	var de_longe: bool = float(alvo.get_meta("longe", 0.0)) >= PROFUNDO_BONUS
+	if de_longe:
+		pontos *= 2
+		alvo.set_meta("pontos_alvo", pontos)
 	pontuacao_total += pontos
 	total_acertos += 1
 
@@ -4762,7 +4878,10 @@ func _acertar_alvo(alvo: Area2D, pos_impacto: Vector2 = Vector2.ZERO) -> void:
 			"bau":
 				_tocar_som_com_atraso(som_bau_hit_stream, 0.0, -0.2, randf_range(1.00, 1.02), inicio_bau_hit_seg)
 
-	_set_status("ACERTO! +%d" % pontos, "acerto")
+	_set_status(("DE LONGE! +%d" if de_longe else "ACERTO! +%d") % pontos, "acerto")
+	if alvo.has_meta("profundo"):
+		# acertado, sai da névoa (os pedaços e o brilho com a cor dele)
+		alvo.modulate = Color(1, 1, 1, maxf(alvo.modulate.a, 0.8))
 
 	if tipo == "aguaviva":
 		_flash_tela(Color(0.36, 0.88, 1.0, 0.14))
