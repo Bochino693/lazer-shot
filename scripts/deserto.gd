@@ -291,6 +291,8 @@ var recarregando: bool = false
 var reload_tempo_restante: float = 0.0
 
 var pontuacao_total: int = 0
+const BONUS_CRISTAL := 300   # quebrar o cristal do meio
+const BONUS_PONTA := 150     # quebrar o cristal da ponta de um obelisco
 var total_tiros: int = 0
 var total_acertos: int = 0
 var total_erros: int = 0
@@ -1747,16 +1749,35 @@ func _processar_tiro(pos_global: Vector2) -> void:
 	if idx >= 0:
 		_resolver_acerto(idx)
 	else:
+		# cada lugar responde: o cristal trinca (e quebra), pedra lasca, areia
+		# levanta; marca de bala só na pedra e na areia
+		var mat: String = _vivo.impacto(pos_global) if _vivo != null else "areia"
+		if mat.begins_with("cristal"):
+			# os cristais são alvo de bônus: tiro neles não é erro, e quem
+			# quebra ganha pontos
+			_premiar_cristal(pos_global)
+			return
 		total_erros += 1
 		_quebrar_combo()
 		if _vivo != null:
 			_vivo.evento("erro", MiraGlobal.pos)
-		# cada lugar responde: o cristal trinca (e quebra), o ouro toca,
-		# pedra lasca, areia levanta; marca de bala só na pedra e na areia
-		var mat: String = _vivo.impacto(pos_global) if _vivo != null else "areia"
 		if (mat == "pedra" or mat == "areia") and _vivo != null and _vivo.no_chao(pos_global):
 			_furar_fundo(pos_global, mat)
 		_set_status("ERRO!", Color(1.0, 0.28, 0.22, 1.0), 1.2)
+
+
+## Cristal quebrado neste tiro: o do meio vale BONUS_CRISTAL, o da ponta de
+## um obelisco BONUS_PONTA (pontos rosados saltando do cristal).
+func _premiar_cristal(pos_global: Vector2) -> void:
+	var quebrou: String = _vivo.quebrou_agora if _vivo != null else ""
+	if quebrou == "":
+		return
+	var pontos := BONUS_CRISTAL if quebrou == "cristal" else BONUS_PONTA
+	pontuacao_total += pontos
+	total_acertos += 1
+	AvisoTiro.pontos(self, get_viewport().get_canvas_transform() * pos_global, "+%d" % pontos,
+		Color(1.0, 0.66, 0.96), Color(1.0, 1.0, 1.0, 0.7))
+	AvisoTiro.instrucao(self, "CRISTAL QUEBRADO! +%d" % pontos, Color(1.0, 0.78, 0.97))
 
 
 func _iniciar_countdown() -> void:
@@ -2320,9 +2341,10 @@ func _z_desenho(z: float) -> int:
 	return 100 + clampi(int(round(60.0 / maxf(z, 0.3))), 0, 190)
 
 
-## Névoa da distância: nada até 1,5; longe cobre até a metade.
+## Névoa da distância: nada até 2; bem longe só um véu (o brasão continua
+## nítido e cheio, nunca meio apagado).
 func _nevoa(z: float) -> float:
-	return clampf((z - 1.5) / 6.0, 0.0, 0.5)
+	return clampf((z - 2.0) / 8.0, 0.0, 0.3)
 
 
 func _sortear_estilo_3d() -> String:

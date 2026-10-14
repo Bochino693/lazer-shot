@@ -87,16 +87,24 @@ vec3 ouro(vec3 pedra, vec4 msk, vec2 up) {
 	float quina = clamp(msk.b / max(cob, 0.004), 0.0, 1.0);
 	// o claro e o escuro são os da pedra; só o tom vira ouro
 	float l = dot(pedra, vec3(0.30, 0.59, 0.11));
-	vec3 tom = mix(vec3(1.26, 0.98, 0.50), vec3(1.0, 0.96, 0.86), ouro_noite);
-	vec3 col = mix(pedra, tom * l * 1.06, 0.62);
-	float aceso = smoothstep(0.30, 0.80, l);
-	vec3 luz = mix(vec3(1.0, 0.92, 0.66), vec3(0.80, 0.88, 1.0), ouro_noite);
 	// qual ponta é esta (pelo x na caixa) e se o cristal dela está aceso
 	float wl = smoothstep(0.32, 0.22, up.x);
 	float wr = smoothstep(0.68, 0.78, up.x);
 	float acesa = dot(vec3(wl, 1.0 - wl - wr, wr), pontas_acesas);
+	vec3 tom = mix(vec3(1.26, 0.98, 0.50), vec3(1.0, 0.96, 0.86), ouro_noite);
+	// acesa: metal mais puro e mais claro (a ponta se destaca da pedra)
+	vec3 col = mix(pedra, tom * l * (1.06 + 0.28 * acesa), 0.62 + 0.24 * acesa);
+	float aceso = smoothstep(0.30, 0.80, l);
+	vec3 luz = mix(vec3(1.0, 0.92, 0.66), vec3(0.80, 0.88, 1.0), ouro_noite);
 	luz *= acesa;
-	col += luz * quina * (0.05 + 0.09 * batida + 0.04 * grave + 0.14 * max(ouro_brilho, 0.0)) * (0.4 + aceso);
+	col += luz * quina * (0.20 + 0.10 * batida + 0.05 * grave + 0.14 * max(ouro_brilho, 0.0)) * (0.4 + aceso);
+	// e brilha por dentro (a sombra do metal também acende)
+	col += luz * tom * 0.07;
+	// a energia subindo pela ponta até o pico: uma faixa clara que corre
+	// de baixo para cima (cada pirâmide no seu tempo)
+	float sobe = fract(TIME * 0.38 + wl * 0.33 + wr * 0.66);
+	float fy = (up.y - 1.05 + sobe * 1.1) / 0.075;
+	col += luz * exp(-fy * fy) * (0.18 + 0.42 * aceso);
 	// reflexo correndo de pirâmide em pirâmide (a cada acerto)
 	if (ouro_varre >= 0.0) {
 		float x = up.x - (ouro_varre * 1.4 - 0.2) + (up.y - 0.5) * 0.3;

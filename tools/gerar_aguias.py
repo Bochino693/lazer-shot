@@ -7,12 +7,21 @@
                             as penas da ponta abertas ("dedos"), cauda em
                             leque, barriga escura, faixa clara nas asas, borda
                             clara onde a luz atravessa as penas
+  sprites/egito_aguia_pousada.png
+                            4 quadros de 128x128: a mesma águia pousada de
+                            frente (na ponta de uma pirâmide apagada), na
+                            mesma escala da que voa: 0 = parada, asas
+                            fechadas; 1 = cabeça virada; 2 = gritando (cabeça
+                            para cima, bico aberto, ombros soltos); 3 = asas
+                            meio abertas para cima (assentando)
   songs/aguia.wav           grito da águia ("kiiii-arrr") com eco do vale
   songs/aguia_noite.wav     o mesmo, mais longe: mais grave, abafado e com
                             mais eco (de noite)
 
-    python3 tools/gerar_aguias.py
+    python3 tools/gerar_aguias.py            (tudo)
+    python3 tools/gerar_aguias.py pousada    (só a águia pousada)
 """
+import sys
 import os
 import wave
 import numpy as np
@@ -128,6 +137,130 @@ def folha():
     print("egito_aguia.png  %dx%d (%d quadros)" % (arr.shape[1], arr.shape[0], len(quadros)))
 
 
+# ───────────────────────────────────────────── pousada (de frente)
+WP = 128
+
+
+def quadro_pousada(pose):
+    """pose: 0 parada, 1 cabeça virada, 2 gritando, 3 asas meio abertas."""
+    S = SS
+    m = Image.new("L", (WP * S, WP * S), 0)
+    d = ImageDraw.Draw(m)
+    cx = WP / 2
+    P = lambda p: ((cx + p[0]) * S, p[1] * S)
+    asas = Image.new("L", (WP * S, WP * S), 0)        # asas fechadas (mais escuras)
+    da = ImageDraw.Draw(asas)
+    penas = Image.new("L", (WP * S, WP * S), 0)
+    dp = ImageDraw.Draw(penas)
+    peito = Image.new("L", (WP * S, WP * S), 0)
+    dpe = ImageDraw.Draw(peito)
+    pes = Image.new("L", (WP * S, WP * S), 0)
+    dpes = ImageDraw.Draw(pes)
+    bico = Image.new("L", (WP * S, WP * S), 0)
+    db = ImageDraw.Draw(bico)
+    boca = Image.new("L", (WP * S, WP * S), 0)
+    dbo = ImageDraw.Draw(boca)
+    olho = Image.new("L", (WP * S, WP * S), 0)
+    do = ImageDraw.Draw(olho)
+    ombro = 4.0 if pose == 2 else 0.0
+    cy_cab = 24.0 if pose == 2 else 30.0
+    vira = 5.0 if pose == 1 else 0.0
+    # cauda (atrás dos pés)
+    d.polygon([P((-9, 92)), P((9, 92)), P((13, 122)), P((0, 125)), P((-13, 122))], fill=255)
+    for i in range(5):
+        xx = -10 + 5 * i
+        dp.line([P((xx * 0.6, 96)), P((xx, 122))], fill=255, width=S)
+    # corpo
+    d.ellipse([P((-18, 40)), P((18, 102))], fill=255)
+    dpe.ellipse([P((-11, 50)), P((11, 96))], fill=255)
+    # asas fechadas dos lados
+    for lado in (-1, 1):
+        if pose == 3:
+            # meio abertas, para cima e para fora (assentando / pronta para voar)
+            # (a ponta com as penas abertas, os "dedos")
+            asa = [(lado * 14, 46), (lado * 34, 22), (lado * 50, 4), (lado * 55, 0), (lado * 56, 8), (lado * 61, 6),
+                   (lado * 59, 15), (lado * 63, 15), (lado * 57, 23), (lado * 60, 27), (lado * 52, 31),
+                   (lado * 48, 40), (lado * 40, 60), (lado * 26, 80), (lado * 16, 84)]
+        else:
+            o = ombro
+            asa = [(lado * 12, 44 - o), (lado * (22 + o), 48 - o * 0.5), (lado * (25 + o * 0.6), 66), (lado * 22, 90),
+                   (lado * 15, 112), (lado * 9, 116), (lado * 8, 96), (lado * 10, 60)]
+        d.polygon([P(q) for q in asa], fill=255)
+        da.polygon([P(q) for q in asa], fill=255)
+        for i in range(6):
+            yy = 60 + 9 * i
+            dp.line([P((lado * 10, yy)), P((lado * 22, yy + 7))], fill=255, width=S)
+    # pernas com "calça" de penas e os dedos amarelos agarrando a pedra
+    for lado in (-1, 1):
+        d.ellipse([P((lado * 9 - 6, 92)), P((lado * 9 + 6, 110))], fill=255)
+        for k in (-1, 0, 1):
+            dpes.line([P((lado * 9, 108)), P((lado * 9 + k * 5, 117))], fill=255, width=int(2.6 * S))
+    # cabeça, olhos e bico
+    hx = vira
+    d.ellipse([P((hx - 11, cy_cab - 11)), P((hx + 11, cy_cab + 11))], fill=255)
+    d.polygon([P((-9, cy_cab + 4)), P((9, cy_cab + 4)), P((14, 46)), P((-14, 46))], fill=255)   # pescoço
+    if pose == 1:
+        # de lado: bico para a direita
+        db.polygon([P((hx + 7, cy_cab - 2)), P((hx + 17, cy_cab)), P((hx + 19, cy_cab + 4)),
+                    P((hx + 15, cy_cab + 3)), P((hx + 7, cy_cab + 4))], fill=255)
+        do.ellipse([P((hx + 2, cy_cab - 4)), P((hx + 6, cy_cab))], fill=255)
+    elif pose == 2:
+        # para cima, gritando: bico aberto (as duas metades e a boca escura)
+        db.polygon([P((-4, cy_cab + 2)), P((4, cy_cab + 2)), P((1, cy_cab - 12)), P((-1, cy_cab - 12))], fill=255)
+        db.polygon([P((-3, cy_cab + 4)), P((3, cy_cab + 4)), P((4, cy_cab + 12)), P((-4, cy_cab + 12))], fill=255)
+        dbo.polygon([P((-3, cy_cab + 2)), P((3, cy_cab + 2)), P((3, cy_cab + 9)), P((-3, cy_cab + 9))], fill=255)
+        for lado in (-1, 1):
+            do.ellipse([P((lado * 6 - 2, cy_cab - 3)), P((lado * 6 + 2, cy_cab + 1))], fill=255)
+    else:
+        db.polygon([P((-4, cy_cab + 1)), P((4, cy_cab + 1)), P((2, cy_cab + 11)), P((0, cy_cab + 13)), P((-2, cy_cab + 11))], fill=255)
+        for lado in (-1, 1):
+            do.ellipse([P((lado * 6 - 2, cy_cab - 3)), P((lado * 6 + 2, cy_cab + 1))], fill=255)
+    d.bitmap((0, 0), bico, fill=255)
+
+    reduz = lambda im, r=0.0: (np.asarray((im.resize((WP, WP), Image.LANCZOS)).filter(ImageFilter.GaussianBlur(r)) if r else
+                                          im.resize((WP, WP), Image.LANCZOS)).astype(np.float32) / 255)
+    mask = reduz(m)
+    a_asas = reduz(asas)
+    pn = reduz(penas)
+    pe = reduz(peito, 2.0)
+    ps = reduz(pes)
+    bc = reduz(bico)
+    bo = reduz(boca)
+    ol = reduz(olho)
+    yy, xx = np.mgrid[0:WP, 0:WP].astype(np.float32)
+    cor = np.ones((WP, WP, 3), np.float32) * np.array([0.30, 0.20, 0.13])
+    # peito um pouco mais claro, com as riscas
+    cor = cor * (1 - 0.3 * pe[..., None]) + np.array([0.46, 0.33, 0.21]) * (0.3 * pe[..., None])
+    # asas fechadas mais escuras
+    cor = cor * (1 - 0.25 * a_asas[..., None])
+    cor = cor * (1 - 0.28 * pn[..., None])
+    # nuca dourada
+    cab = np.exp(-(((xx - cx - vira) / 12) ** 2 + ((yy - cy_cab) / 13) ** 2))
+    cor = cor * (1 - 0.7 * cab[..., None]) + np.array([0.74, 0.54, 0.24]) * (0.7 * cab[..., None])
+    # luz de cima (o céu), base mais escura
+    cor = cor * (1.08 - 0.30 * np.clip((yy - 30) / 90, 0, 1))[..., None]
+    cor = cor * (1 - ps[..., None]) + np.array([0.90, 0.74, 0.26]) * ps[..., None]
+    ponta_bico = np.clip((np.abs(yy - cy_cab) - 6) / 6, 0, 1) if pose != 1 else np.clip((xx - cx - vira - 13) / 6, 0, 1)
+    cor_bico = np.array([0.90, 0.76, 0.32]) * (1 - ponta_bico[..., None]) + np.array([0.22, 0.20, 0.20]) * ponta_bico[..., None]
+    cor = cor * (1 - bc[..., None]) + cor_bico * bc[..., None]
+    cor = cor * (1 - bo[..., None]) + np.array([0.35, 0.08, 0.06]) * bo[..., None]
+    cor = cor * (1 - ol[..., None]) + np.array([0.10, 0.06, 0.03]) * ol[..., None]
+    # brilho no olho
+    for lado in ((-1, 1) if pose != 1 else (1,)):
+        ex = cx + (lado * 6 - 0.8 if pose != 1 else vira + 3.2)
+        brilho = np.exp(-(((xx - ex) / 0.9) ** 2 + ((yy - (cy_cab - 2.6)) / 0.9) ** 2))
+        cor = cor + 0.6 * brilho[..., None]
+    borda = np.clip(mask - ndi.grey_erosion(mask, size=(3, 3)), 0, 1)
+    cor = cor + np.array([0.55, 0.45, 0.30]) * (0.45 * borda[..., None])
+    return np.dstack([np.clip(cor, 0, 1), mask])
+
+
+def pousada():
+    arr = np.concatenate([quadro_pousada(p) for p in range(4)], axis=1)
+    Image.fromarray((arr * 255 + 0.5).astype(np.uint8), "RGBA").save(os.path.join(SP, "egito_aguia_pousada.png"), optimize=True)
+    print("egito_aguia_pousada.png  %dx%d (4 quadros)" % (arr.shape[1], arr.shape[0]))
+
+
 # ───────────────────────────────────────────── som
 TAXA = 32000
 
@@ -197,5 +330,9 @@ def sons():
 
 
 if __name__ == "__main__":
-    folha()
-    sons()
+    if sys.argv[1:] == ["pousada"]:
+        pousada()
+    else:
+        folha()
+        pousada()
+        sons()
