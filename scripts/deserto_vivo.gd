@@ -46,10 +46,10 @@ var MASCARA_LUA: Texture2D = load("res://sprites/deserto_lua_mascara.png")
 # halo (1x, ampliado), esclera, íris (anda), pálpebra (desce ao piscar) e o disco por cima.
 var TEX_SOL: Array = [load("res://sprites/egito_sol_disco.png"), load("res://sprites/egito_sol_esclera.png"),
 	load("res://sprites/egito_sol_iris.png"), load("res://sprites/egito_sol_palpebra.png"),
-	load("res://sprites/egito_sol_halo.png")]
+	load("res://sprites/egito_sol_halo.png"), load("res://sprites/egito_sol_palpebra_baixo.png")]
 var TEX_LUA: Array = [load("res://sprites/egito_lua_disco.png"), load("res://sprites/egito_lua_esclera.png"),
 	load("res://sprites/egito_lua_iris.png"), load("res://sprites/egito_lua_palpebra.png"),
-	load("res://sprites/egito_lua_halo.png")]
+	load("res://sprites/egito_lua_halo.png"), load("res://sprites/egito_lua_palpebra_baixo.png")]
 var AGUIA: Texture2D = load("res://sprites/egito_aguia.png")
 var SOM_AGUIA: AudioStream = load("res://songs/aguia.wav")
 var SOM_AGUIA_NOITE: AudioStream = load("res://songs/aguia_noite.wav")
@@ -70,10 +70,27 @@ const PONTAS_CAIXA := Rect2(180, 438, 644, 148)
 
 # Medidas do olho (px da textura 3x, a partir do centro do disco), de
 # tools/gerar_astros.py: centro do olho, 1 unidade (meia largura da abertura),
-# lugar da íris, topo da pálpebra e quanto ela desce para fechar.
-# Sol: Olho de Rá (espelho do de Hórus); lua: Olho de Hórus.
-const ASTRO_SOL := {"olho": Vector2(70.7, -13.0), "u": 372.0, "iris": Vector2(0.0, -14.9), "palpebra_y": -442.8, "abre": 312.6}
-const ASTRO_LUA := {"olho": Vector2(-70.7, -13.0), "u": 372.0, "iris": Vector2(0.0, -14.9), "palpebra_y": -442.8, "abre": 312.6}
+# lugar da íris, topo da pálpebra e quanto ela desce para fechar, centro da
+# pálpebra de baixo em repouso e quanto ela sobe no máximo.
+# Sol: Olho de Rá (o direito); lua: Olho de Hórus (o esquerdo, espelho).
+const ASTRO_SOL := {"olho": Vector2(-70.7, -13.0), "u": 372.0, "iris": Vector2(0.0, -14.9), "palpebra_y": -442.8, "abre": 312.6, "baixo_y": 440.6, "sobe": 260.4}
+const ASTRO_LUA := {"olho": Vector2(70.7, -13.0), "u": 372.0, "iris": Vector2(0.0, -14.9), "palpebra_y": -442.8, "abre": 312.6, "baixo_y": 440.6, "sobe": 260.4}
+
+# Humor dos olhos. topo: quanto a pálpebra de cima desce (0 aberta, 1
+# fechada); baixo: quanto a de baixo sobe (fração de "sobe"; a beirada curva
+# para cima, então subindo ela deixa o olho em meia-lua, sorrindo);
+# iris_y: íris um pouco acima/abaixo; alcance: o vaivém da íris; vel: rapidez
+# com que a íris chega (baixo = desliza calma, alto = salto); mira: segue a mira
+# do jogador; piscar: intervalo entre piscadas (s).
+const HUMORES := {
+	"calmo": {"topo": 0.30, "baixo": 0.12, "iris_y": 0.0, "alcance": 0.55, "vel": 5.0, "mira": false, "piscar": Vector2(3.0, 6.0)},
+	"feliz": {"topo": 0.08, "baixo": 0.52, "iris_y": -0.03, "alcance": 0.35, "vel": 6.0, "mira": false, "piscar": Vector2(2.5, 5.0)},
+	"radiante": {"topo": 0.10, "baixo": 0.66, "iris_y": -0.05, "alcance": 0.25, "vel": 7.0, "mira": false, "piscar": Vector2(2.0, 4.0)},
+	"atento": {"topo": 0.18, "baixo": 0.24, "iris_y": 0.01, "alcance": 1.0, "vel": 14.0, "mira": true, "piscar": Vector2(4.5, 8.0)},
+	"bravo": {"topo": 0.50, "baixo": 0.28, "iris_y": 0.02, "alcance": 0.7, "vel": 10.0, "mira": true, "piscar": Vector2(5.0, 9.0)},
+	"surpreso": {"topo": 0.04, "baixo": 0.0, "iris_y": 0.0, "alcance": 0.3, "vel": 18.0, "mira": false, "piscar": Vector2(5.0, 8.0)},
+	"sono": {"topo": 0.58, "baixo": 0.14, "iris_y": 0.02, "alcance": 0.3, "vel": 2.0, "mira": false, "piscar": Vector2(2.5, 4.5)},
+}
 const ASTRO_X := 4.0          # as texturas do astro são 4x a imagem do fundo (o halo é 1x)
 const CRISTAL_CAIXA := Rect2(440, 620, 136, 340)
 
@@ -123,9 +140,19 @@ var _raios_sol: ColorRect
 var _raios_lua: ColorRect
 var _disco_sol: Node2D
 var _disco_lua: Node2D
-# olho vivo de cada disco: {disco, iris, palpebra, iris_0, palpebra_0, u, abre,
-# olhar, alvo, prox_olhar, piscar, prox_piscar, fase, dupla}
+# olho vivo de cada disco: {disco, iris, palpebra, baixo, iris_0, palpebra_0,
+# baixo_0, u, abre, sobe, olhar, alvo, prox_olhar, piscar, prox_piscar, fase,
+# dupla, topo_v, baixo_v}
 var _olhos: Array = []
+# humor: o jogo conta o que aconteceu (evento) e o astro reage
+var _combo := 0
+var _erros_recentes := 0.0     # cada erro +1, cai 1 a cada 3,5 s
+var _tempo_final := false
+var _fim := false
+var _reacao := ""              # humor curto por cima do de base
+var _reacao_t := 0.0
+var _espiar := Vector2.INF     # ponto (tela) que o olho espia por um instante
+var _espiar_t := 0.0
 var _pontas: Sprite2D
 var _cristal: Sprite2D
 var _faiscas: CPUParticles2D
@@ -282,6 +309,10 @@ func _criar_astro(tex: Array, dados: Dictionary, c: Vector2) -> Node2D:
 	iris.texture = tex[2]
 	iris.position = olho + dados["iris"]
 	astro.add_child(iris)
+	var baixo := Sprite2D.new()
+	baixo.texture = tex[5]
+	baixo.position = olho + Vector2(0.0, dados["baixo_y"])
+	astro.add_child(baixo)
 	var palpebra := Sprite2D.new()
 	palpebra.texture = tex[3]
 	palpebra.position = olho + Vector2(0.0, dados["palpebra_y"] + (tex[3] as Texture2D).get_height() * 0.5)
@@ -289,10 +320,13 @@ func _criar_astro(tex: Array, dados: Dictionary, c: Vector2) -> Node2D:
 	var disco := Sprite2D.new()
 	disco.texture = tex[0]
 	astro.add_child(disco)
-	_olhos.append({"disco": disco, "halo": halo, "iris": iris, "palpebra": palpebra, "iris_0": iris.position,
-		"palpebra_0": palpebra.position, "u": dados["u"], "abre": dados["abre"],
+	var h: Dictionary = HUMORES["calmo"]
+	_olhos.append({"astro": astro, "disco": disco, "halo": halo, "iris": iris, "palpebra": palpebra, "baixo": baixo,
+		"iris_0": iris.position, "palpebra_0": palpebra.position, "baixo_0": baixo.position,
+		"u": dados["u"], "abre": dados["abre"], "sobe": dados["sobe"],
 		"olhar": Vector2.ZERO, "alvo": Vector2.ZERO, "prox_olhar": randf_range(0.6, 1.5),
-		"piscar": 0.0, "prox_piscar": randf_range(1.5, 3.5), "fase": -1.0, "dupla": false})
+		"piscar": 0.0, "prox_piscar": randf_range(1.5, 3.5), "fase": -1.0, "dupla": false,
+		"topo_v": h["topo"], "baixo_v": h["baixo"]})
 	return astro
 
 
@@ -615,24 +649,123 @@ func _process(delta: float) -> void:
 		_animar_ceu(delta)
 
 
-## Olho vivo: a pupila salta de um ponto a outro (como um olho de verdade,
-## rápido e para) e a pálpebra pisca de tempos em tempos, às vezes duas vezes.
+## O jogo conta ao sol e à lua o que aconteceu, e eles reagem:
+##   "acerto" (valor = combo), "erro" (pos = onde errou), "astro_errado"
+##   (pos), "combo_quebrou", "tempo_final", "fim", "recarga", "inicio".
+## Humor de base: calmo; feliz com combo 3+, radiante com 6+; atento (segue a
+## mira) com muitos erros seguidos ou nos últimos 10 s; sonolento no fim.
+## Por cima, reações curtas: apertinho feliz no acerto, bravo no astro
+## errado, uma espiada onde errou, surpresa quando o cristal quebra.
+func evento(nome: String, pos_global: Vector2 = Vector2.INF, valor: int = 0) -> void:
+	match nome:
+		"acerto":
+			_combo = valor
+			_erros_recentes = maxf(0.0, _erros_recentes - 0.6)
+			if _combo < 3:
+				_reagir("feliz", 0.5)
+		"erro":
+			_combo = 0
+			_erros_recentes += 1.0
+			_espiar_ponto(pos_global, 0.7)
+		"astro_errado":
+			_combo = 0
+			_erros_recentes += 1.0
+			_reagir("bravo", 1.4)
+			_espiar_ponto(pos_global, 0.9)
+		"combo_quebrou":
+			_combo = 0
+		"tempo_final":
+			_tempo_final = true
+		"fim":
+			_fim = true
+			_reacao = ""
+		"inicio":
+			_fim = false
+			_tempo_final = false
+			_combo = 0
+			_erros_recentes = 0.0
+		"recarga":
+			# olha para a arma (embaixo) num instante
+			_espiar_ponto(get_viewport().get_visible_rect().size * Vector2(0.5, 1.0), 0.5)
+
+
+func _reagir(nome: String, dur: float) -> void:
+	_reacao = nome
+	_reacao_t = dur
+
+
+func _espiar_ponto(p: Vector2, dur: float) -> void:
+	if p == Vector2.INF:
+		return
+	_espiar = p
+	_espiar_t = dur
+
+
+func _humor_base() -> String:
+	if _fim:
+		return "sono"
+	if _erros_recentes >= 2.5:
+		return "atento"
+	if _combo >= 6:
+		return "radiante"
+	if _combo >= 3:
+		return "feliz"
+	if _tempo_final:
+		return "atento"
+	return "calmo"
+
+
+## Para onde a íris olha (offset em px da textura) para ver um ponto da tela.
+func _olhar_para(o: Dictionary, p_tela: Vector2, alcance: float) -> Vector2:
+	var centro: Vector2 = (o["astro"] as Node2D).get_global_transform_with_canvas().origin
+	var d := p_tela - centro
+	var u: float = o["u"]
+	return Vector2(clampf(d.x / 320.0, -1.0, 1.0) * 0.30 * alcance, clampf(d.y / 420.0, -1.0, 1.0) * 0.05) * u
+
+
+## Olho vivo: a íris passeia (calma desliza, atenta salta e segue a mira), as
+## duas pálpebras vão para o humor do momento e a de cima pisca de tempos em
+## tempos, às vezes duas vezes.
 func _animar_olhos(delta: float) -> void:
+	_erros_recentes = maxf(0.0, _erros_recentes - delta / 3.5)
+	if _reacao_t > 0.0:
+		_reacao_t -= delta
+		if _reacao_t <= 0.0:
+			_reacao = ""
+	if _espiar_t > 0.0:
+		_espiar_t -= delta
+	var h: Dictionary = HUMORES[_reacao if _reacao != "" else _humor_base()]
 	for i in _olhos.size():
 		var o: Dictionary = _olhos[i]
 		var visivel: bool = (_disco_sol if i == 0 else _disco_lua).visible
 		if not visivel:
 			continue
 		var u: float = o["u"]
-		o["prox_olhar"] -= delta
-		if o["prox_olhar"] <= 0.0:
-			o["prox_olhar"] = randf_range(0.7, 2.2)
-			var escolhas := [Vector2(0, 0), Vector2(-0.30, 0.0), Vector2(0.30, 0.0), Vector2(-0.22, -0.04),
-				Vector2(0.22, -0.04), Vector2(-0.18, 0.04), Vector2(0.18, 0.04), Vector2(0.0, -0.04)]
-			o["alvo"] = escolhas[randi() % escolhas.size()] * u
+		var alcance: float = h["alcance"]
+		if _espiar_t > 0.0:
+			o["alvo"] = _olhar_para(o, _espiar, 1.0)
+		elif h["mira"]:
+			o["alvo"] = _olhar_para(o, MiraGlobal.pos, alcance)
+		else:
+			o["prox_olhar"] -= delta
+			if o["prox_olhar"] <= 0.0:
+				o["prox_olhar"] = randf_range(1.2, 3.0)
+				if randf() < 0.3:
+					# de vez em quando dá uma olhada na mira do jogador
+					o["alvo"] = _olhar_para(o, MiraGlobal.pos, alcance)
+				else:
+					var escolhas := [Vector2(0, 0), Vector2(-0.30, 0.0), Vector2(0.30, 0.0), Vector2(-0.22, -0.04),
+						Vector2(0.22, -0.04), Vector2(-0.18, 0.04), Vector2(0.18, 0.04), Vector2(0.0, -0.04)]
+					var e: Vector2 = escolhas[randi() % escolhas.size()]
+					o["alvo"] = Vector2(e.x * alcance, e.y) * u
 		var olhar: Vector2 = o["olhar"]
-		olhar = olhar.lerp(o["alvo"], 1.0 - exp(-delta * 18.0))
+		olhar = olhar.lerp(o["alvo"] + Vector2(0.0, float(h["iris_y"]) * u), 1.0 - exp(-delta * float(h["vel"])))
 		o["olhar"] = olhar
+
+		# pálpebras indo para o humor (sem tranco)
+		var k := 1.0 - exp(-delta * 7.0)
+		o["topo_v"] = lerpf(o["topo_v"], h["topo"], k)
+		o["baixo_v"] = lerpf(o["baixo_v"], h["baixo"], k)
 
 		var p: float = o["piscar"]
 		if o["fase"] < 0.0:
@@ -642,26 +775,29 @@ func _animar_olhos(delta: float) -> void:
 		else:
 			o["fase"] += delta
 			var f: float = o["fase"]
-			# fecha em 0,08 s, fica 0,05 s, abre em 0,12 s
-			if f < 0.08:
-				p = f / 0.08
-			elif f < 0.13:
+			# fecha em 0,09 s, fica 0,06 s, abre em 0,16 s (piscada calma)
+			if f < 0.09:
+				p = f / 0.09
+			elif f < 0.15:
 				p = 1.0
-			elif f < 0.25:
-				p = 1.0 - (f - 0.13) / 0.12
+			elif f < 0.31:
+				p = 1.0 - (f - 0.15) / 0.16
 			else:
 				p = 0.0
 				o["fase"] = -1.0
+				var faixa: Vector2 = h["piscar"]
 				if not o["dupla"] and randf() < 0.25:
 					o["dupla"] = true
 					o["prox_piscar"] = 0.12
 				else:
 					o["dupla"] = false
-					o["prox_piscar"] = randf_range(2.5, 5.5)
+					o["prox_piscar"] = randf_range(faixa.x, faixa.y)
 		o["piscar"] = p
 		(o["iris"] as Sprite2D).position = o["iris_0"] + olhar
 		var fecha: float = p * p * (3.0 - 2.0 * p)
-		(o["palpebra"] as Sprite2D).position = o["palpebra_0"] + Vector2(0.0, fecha * (o["abre"] + 0.03 * u))
+		var topo: float = lerpf(o["topo_v"], 1.0, fecha)
+		(o["palpebra"] as Sprite2D).position = o["palpebra_0"] + Vector2(0.0, topo * (o["abre"] + 0.03 * u))
+		(o["baixo"] as Sprite2D).position = o["baixo_0"] - Vector2(0.0, float(o["baixo_v"]) * float(o["sobe"]))
 
 
 func _animar_brilhos(delta: float) -> void:
@@ -828,6 +964,7 @@ func _ferir_cristal(p: Vector2) -> void:
 
 
 func _quebrar_cristal() -> void:
+	_reagir("surpreso", 0.8)
 	_cristal_quebrado = true
 	_cristal_volta = CRISTAL_VOLTA
 	_cristal_morte = 0.0

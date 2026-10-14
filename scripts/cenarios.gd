@@ -7,7 +7,7 @@ const CENA_CENARIO_3: String = "res://scenes/bar.tscn"
 const CENA_CENARIO_4: String = "res://scenes/arena.tscn"
 const CENA_RANKING: String = "res://scenes/ranking.tscn"
 
-const CAMINHO_SOM_TIRO: String = "res://songs/tiro-de-pistola.wav"
+const CAMINHO_SOM_TIRO: String = "res://songs/tiro_menu.wav"   # laser curto (a pistola é do Bar)
 const CAMINHO_THEME: String = "res://songs/theme.ogg"
 const CAMINHO_SOM_CHOICE: String = "res://songs/choice.wav"
 const ACAO_TIRO_MENU: String = "input_shot"

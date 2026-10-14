@@ -110,7 +110,9 @@ var fim_tempo_voltar: float = 17.0
 @export var faixa_spawn_topo: float = 330.0
 @export var faixa_spawn_base_margem: float = 180.0
 
-@export var som_tiro_path: String = "res://songs/tiro-de-pistola.wav"
+# o tiro de dia é o raio de sol e de noite o de luar (a pistola é do Bar)
+@export var som_tiro_path: String = "res://songs/tiro_sol.wav"
+@export var som_tiro_lua_path: String = "res://songs/tiro_lua.wav"
 @export var som_recharge_path: String = "res://songs/recharge.wav"
 @export var som_bullet_no_path: String = "res://songs/bullet_no.wav"
 @export var som_fim_path: String = "res://songs/end_game.mp3"
@@ -168,6 +170,7 @@ var _fundo_modo: String = ""
 @onready var lua_modelo: Area2D = $Alvos/Lua
 
 var som_tiro: AudioStream = null
+var som_tiro_lua: AudioStream = null
 var som_recharge: AudioStream = null
 var som_bullet_no: AudioStream = null
 var som_fim: AudioStream = null
@@ -561,8 +564,7 @@ func _ranking_tentar_atirar_tecla(pos_tiro: Vector2) -> void:
 	if tempo_trava_input_arma > 0.0:
 		return
 	tempo_trava_input_arma = 0.10
-	if som_tiro != null:
-		_tocar_som(som_tiro)
+	_tocar_som(_som_do_tiro())
 	nome_ranking.tiro(pos_tiro)
 
 
@@ -577,9 +579,17 @@ func _ao_confirmar_nome(nome: String) -> void:
 	_confirmar_nome_ranking(nome == "ANONIMO")
 
 
+func _som_do_tiro() -> AudioStream:
+	if modo_atual == MODO_LUA and som_tiro_lua != null:
+		return som_tiro_lua
+	return som_tiro
+
+
 func _carregar_assets() -> void:
 	if ResourceLoader.exists(som_tiro_path):
 		som_tiro = load(som_tiro_path)
+	if ResourceLoader.exists(som_tiro_lua_path):
+		som_tiro_lua = load(som_tiro_lua_path)
 
 	if ResourceLoader.exists(som_recharge_path):
 		som_recharge = load(som_recharge_path)
@@ -1485,6 +1495,8 @@ func _atualizar_hud() -> void:
 		# CORES DO TEMPO
 		if tempo_restante <= 10.0:
 			label_timer.modulate = Color(1.0, 0.08, 0.06, 1.0) # vermelho crítico
+			if _vivo != null and partida_iniciada:
+				_vivo.evento("tempo_final")
 		elif tempo_restante <= 30.0:
 			label_timer.modulate = Color(1.0, 0.58, 0.10, 1.0) # laranja alerta
 		else:
@@ -1674,7 +1686,7 @@ func _processar_tiro(pos_global: Vector2) -> void:
 
 	balas_no_cartucho -= 1
 	total_tiros += 1
-	_tocar_som(som_tiro)
+	_tocar_som(_som_do_tiro())
 	# raio de sol de dia, raio de luar de noite (da arma até a mira)
 	Trajetoria.disparar(self, get_viewport().get_canvas_transform() * pos_global, "sol" if modo_atual == MODO_SOL else "lua")
 
@@ -1684,6 +1696,8 @@ func _processar_tiro(pos_global: Vector2) -> void:
 	else:
 		total_erros += 1
 		_quebrar_combo()
+		if _vivo != null:
+			_vivo.evento("erro", MiraGlobal.pos)
 		# cada lugar responde: o cristal trinca (e quebra), o ouro toca,
 		# pedra lasca, areia levanta; marca de bala só na pedra e na areia
 		var mat: String = _vivo.impacto(pos_global) if _vivo != null else "areia"
@@ -1929,6 +1943,8 @@ func _resolver_acerto(indice: int) -> void:
 		pontuacao_total += alvo.valor_correto
 		total_acertos += 1
 		_registrar_hit_combo(alvo.tipo)
+		if _vivo != null:
+			_vivo.evento("acerto", Vector2.INF, combo_qtd)
 
 		var bonus_combo: int = 0
 		if combo_qtd >= 3:
@@ -1943,6 +1959,8 @@ func _resolver_acerto(indice: int) -> void:
 		pontuacao_total -= alvo.penalidade_errado
 		total_erros += 1
 		_quebrar_combo()
+		if _vivo != null:
+			_vivo.evento("astro_errado", MiraGlobal.pos)
 		_set_status("%s -%d" % [alvo.tipo.to_upper(), alvo.penalidade_errado], Color(1.0, 0.26, 0.22, 1.0), 1.75)
 
 	_explodir_alvo_visual(alvo)
@@ -1965,6 +1983,8 @@ func _quebrar_combo() -> void:
 	combo_tipo = ""
 	combo_qtd = 0
 	combo_timer = 0.0
+	if _vivo != null:
+		_vivo.evento("combo_quebrou")
 
 
 func _atualizar_combo(delta: float) -> void:
@@ -2677,6 +2697,8 @@ func _iniciar_recarga() -> void:
 	recarregando = true
 	reload_tempo_restante = tempo_recarga_seg
 	_tocar_som(som_recharge)
+	if _vivo != null:
+		_vivo.evento("recarga")
 	_set_status("RECARREGANDO...", Color(0.30, 0.92, 1.0, 1.0))
 
 
@@ -2688,6 +2710,8 @@ func _finalizar_recarga() -> void:
 
 
 func _encerrar_jogo() -> void:
+	if _vivo != null:
+		_vivo.evento("fim")
 	jogo_ativo = false
 	fim_ativo = true
 	partida_iniciada = false

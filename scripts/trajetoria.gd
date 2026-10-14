@@ -21,12 +21,8 @@ extends CanvasLayer
 
 const Pincel := preload("res://scripts/pincel.gd")
 const MAX_TIROS := 8
-# som que acompanha o rastro (o estampido da arma é da fase)
-const SONS := {
-	"sol": [preload("res://songs/raio_sol.wav"), -9.0],
-	"lua": [preload("res://songs/raio_lua.wav"), -10.0],
-	"mar": [preload("res://songs/bolhas_tiro.wav"), -8.0],
-}
+# (o som é o estampido de cada fase: raio de sol, de luar, arpão no mar,
+# laser na arena, pistola no bar; o rastro não toca nada por cima)
 
 var _tiros: Array = []         # {de, para, t, vida, estilo}
 var _parts: Array = []         # {pos, vel, t, vida, tam, tipo, cor}
@@ -70,8 +66,6 @@ func _novo(para: Vector2, estilo: String) -> void:
 	while _tiros.size() > MAX_TIROS:
 		_tiros.pop_front()
 	var d := para - de
-	if SONS.has(estilo):
-		Maquina.efeito(SONS[estilo][0], SONS[estilo][1], randf_range(0.93, 1.07))
 	match estilo:
 		"sol":
 			for i in 7:

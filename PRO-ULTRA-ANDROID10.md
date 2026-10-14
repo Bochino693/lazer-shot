@@ -55,7 +55,7 @@ Ele abre o jogo, espera 40 s e salva `build/android/LOGCAT-TVBOX.txt` e a
 pasta `build/android/caixa_preta`. Com `-Instalar`, o mesmo acontece logo
 depois de instalar o APK novo.
 
-A versão do APK aparece em Configurações > Apps da TV Box (1.14.0, código 16).
+A versão do APK aparece em Configurações > Apps da TV Box (1.15.0, código 17).
 
 ## Tela em pé na TV Box
 
@@ -865,6 +865,49 @@ o Android fecha o app sem aviso.
   Nenhum botão do jogo fecha o app.
 
 APK 1.14.0 (código 16).
+
+## Rodada 15: cada cenário com o seu tiro e o sol e a lua com humor
+
+**Som do tiro de cada cenário** (`tools/gerar_sons_efeitos.py`, sintetizados):
+- Egito de dia: `tiro_sol.wav` — baque, o raio de sol saindo num acorde
+  dourado que sobe, chama e faíscas.
+- Egito de noite: `tiro_lua.wav` — baque leve, sino de cristal que desce,
+  ar frio e brilhos gelados.
+- Mar: `tiro_mar.wav` — arpão debaixo d'água: "tuum" abafado, cavitação e
+  rastro de bolhas subindo.
+- Abertura e menu de cenários: `tiro_menu.wav` — disparo de laser curto.
+- A pistola (`tiro-de-pistola.wav`) ficou só no Bar; a Arena segue com o
+  laser dela. O rastro do tiro não toca mais um som por cima (os antigos
+  `raio_sol`, `raio_lua` e `bolhas_tiro` viraram parte dos estampidos).
+  Os estampidos são curtos e cheios: em rajada não viram um amontoado.
+  `python3 tools/gerar_sons_efeitos.py tiro_sol tiro_mar` gera só esses.
+
+**Olho de Rá e Olho de Hórus** (`tools/gerar_astros.py`):
+- Rá (sol) é o olho direito: traço e espiral para a direita. Hórus (lua) é
+  o esquerdo: o espelho.
+- O desenho é de metal maciço: ouro no sol, prata na lua (borda polida em
+  relevo e o miolo fosco, granulado), sem o esmalte azul. O astro atrás
+  mudou de cor para o desenho aparecer: sol laranja-avermelhado, lua
+  cinza-azulada. Os fundos do menu (`deserto_sol.png`, `deserto_lua.png`)
+  foram refeitos com o astro novo (`gerar_egito.py --so-fundo`), sem a
+  borda da lua antiga que sobrava da foto.
+
+**Olhar tranquilo que reage ao jogo** (`scripts/deserto_vivo.gd`). O olho
+ganhou a pálpebra de baixo (a beirada curva para cima: subindo, o olho fica
+em meia-lua, sorrindo). Em repouso as pálpebras cortam parte do olho e a
+íris desliza devagar, sem o olhar arregalado. O deserto conta o que
+aconteceu e o astro muda de humor:
+- calmo: o normal (pálpebras meio baixas, piscada calma, às vezes olha
+  para a mira do jogador);
+- feliz com combo de 3, radiante com combo de 6 (olho sorrindo);
+- atento com vários erros seguidos e nos últimos 10 s (olho mais estreito,
+  seguindo a mira);
+- bravo ao acertar o astro errado; surpreso quando o cristal quebra;
+- sonolento no fim da partida;
+- apertinho feliz a cada acerto, espiada onde o tiro errou e olhada para a
+  arma na recarga.
+
+APK 1.15.0 (código 17).
 
 ## Para testar no PC como se fosse a TV Box
 

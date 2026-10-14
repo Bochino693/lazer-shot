@@ -20,6 +20,7 @@ O sol e a lua (com os olhos) saem de tools/gerar_astros.py: rodar ele antes.
     git show 89ed8d3:sprites/deserto_lua.png > /tmp/orig/lua.png
     python3 tools/gerar_astros.py
     python3 tools/gerar_egito.py --originais /tmp/orig
+    python3 tools/gerar_egito.py --originais /tmp/orig --so-fundo   (só os fundos)
 """
 import argparse
 import os
@@ -109,6 +110,26 @@ def apagar_olho(im, centro, R, forca_alta):
     return out
 
 
+def apagar_borda_antiga(im, antigo, r_antigo, novo, r_novo):
+    """A lua da foto é um pouco maior e mais alta que o disco novo: a beirada
+    clara dela que sobra para fora do disco novo vira céu (inpaint)."""
+    H, W = im.shape[:2]
+    yy, xx = np.mgrid[0:H, 0:W]
+    d_a = np.hypot(xx - antigo[0], yy - antigo[1])
+    d_n = np.hypot(xx - novo[0], yy - novo[1])
+    m = (d_a < r_antigo + 6) & (d_n > r_novo - 3)
+    r = int(r_antigo + 30)
+    x0, y0 = max(antigo[0] - r, 0), max(antigo[1] - r, 0)
+    x1, y1 = min(antigo[0] + r, W), min(antigo[1] + r, H)
+    crop = im[y0:y1, x0:x1]
+    mc = m[y0:y1, x0:x1]
+    cheio = inpaint_biharmonic(crop, ndi.binary_dilation(mc, iterations=2), channel_axis=-1)
+    pena = ndi.gaussian_filter(ndi.binary_dilation(mc, iterations=1).astype(np.float32), 1.5)[..., None]
+    out = im.copy()
+    out[y0:y1, x0:x1] = crop * (1 - pena) + np.clip(cheio, 0, 1) * pena
+    return out
+
+
 # ───────────────────────────────────────────── disco em 2x
 def pontas_2x():
     x0, y0, x1, y1 = PONTAS_CAIXA
@@ -184,13 +205,17 @@ def estrela():
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--originais", required=True)
+    ap.add_argument("--so-fundo", action="store_true", help="só os fundos com o sol/a lua (depois de gerar_astros.py)")
     arg = ap.parse_args()
     sol = ler(os.path.join(arg.originais, "sol.png"))
     lua = ler(os.path.join(arg.originais, "lua.png"))
     # fundo sem o olho antigo, com o sol/a lua novos pintados por cima (o que
     # o menu mostra; no jogo as camadas de gerar_astros.py ficam por cima)
-    for limpo, nome in ((apagar_olho(sol, *SOL, 0.6), "sol"), (apagar_olho(lua, *LUA, 1.0), "lua")):
+    lua_limpa = apagar_borda_antiga(apagar_olho(lua, *LUA, 1.0), LUA[0], LUA[1], (512, 300), 138)
+    for limpo, nome in ((apagar_olho(sol, *SOL, 0.6), "sol"), (lua_limpa, "lua")):
         gravar(colar_astro(limpo, nome), "deserto_%s.png" % nome)
+    if arg.so_fundo:
+        return
     pontas_2x()
     cristal_2x(os.path.join(arg.originais, "sol.png"))
     estrela()
