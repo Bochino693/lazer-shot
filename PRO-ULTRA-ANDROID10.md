@@ -1232,7 +1232,7 @@ transparente) e nunca miúdos; o navio que afunda tem cor de galeão (casco de
 madeira, faixa ocre, velas de linho), um rombo de tiro soltando bolhas e mais
 vida na queda (`tools/gerar_navio_cor.py`).
 
-**Fundos em alta:** Mar e Egito (fundos e planos) também em super-resolução
+**Fundos em alta:** Mar, Egito (fundos e planos) e Arena também em super-resolução
 ETC2, como o Bar.
 
 APK 1.20.0 (código 22).
