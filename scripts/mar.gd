@@ -5368,72 +5368,23 @@ func _calcular_precisao() -> int:
 
 
 func _set_status(texto: String, tipo: String = "neutro") -> void:
-	if status_label == null or status_panel == null:
+	# sem faixa no rodapé: o recado sai pequeno perto da mira (AvisoTiro); os
+	# pontos dos acertos já saltam do alvo
+	if status_panel != null:
+		status_panel.visible = false
+	if status_label != null:
+		status_label.visible = false
+	if texto == "" or texto.contains("+"):
 		return
-
-	status_label.text = texto
-	status_label.visible = texto != ""
-	status_panel.visible = texto != ""
-	status_panel.scale = Vector2.ONE
-	status_panel.modulate = Color(1, 1, 1, 1)
-
-	if texto == "":
-		return
-
-	status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	status_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	Leve.color(status_label, "font_outline_color", Color.BLACK)
-	Leve.constant(status_label, "outline_size", 7)
-
-	var estilo := status_panel.get_theme_stylebox("panel") as StyleBoxFlat
-	if estilo == null:
-		estilo = StyleBoxFlat.new()
-		estilo.corner_radius_top_left = 18
-		estilo.corner_radius_top_right = 18
-		estilo.corner_radius_bottom_left = 18
-		estilo.corner_radius_bottom_right = 18
-		estilo.border_width_left = 3
-		estilo.border_width_right = 3
-		estilo.border_width_top = 3
-		estilo.border_width_bottom = 3
-		Leve.stylebox(status_panel, "panel", estilo)
-
-	match tipo:
-		"bomba", "erro":
-			Leve.color(status_label, "font_color", Color(1.0, 0.88, 0.84, 1.0))
-			estilo.bg_color = Color(0.18, 0.015, 0.018, 0.94)
-			estilo.border_color = Color(1.0, 0.12, 0.08, 1.0)
-			estilo.shadow_color = Color(1.0, 0.04, 0.02, 0.70)
-			estilo.shadow_size = 30
-
-		"acerto":
-			Leve.color(status_label, "font_color", Color(0.86, 1.0, 1.0, 1.0))
-			estilo.bg_color = Color(0.015, 0.075, 0.115, 0.94)
-			estilo.border_color = COR_NEON_MAR
-			estilo.shadow_color = Color(COR_NEON_MAR.r, COR_NEON_MAR.g, COR_NEON_MAR.b, 0.62)
-			estilo.shadow_size = 28
-
-		_:
-			Leve.color(status_label, "font_color", Color.WHITE)
-			estilo.bg_color = Color(0.015, 0.035, 0.065, 0.94)
-			estilo.border_color = COR_NEON_MAR_CLARO
-			estilo.shadow_color = Color(0.35, 0.85, 1.0, 0.46)
-			estilo.shadow_size = 24
-
-	var tw := create_tween()
-	tw.set_parallel(true)
-	tw.tween_property(status_panel, "scale", Vector2(1.012, 1.08), 0.08)
-	tw.tween_property(status_panel, "scale", Vector2.ONE, 0.14).set_delay(0.08)
-	tw.tween_property(status_panel, "modulate:a", 0.0, 0.25).set_delay(1.45)
-
-	tw.finished.connect(func() -> void:
-		if is_instance_valid(status_panel) and status_label.text == texto:
-			status_label.text = ""
-			status_label.visible = false
-			status_panel.visible = false
-			status_panel.modulate.a = 1.0
-	)
-
+	# recados do jogo (arma, nível, bombas) na pílula de cima
+	for inicio in ["RECARREG", "CARTUCHO", "MUNIÇÃO", "NÍVEL", "COMEÇOU", "NÃO ACERTE", "3 BOMBAS"]:
+		if texto.begins_with(inicio):
+			AvisoTiro.instrucao(self, texto, Color(1.0, 0.6, 0.55) if tipo == "erro" or tipo == "bomba" else Color(0.8, 0.96, 1.0))
+			return
+	var cor := Color(0.88, 0.97, 1.0)
+	if tipo == "erro" or tipo == "bomba":
+		cor = Color(1.0, 0.72, 0.66)
+	AvisoTiro.mostrar(self, get_viewport().get_canvas_transform() * alvo_pos, texto, cor)
 
 
 func _atualizar_hud() -> void:

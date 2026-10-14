@@ -932,7 +932,8 @@ func _processar_acerto_alvo(alvo: Area2D, pos_tiro: Vector2 = Vector2.INF) -> vo
 	_tocar_vidro_apos_tiro()
 	_registrar_fx_impacto(pos_tiro)
 
-	_set_status_neutro("%s  +%d" % [_obter_nome_garrafa_por_pontos(pontos), pontos])
+	# os pontos saltam da garrafa (sem faixa no rodapé)
+	AvisoTiro.pontos(self, get_viewport().get_canvas_transform() * pos_global, "+%d" % pontos, Color(1.0, 0.85, 0.35))
 	_marcar_hud_sujo()
 
 	await get_tree().create_timer(0.26).timeout
@@ -4919,75 +4920,28 @@ func _atualizar_hud() -> void:
 
 
 func _set_status_neutro(texto: String) -> void:
+	# sem faixa no rodapé: o recado sai pequeno perto da mira (AvisoTiro)
+	_esconder_status()
 	if texto.strip_edges() == "":
-		if status_tween != null:
-			status_tween.kill()
-
-		if status_label != null:
-			status_label.text = ""
-			status_label.visible = false
-			status_label.modulate = Color(1, 1, 1, 0)
-			status_label.scale = Vector2.ONE
-			status_label.rotation = 0.0
-
-		if status_panel != null:
-			status_panel.visible = false
-			status_panel.modulate.a = 0.0
-			status_panel.scale = Vector2.ONE
-
 		return
+	if texto.begins_with("RECARREG"):
+		AvisoTiro.instrucao(self, texto)
+	else:
+		AvisoTiro.mostrar(self, _pos_tela_aviso(), texto, Color(0.95, 0.93, 0.88))
 
-	status_token += 1
-	var token_local: int = status_token
 
+func _esconder_status() -> void:
 	if status_tween != null:
 		status_tween.kill()
-
 	if status_label != null:
-		status_label.text = texto
-		status_label.visible = true
-		status_label.modulate = Color(1, 1, 1, 0)
-		status_label.scale = Vector2.ONE
-		status_label.rotation = 0.0
-		status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		status_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		Leve.font_size(status_label, "font_size", 40)
-		Leve.color(status_label, "font_color", Color.WHITE)
-		Leve.color(status_label, "font_outline_color", Color.BLACK)
-		Leve.constant(status_label, "outline_size", 8)
-
+		status_label.text = ""
+		status_label.visible = false
 	if status_panel != null:
-		status_panel.visible = true
-		status_panel.modulate = Color(1, 1, 1, 0)
-		status_panel.scale = Vector2.ONE
+		status_panel.visible = false
 
-		var estilo := status_panel.get_theme_stylebox("panel") as StyleBoxFlat
-		if estilo == null:
-			estilo = _estilo_card_bar()
-			Leve.stylebox(status_panel, "panel", estilo)
 
-		estilo.bg_color = Color(0.025, 0.105, 0.035, 0.92)
-		estilo.border_color = COR_NEON_BAR
-		estilo.shadow_color = Color(COR_NEON_BAR.r, COR_NEON_BAR.g, COR_NEON_BAR.b, 0.72)
-		estilo.shadow_size = 34
-
-	_ajustar_layout()
-
-	status_tween = create_tween()
-	status_tween.set_parallel(true)
-
-	if status_label != null:
-		status_tween.tween_property(status_label, "modulate:a", 1.0, 0.08)
-		status_tween.tween_property(status_label, "modulate:a", 0.0, 0.22).set_delay(1.45)
-
-	if status_panel != null:
-		status_tween.tween_property(status_panel, "modulate:a", 1.0, 0.08)
-		status_tween.tween_property(status_panel, "scale", Vector2(1.015, 1.10), 0.08)
-		status_tween.tween_property(status_panel, "scale", Vector2.ONE, 0.14).set_delay(0.08)
-		status_tween.tween_property(status_panel, "modulate:a", 0.0, 0.22).set_delay(1.45)
-
-	_reset_status_depois(1.75, token_local)
-
+func _pos_tela_aviso() -> Vector2:
+	return get_viewport().get_canvas_transform() * alvo_pos
 
 
 func _criar_blocos_municao() -> void:
@@ -5084,25 +5038,8 @@ func _set_status_acerto(texto: String) -> void:
 
 
 func _set_status_erro(texto: String) -> void:
-	_set_status_neutro(texto)
-
-	if status_label != null:
-		Leve.color(status_label, "font_color", Color(1.0, 0.28, 0.18, 1.0))
-		Leve.color(status_label, "font_outline_color", Color.BLACK)
-		Leve.constant(status_label, "outline_size", 8)
-
-	if status_panel != null:
-		var estilo := status_panel.get_theme_stylebox("panel") as StyleBoxFlat
-		if estilo == null:
-			estilo = _estilo_card_bar()
-			Leve.stylebox(status_panel, "panel", estilo)
-
-		# fundo neutro, só a borda/brilho muda para erro
-		estilo.bg_color = Color(0.045, 0.060, 0.040, 0.92)
-		estilo.border_color = Color(1.0, 0.18, 0.10, 1.0)
-		estilo.shadow_color = Color(1.0, 0.08, 0.02, 0.70)
-		estilo.shadow_size = 34
-
+	_esconder_status()
+	AvisoTiro.mostrar(self, _pos_tela_aviso(), texto, Color(1.0, 0.70, 0.62))
 
 
 func _garrafa_valida(alvo: Area2D) -> bool:
@@ -5314,23 +5251,11 @@ func _atualizar_hud_se_necessario() -> void:
 func _atualizar_status_constante() -> void:
 	if not jogo_ativo:
 		return
-
+	# recado da arma na pílula de cima (some sozinho quando resolve)
 	if recarregando:
-		status_label.visible = true
-		status_label.text = "RECARREGANDO..."
-		status_label.modulate = Color(0.78, 0.96, 1.0, 1.0)
-		return
-
-	if balas_no_cartucho <= 0 and partida_iniciada:
-		status_label.visible = true
-		status_label.text = "RECARREGUE!"
-		status_label.modulate = Color(1.0, 0.24, 0.22, 1.0)
-		return
-
-	if status_label.text == "RECARREGUE!" or status_label.text == "RECARREGANDO...":
-		status_label.text = ""
-		status_label.visible = false
-		status_label.modulate = Color(1, 1, 1, 0)
+		AvisoTiro.instrucao(self, "RECARREGANDO...", Color(0.78, 0.96, 1.0))
+	elif balas_no_cartucho <= 0 and partida_iniciada:
+		AvisoTiro.instrucao(self, "RECARREGUE!", Color(1.0, 0.55, 0.50))
 
 
 func _tem_fx_visuais_ativos() -> bool:

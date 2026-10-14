@@ -1607,7 +1607,8 @@ func _atualizar_hud() -> void:
 			label_recarga.modulate = Color(0.76, 0.88, 1.0, 0.95)
 
 	if label_combo != null:
-		label_combo.visible = true
+		# a linha de sequência do rodapé saiu (o combo aparece grande no meio)
+		label_combo.visible = false
 
 		if combo_qtd > 0 and combo_tipo != "":
 			label_combo.text = "SEQUÊNCIA: %s x%d    |    MELHOR: x%d" % [
@@ -3031,17 +3032,15 @@ func _reiniciar_jogo() -> void:
 
 
 func _set_status(texto: String, cor: Color, duracao: float = 1.5) -> void:
-	if texto == "":
+	# sem faixa no rodapé: o recado sai pequeno perto da mira (AvisoTiro) e
+	# os recados do jogo na pílula de cima; os pontos já saltam do alvo
+	if texto == "" or texto.contains("+"):
 		return
-
-	status_msgs.append({
-		"text": texto,
-		"cor": cor,
-		"time": duracao
-	})
-
-	if status_msgs.size() > 3:
-		status_msgs.pop_front()
+	for inicio in ["COMEÇOU", "MODO", "RECARREG", "DESCARGA"]:
+		if texto.begins_with(inicio):
+			AvisoTiro.instrucao(self, texto, cor.lerp(Color.WHITE, 0.3))
+			return
+	AvisoTiro.mostrar(self, mira_pos, texto, cor.lerp(Color.WHITE, 0.45))
 
 
 func _tocar_som(stream: AudioStream) -> void:
