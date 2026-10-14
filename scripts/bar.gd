@@ -228,6 +228,7 @@ var alvo_anim_t: float = 0.0
 var alvo_layer: CanvasLayer = null
 var alvo_overlay: Control = null
 var combo_hud_label: Label
+var _anuncio: ComboAnuncio      # o combo grande no meio da tela, com a voz do locutor
 
 var partida_iniciada: bool = false
 var intro_cenario_em_execucao: bool = false
@@ -3924,6 +3925,8 @@ func _configurar_hud() -> void:
 	Leve.constant(combo_hud_label, "outline_size", 6)
 	combo_hud_label.z_index = 95
 	hud_root.add_child(combo_hud_label)
+	if _anuncio == null:
+		_anuncio = ComboAnuncio.criar(self, "bar")
 	
 	_fonte_titulo(score_title_label, 22, COR_NEON_BAR_CLARO)
 	_fonte_valor(score_label, 58, Color(0.82, 1.0, 0.86, 1.0))
@@ -4783,6 +4786,8 @@ func _resetar_combo() -> void:
 	combo_fx_t = 0.0
 	combo_fx_texto = ""
 	combo_fx_ativo = false
+	if _anuncio != null:
+		_anuncio.zerar()
 
 	if combo_hud_label != null:
 		combo_hud_label.visible = false
@@ -4790,14 +4795,15 @@ func _resetar_combo() -> void:
 
 
 
+## O combo agora é anunciado grande no meio da tela, com a voz do locutor
+## (scripts/combo_anuncio.gd); o rótulo pequeno fica escondido.
 func _ativar_combo_fx(texto: String) -> void:
 	combo_fx_texto = texto
 	combo_fx_t = DURACAO_COMBO_FX
 	combo_fx_ativo = true
 
-	if combo_hud_label != null:
-		combo_hud_label.text = texto
-		combo_hud_label.visible = true
+	if _anuncio != null:
+		_anuncio.combo(sequencia_acertos, not modo_demo)   # na demonstração, sem voz
 
 
 func _set_estilo_panel(
@@ -5162,27 +5168,10 @@ func _on_viewport_size_changed() -> void:
 
 
 func _atualizar_combo_hud() -> void:
-	if combo_hud_label == null:
-		return
-
-	if sequencia_acertos < 2 or combo_fx_texto == "":
+	# o combo é mostrado pelo anunciador (scripts/combo_anuncio.gd)
+	if combo_hud_label != null and combo_hud_label.visible:
 		combo_hud_label.visible = false
 		combo_hud_label.text = ""
-		return
-
-	var pulso: float = 0.72 + (sin(Time.get_ticks_msec() * 0.010) * 0.5 + 0.5) * 0.28
-
-	combo_hud_label.visible = true
-	combo_hud_label.text = combo_fx_texto
-	combo_hud_label.scale = Vector2.ONE
-	combo_hud_label.rotation = 0.0
-	combo_hud_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	combo_hud_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	combo_hud_label.modulate = Color(1.0, 0.94, 0.34, pulso)
-	Leve.font_size(combo_hud_label, "font_size", 26)
-	Leve.color(combo_hud_label, "font_color", Color(1.0, 0.94, 0.34, 1.0))
-	Leve.color(combo_hud_label, "font_outline_color", Color.BLACK)
-	Leve.constant(combo_hud_label, "outline_size", 6)
 
 
 

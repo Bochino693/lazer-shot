@@ -26,6 +26,9 @@ PRELOAD = re.compile(r'preload\(\s*"(res://[^"]+)"\s*\)')
 # FundoVivo carrega só os fundos pedidos: FundoVivo.new(["init", ...]).
 FUNDO_VIVO = "res://scripts/fundo_vivo.gd"
 FUNDO_ITEM = re.compile(r'^\t"(\w+)": \["(res://[^"]+)", "(res://[^"]+)"', re.M)
+# O anunciador de combos carrega as vozes da tela pedida:
+# ComboAnuncio.criar(self, "mar") -> songs/voz/mar_*.ogg
+ANUNCIO = re.compile(r'ComboAnuncio\.criar\(\s*\w+\s*,\s*"(\w+)"\s*\)')
 
 
 def arquivo(res):
@@ -82,6 +85,16 @@ def literais_fundo_vivo(texto, fundos):
     return saida
 
 
+def vozes_anuncio(texto):
+    saida = []
+    for tela in ANUNCIO.findall(texto):
+        pasta = os.path.join(RAIZ, "songs", "voz")
+        if os.path.isdir(pasta):
+            saida += ["res://songs/voz/" + n for n in sorted(os.listdir(pasta))
+                      if n.startswith(tela + "_") and n.endswith(".ogg")]
+    return saida
+
+
 def main():
     mapa = classes()
     fundos = fundos_vivos()
@@ -101,7 +114,7 @@ def main():
             if s == FUNDO_VIVO:
                 continue   # os fundos entram pelas chaves pedidas (abaixo)
             ja_vem = set(PRELOAD.findall(texto))
-            for res in LITERAL.findall(texto) + literais_fundo_vivo(texto, fundos):
+            for res in LITERAL.findall(texto) + literais_fundo_vivo(texto, fundos) + vozes_anuncio(texto):
                 if res in ja_vem and texto.count('"%s"' % res) == 1:
                     continue
                 # outras telas não: só o que esta tela usa

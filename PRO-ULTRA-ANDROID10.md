@@ -1011,6 +1011,114 @@ Egito: 59 → 71. Memória estável no teste longo (todas as telas, 7 min).
 
 APK 1.17.0 (código 19).
 
+## Rodada 18: cenários em planos reais, mecânicas novas e demos com robô
+
+Na 1.17 a câmera andava e cada pixel da foto andava pela distância dele, mas
+as coisas em pé continuavam pintadas na foto: quando a câmera andava, a borda
+delas "entortava" o fundo e dava para ver que era uma imagem só. Agora cada
+coisa em pé é um plano de verdade, recortado, e o fundo atrás dela foi
+reconstruído (`tools/gerar_camadas.py`): quando a câmera anda, os planos se
+deslocam uns dos outros e aparece chão, céu e pedra de verdade atrás deles.
+
+**Egito** (`scripts/deserto_vivo.gd`, `egito_feixes.gd`, `egito_planos.gd`,
+`shaders/egito_plano.gdshader`, `egito_feixe.gdshader`):
+- Fundo sem as colunas, estátuas de Anúbis, obeliscos e o cristal
+  (`sprites/egito_fundo_sol.png` / `_lua.png`), e cada um deles como plano
+  recortado na sua distância (`sprites/egito_planos_*.png`). Câmera anda mais
+  (30 px) para mostrar a profundidade.
+- Os quatro feixes de energia são peças vivas: saem de dentro do cristal
+  (passam por trás dele, sem fresta) e chegam nas pontas dos obeliscos, com
+  pulsos que correm mais com o grave. O brilho do cristal são ondas suaves
+  (sem quadradinhos).
+- As pontas de ouro das três pirâmides do fundo seguem os cristais: o da
+  ponta esquerda apaga a pirâmide da esquerda, o da direita a da direita, e o
+  do meio apaga as três.
+- Cristais das pontas dos obeliscos levam tiro: trincam e, com 4 tiros,
+  quebram e apagam o lado deles (feixes, ponta e a luz no obelisco); voltam
+  sozinhos depois de um tempo. Quebrar o cristal do meio apaga **tudo**:
+  feixes, pontas e a luz vermelha/dourada que ele joga no chão, nos degraus,
+  no pedestal e nos obeliscos (`sprites/egito_fundo_luz.png` e o G da folha
+  `egito_planos_brilho.png` dizem onde essa luz bate).
+- Mecânica nova — **descarga do cristal**: cada acerto certo carrega o
+  cristal (os feixes engrossam, correm e estalam); com 8 acertos, se o
+  cristal estiver inteiro, raios saem das pontas acesas e estouram todos os
+  brasões certos da tela ("DESCARGA DO CRISTAL!"). Brasão errado tira carga;
+  tiro no cristal zera; tiro numa ponta tira metade.
+- Nuvens com o humor do sol/lua: agitadas quando ele está feliz, quase
+  paradas quando ele está tenso ou com sono.
+- Poeira bem perto da câmera (grãos grandes que passam na frente de tudo).
+- Tiro em coisa em pé é pedra e não deixa furo no chão atrás dela; o mapa de
+  profundidade (`sprites/egito_profundidade.png`) agora é igual aos recortes.
+
+**Mar** (`scripts/mar.gd`, `mar_vida.gd`, `mar_acerto.gd`,
+`mar_cardume_dourado.gd`):
+- Fundo sem as duas pedras com escritas (`sprites/atlantis_fundo.png`,
+  reconstruído por remendos da própria imagem) e as pedras como planos com o
+  contorno de verdade (`sprites/mar_pedra_esq.png` / `_dir.png`).
+- Água-viva nada como as de verdade: o sino fecha e ela dá um tranco, depois
+  desliza enquanto ele abre; inclina para onde vai; na trajetória clássica
+  sobe do fundo. No tiro vira **pó de luz**: a própria imagem se desfaz em
+  grãos a partir do ponto do tiro, que brilham, sobem e somem.
+- O vaso agora solta um **cavalo-marinho espírito** (`tools/
+  gerar_cavalo_espirito.py`): corpo de luz translúcido, borda acesa, anéis de
+  luz e chamas escorrendo; sai num clarão, sobe nadando com halo e rastro e
+  se desfaz em faíscas.
+- Queda no chão refeita: o baú bate inteiro, quica, abre e espirra moedas e
+  afunda na areia; o vaso parte em poucos pedaços grandes que tombam,
+  assentam em distâncias diferentes e afundam; nuvem de areia rente ao chão.
+- Mecânica nova — **cardume dourado**: de tempos em tempos (20 a 30 s) um
+  cardume de peixes de ouro atravessa a água; acertar qualquer peixe vale
+  +150 e o cardume se espalha num estouro de ouro.
+- **Luz do sol de fora em movimento** (`shaders/fundo_profundo.gdshader`): os
+  fachos finos que desciam saíram; no lugar, raios de sol largos saem do alto,
+  nascem, se juntam, somem e balançam devagar, fortes na água aberta e fracos
+  no que está perto; a luz cáustica anda no chão, no templo, nas paredes e nas
+  pedras com escritas e acende mais onde passa um facho. Tudo no mesmo desenho
+  do fundo: os raios já vêm animados numa textura (`sprites/mar_raios.png`,
+  uma leitura por pixel, sem seno), a parte parada fica no alfa da máscara
+  (`sprites/mar_profundidade.png`: R distância, G cáustica, A raios) e o que
+  só depende do tempo é feito no vértice.
+- Saiu a cachoeira que escorria em cima da pedra escura atrás do Poseidon
+  (virava riscas na pedra).
+
+**Anunciador de combos com voz** (`scripts/combo_anuncio.gd`, igual nas quatro
+telas): o combo aparece grande no meio da tela, entra estourando e assenta
+com um quique, com clarão, raios de luz e faíscas nas cores da tela, e sobe
+sumindo. Níveis: DOUBLE HIT (2), TRIPLE HIT (3), QUADRA HIT (4), PENTA HIT (5),
+MEGA COMBO (6), SUPER COMBO (8), INSANE (10), UNSTOPPABLE (13) e LEGENDARY
+(16, e de novo a cada 4); entre um nível e outro aparece o número (x7). Em
+cada nível novo a voz da tela anuncia e a música abaixa 7 dB enquanto ela
+fala:
+- Mar: Poseidon (bem grave, encorpado, eco de caverna; "vuum" de água e
+  bolhas antes);
+- Egito: o deus do templo (grave, eco longo de templo; gongo antes);
+- Bar: locutor de saloon (rápido, voz de rádio antigo; sino de balcão antes);
+- Arena: locutora da arena (voz de máquina, eco de estádio; laser subindo antes).
+Falas especiais: POWER OF RA! na descarga do cristal, POSEIDON'S TREASURE! no
+cardume dourado e PERFECT SEQUENCE! na sequência completa da Arena (que
+ganhou contagem de acertos seguidos; erro ou tiro fora zera). As vozes são
+`songs/voz/<tela>_<fala>.ogg` (39 falas, 440 KB), feitas pelo
+`tools/gerar_vozes.py` (Piper + ffmpeg); os efeitos foram escolhidos para a
+fala continuar clara (conferido com um reconhecedor de voz: 36 de 40 falas
+reconhecidas, perto do que ele acerta com a voz sem efeito nenhum). A
+pré-carga de cada tela já traz as vozes dela (`tools/gerar_precarga.py`).
+
+**Demos do menu:** as prévias dos quatro cenários (`background_video/
+teaser_*.mp4` e `.ogv`) foram regravadas com um robô jogando a versão atual
+(mira com movimento de mão, só atira com o alvo certo sob a mira), gravadas
+pelo Movie Maker do Godot em 1080x1920 e codificadas como antes (mp4 576x1024
+30 q/s com AAC; ogv 432x768 24 q/s, 2,4 Mbit/s). Já mostram a luz nova do
+Mar, as pontas das pirâmides e o anunciador com as vozes. Para regravar:
+`bash tools/demos/gravar_demos.sh <cópia importada do projeto>`.
+
+**Leve para a TV Box:** colunas e estátuas são imagem pura (sem shader); só
+o cristal e os obeliscos usam o shader de brilho; os planos leem uma folha só
+fora da troca sol/lua; o fundo não lê a máscara vazia e o céu das nuvens vem
+pronto numa textura (sem contas por pixel). Medido: ver o relatório da
+rodada.
+
+APK 1.18.0 (código 20).
+
 ## Para testar no PC como se fosse a TV Box
 
 ```

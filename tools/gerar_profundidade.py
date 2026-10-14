@@ -6,14 +6,22 @@ para a porta do templo (o ponto de fuga) e cada coisa em pé tem a distância
 do ponto onde ela encosta no chão. Daqui sai, para cada pixel do fundo, a
 distância Z (Z = 1 é o plano dos alvos comuns):
   chão          em perspectiva: Z = (chão perto - fuga) / (y na tela - fuga)
-  pedras        constante, a do pé de cada uma (as duas pedras grandes)
+  pedras        fora do mapa: são planos recortados à parte, cada um na
+                distância do pé dele (scripts/mar_vida.gd)
   templo e céu  longe (Z = 10)
 O shader do fundo (shaders/fundo_profundo.gdshader) move cada pixel conforme
 essa distância quando a mira anda (paralaxe de verdade, pixel a pixel), e
 os alvos passam na frente ou atrás das pedras pela distância deles.
 
-Gera sprites/mar_profundidade.png (L, 1/4 da resolução do fundo), com
-t = (1/Z - 1/Z_LONGE) / (1/Z_PERTO - 1/Z_LONGE).
+Gera sprites/mar_profundidade.png (RGB, 1/4 da resolução do fundo):
+  R  t = (1/Z - 1/Z_LONGE) / (1/Z_PERTO - 1/Z_LONGE)
+  G  onde a luz cáustica do sol cai (chão e superfícies com textura, mais
+     nas claras; a água aberta não recebe)
+  B  onde os raios de sol aparecem inteiros (a água aberta, lisa)
+  A  a força parada dos raios em cada ponto: caem saindo do sol (acima do
+     topo, SOL_MAR) e são fortes na água aberta (B), fracos no que está perto
+O mesmo shader do fundo usa G e A para a luz do sol de fora andando (só a
+parte que mexe é feita lá).
 
 Egito (sprites/egito_profundidade.png, L, metade da resolução, a mesma para
 o dia e a noite): a imagem é uma câmera olhando o horizonte (ponto de fuga
@@ -26,6 +34,7 @@ esconde os brasões que passam atrás das coisas (shaders/egito_alvo.gdshader).
     python3 tools/gerar_profundidade.py
 """
 import os
+import re
 import numpy as np
 from PIL import Image
 from PIL import ImageDraw
@@ -47,6 +56,9 @@ Z_LONGE, Z_PERTO = 10.0, 0.7
 PE_PEDRA_ESQ = 935.0
 PE_PEDRA_DIR = 1230.0
 PE_TEMPLO = 790.0
+# de onde entra a luz do sol (UV do fundo, acima do topo): o mesmo `sol` do
+# shaders/fundo_profundo.gdshader
+SOL_MAR = (0.52, -0.10)
 
 
 def y_tela(y_tex):
@@ -67,19 +79,48 @@ def mascara(nome, canto, canal=2):
     return full
 
 
+def luz_mar(yy):
+    """Máscaras da luz do sol no Mar: (onde cai a cáustica, onde os raios
+    aparecem). Superfície = onde a imagem tem textura (pedra, coral, templo)
+    ou é chão; água aberta = onde a imagem é lisa."""
+    img = np.asarray(Image.open(os.path.join(SP, "atlantis_fundo.png")).convert("RGB")).astype(np.float32) / 255
+    lum = img @ np.array([0.3, 0.55, 0.15], np.float32)
+    m1 = ndi.uniform_filter(lum, 11)
+    m2 = ndi.uniform_filter(lum * lum, 11)
+    textura = np.clip((np.sqrt(np.maximum(m2 - m1 * m1, 0)) - 0.025) / 0.06, 0, 1)
+    textura = ndi.gaussian_filter(textura, 6)
+    chao = np.clip((yy - PE_TEMPLO) / 60.0, 0, 1)
+    cau = np.maximum(textura * 0.8, chao) * (0.35 + 0.65 * np.clip(lum / 0.55, 0, 1))
+    raio = np.clip(1 - textura * 1.2, 0, 1) * (1 - chao * 0.6)
+    return cau, raio
+
+
 def mar():
     yy = np.mgrid[0:TEX[1], 0:TEX[0]][0].astype(np.float64)
     z = np.where(yy > PE_TEMPLO, z_chao(yy), Z_LONGE)
     templo = mascara("mar_frente_navio_mascara.png", (195, 530), 0)
     z = np.where(templo > 0.5, np.minimum(z, float(z_chao(PE_TEMPLO))), z)
-    for nome, canto, pe in (("mar_pedra_esq_mascara.png", (0, 466), PE_PEDRA_ESQ),
-                            ("mar_pedra_dir_mascara.png", (523, 523), PE_PEDRA_DIR)):
-        m = mascara(nome, canto)
-        z = np.where(m > 0.5, float(z_chao(pe)), z)
+    # as duas pedras com escritas não entram: são planos à parte
+    # (sprites/mar_pedra_*.png, tools/gerar_camadas.py) e o fundo atrás delas
+    # foi reconstruído (atlantis_fundo.png), então ali o fundo é chão
     inv = 1.0 / z
     t = (inv - 1 / Z_LONGE) / (1 / Z_PERTO - 1 / Z_LONGE)
-    peq = Image.fromarray((np.clip(t, 0, 1) * 255 + 0.5).astype(np.uint8), "L").resize((TEX[0] // 4, TEX[1] // 4), Image.BILINEAR)
-    peq = Image.fromarray(ndi.gaussian_filter(np.asarray(peq).astype(np.float32), 0.7).clip(0, 255).astype(np.uint8), "L")
+    cau, raio = luz_mar(yy)
+    canais = []
+    for i, a in enumerate((t, cau, raio)):
+        c = Image.fromarray((np.clip(a, 0, 1) * 255 + 0.5).astype(np.uint8), "L").resize((TEX[0] // 4, TEX[1] // 4), Image.BILINEAR)
+        canais.append(Image.fromarray(ndi.gaussian_filter(np.asarray(c).astype(np.float32), 0.7 if i == 0 else 1.2).clip(0, 255).astype(np.uint8), "L"))
+    # força parada dos raios, na resolução do mapa (UV do centro de cada pixel)
+    h, w = TEX[1] // 4, TEX[0] // 4
+    vy, vx = np.mgrid[0:h, 0:w].astype(np.float64)
+    vx = (vx + 0.5) / w - SOL_MAR[0]
+    vy = (vy + 0.5) / h - SOL_MAR[1]
+    s = vx / vy
+    r = np.asarray(canais[0]).astype(np.float64) / 255
+    b = np.asarray(canais[2]).astype(np.float64) / 255
+    fixa = np.exp(-vy * 0.9 - s * s * 0.8) * (0.4 + 0.6 * b) * (1 - 0.8 * r)
+    canais.append(Image.fromarray((np.clip(fixa, 0, 1) * 255 + 0.5).astype(np.uint8), "L"))
+    peq = Image.merge("RGBA", canais)
     peq.save(os.path.join(SP, "mar_profundidade.png"), optimize=True)
     print("  mar_profundidade.png   %dx%d  pedras: esq Z=%.2f dir Z=%.2f templo Z=%.2f" % (
         peq.width, peq.height, z_chao(PE_PEDRA_ESQ), z_chao(PE_PEDRA_DIR), z_chao(PE_TEMPLO)))
@@ -132,22 +173,37 @@ def z_chao_egito(y):
     return np.clip((EG_CHAO_1 - EG_HORIZONTE) / np.maximum(d, 1e-3), EG_Z_PERTO, EG_Z_LONGE)
 
 
+def planos_egito():
+    """Os recortes do Egito (scripts/egito_planos.gd, tools/gerar_camadas.py):
+    [(alfa 1024x1536, Z)], do longe para o perto."""
+    txt = open(os.path.join(RAIZ, "scripts", "egito_planos.gd"), encoding="utf-8").read()
+    folha = np.asarray(Image.open(os.path.join(SP, "egito_planos_sol.png")).convert("RGBA"))[..., 3].astype(np.float32) / 255
+    saida = []
+    for m in re.finditer(r'"canto": Vector2\((\d+), (\d+)\), "folha": Rect2\((\d+), (\d+), (\d+), (\d+)\), "z": ([\d.]+)', txt):
+        cx, cy, fx, fy, fw, fh = (int(v) for v in m.groups()[:6])
+        a = np.zeros((TEX[1], TEX[0]), np.float32)
+        x0, y0 = max(cx, 0), max(cy, 0)
+        x1, y1 = min(cx + fw, TEX[0]), min(cy + fh, TEX[1])
+        a[y0:y1, x0:x1] = folha[fy + y0 - cy:fy + y1 - cy, fx + x0 - cx:fx + x1 - cx]
+        saida.append((a, float(m.group(7))))
+    return saida
+
+
 def egito():
-    E = 2  # desenha os contornos em 2x e reduz: borda lisa
+    # o chão (com as colunas pequenas do fundo, que ficaram pintadas nele) é o
+    # mesmo da conta do shader do fundo: Z pelo y; céu e pirâmides longe. Cada
+    # plano recortado (colunas, Anúbis, obeliscos, cristal) tem o Z dele, pelo
+    # alfa do próprio recorte: o mapa bate com o que a tela mostra.
     yy = np.mgrid[0:TEX[1], 0:TEX[0]][0].astype(np.float64)
     z = z_chao_egito(yy)
     z = np.where(yy <= EG_HORIZONTE, EG_Z_LONGE, z)
-    for pol, pe in EG_COISAS:
-        m = Image.new("L", (TEX[0] * E, TEX[1] * E), 0)
-        ImageDraw.Draw(m).polygon([(x * E, y * E) for x, y in pol], fill=255)
-        m = np.asarray(m.resize(TEX, Image.LANCZOS)).astype(np.float32) / 255
-        z = np.where(m > 0.5, float(z_chao_egito(pe)), z)
+    for a, zp in planos_egito():
+        z = np.where(a > 0.5, zp, z)
     inv = 1.0 / z
     t = (inv - 1 / EG_Z_LONGE) / (1 / EG_Z_PERTO - 1 / EG_Z_LONGE)
     img = Image.fromarray((np.clip(t, 0, 1) * 255 + 0.5).astype(np.uint8), "L").resize((TEX[0] // 2, TEX[1] // 2), Image.BILINEAR)
     img.save(os.path.join(SP, "egito_profundidade.png"), optimize=True)
-    print("  egito_profundidade.png %dx%d  cristal Z=%.2f obeliscos Z=%.2f anubis Z=%.2f colunas Z=%.2f" % (
-        img.width, img.height, z_chao_egito(1200), z_chao_egito(1086), z_chao_egito(930), z_chao_egito(1290)))
+    print("  egito_profundidade.png %dx%d  (%d planos recortados)" % (img.width, img.height, len(planos_egito())))
 
 
 if __name__ == "__main__":

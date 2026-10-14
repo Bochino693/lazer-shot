@@ -2,7 +2,8 @@
 """Artes dos efeitos da Rodada 17 (Mar e Egito).
 
 Gera (em sprites/):
-  mar_cavalo.png        cavalo-marinho de jade (sai do vaso quebrado no Mar)
+  (mar_cavalo.png agora é o espírito de tools/gerar_cavalo_espirito.py; o
+   cavalo de jade antigo daqui não é mais gravado)
   fx_fumaca.png         nuvem macia (fumaça da bomba, poeira e areia; tingida
                         no jogo)
   fx_onda.png           anel de choque (explosão debaixo d'água)
@@ -10,7 +11,9 @@ Gera (em sprites/):
   fx_furo_pedra.png     furo de bala na pedra (buraco com rachaduras)
   mar_caustica.png      luz cáustica (as linhas de luz que a água faz no chão),
                         emenda nos quatro lados
-  mar_facho.png         facho de luz que desce da superfície
+  mar_raios.png         raios de sol já animados (shaders/fundo_profundo.gdshader):
+                        x = direção saindo do sol (uma volta), y = tempo (um
+                        ciclo de RAIOS_CICLO s); emenda nos quatro lados
 
 Uso:
     python3 tools/gerar_fx.py
@@ -280,21 +283,42 @@ def caustica():
     gravar(np.dstack([np.ones_like(aresta), np.ones_like(aresta), np.ones_like(aresta), aresta]), "mar_caustica.png")
 
 
-def facho():
-    W, H = 64, 512
-    yy, xx = np.mgrid[0:H, 0:W].astype(np.float32)
-    perfil = np.exp(-((xx - W / 2) / (W * 0.22)) ** 2)
-    desce = np.clip(1 - yy / H, 0, 1) ** 1.4 * np.clip(yy / 30.0, 0, 1)
-    estrias = 0.75 + 0.25 * ruido((H, W), ((2.0, 1.0),), 4)
-    a = perfil * desce * estrias
-    gravar(np.dstack([np.ones_like(a), np.ones_like(a), np.ones_like(a), a]), "mar_facho.png")
+RAIOS_CICLO = 48.0     # segundos de uma volta da animação (o mesmo do shader)
+
+
+def raios():
+    # duas faixas de luz de larguras e forças diferentes, cada uma numa volta:
+    # a primeira anda uma volta por ciclo, a segunda (em dobro de escala)
+    # três voltas para o outro lado; onde as duas se somam o facho acende,
+    # onde se separam ele some. Cada linha da textura é um instante do ciclo
+    # (o shader lê uma vez só, com o tempo no y)
+    N, T = 256, 256
+
+    def faixa(semente, n):
+        g = np.random.default_rng(semente)
+        x = np.arange(N * 4) / (N * 4)
+        f = np.zeros_like(x)
+        for _ in range(n):
+            c, sg, a = g.uniform(0, 1), g.uniform(0.012, 0.045), g.uniform(0.45, 1.0)
+            for k in (-1, 0, 1):
+                f += a * np.exp(-((x - c - k) / sg) ** 2)
+        return f / f.max()
+
+    f1, f2 = faixa(7, 9), faixa(11, 6)
+    u = np.arange(N) / N
+    linhas = []
+    for j in range(T):
+        tau = j / T
+        a = f1[((u + tau) % 1.0 * N * 4).astype(int)]
+        b = f2[((2 * u - 3 * tau) % 1.0 * N * 4).astype(int)]
+        linhas.append(np.minimum(a * 0.65 + b * 0.55, 1.0) ** 2)
+    gravar(np.array(linhas), "mar_raios.png")
 
 
 if __name__ == "__main__":
-    cavalo()
     fumaca()
     onda()
     furo_areia()
     furo_pedra()
     caustica()
-    facho()
+    raios()

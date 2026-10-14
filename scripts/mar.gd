@@ -39,7 +39,7 @@ var fx_redraw_timer: float = 0.0
 @export var tiro_sem_tremida_no_erro: bool = true
 
 
-@export var caminho_background: String = "res://sprites/atlantis_jogo.png"
+@export var caminho_background: String = "res://sprites/atlantis_fundo.png"
 @export var tempo_partida: float = 120.0
 @export var som_aguaviva_hit_path: String = "res://songs/buble_hit.wav"
 @export var som_bomba_xploit_path: String = "res://songs/xploit.wav"
@@ -120,6 +120,7 @@ var combo_timer_restante: float = 0.0
 
 var combo_layer: CanvasLayer
 var combo_label: Label
+var _anuncio: ComboAnuncio      # o combo grande no meio da tela, com a voz de Poseidon
 
 @export var escala_vaso_min: float = 0.58
 @export var escala_vaso_max: float = 0.70
@@ -146,6 +147,10 @@ var som_recharge_stream: AudioStream = null
 @export var aguaviva_balanço_y: float = 10.0
 @export var aguaviva_rotacao_idle: float = 8.0
 @export var aguaviva_pulso_escala: float = 0.05
+# nado da água-viva: um pulso a cada AGUAVIVA_PERIODO s; no tranco ela anda
+# (1 + AGUAVIVA_TRANCO) vezes a velocidade média, deslizando (1 - ...)
+const AGUAVIVA_PERIODO := 1.15
+const AGUAVIVA_TRANCO := 0.8
 # Rodada 14: balanço das águas-vivas mais lento (acompanha a queda mais lenta)
 @export var aguaviva_freq_x: float = 1.2
 @export var aguaviva_freq_y: float = 1.8
@@ -468,6 +473,12 @@ const PROFUNDO_RAIO_MIN := 30.0 # px: de longe o alvo é pequeno; um mínimo jus
 const CHAO_TELA := 0.86         # o chão do mar no plano Z = 1 (fração da altura da tela)
 const COR_NEVOA_ALVO := Color(0.52, 0.80, 0.95)
 var _profundo: Node2D = null
+# cardume dourado (bônus): passa de tempos em tempos; tiro nele vale BONUS_CARDUME
+const BONUS_CARDUME := 150
+const Z_CARDUME := 1.0      # na frente das pedras (bem visível)
+var _cardume: MarCardumeDourado = null
+var _cardume_espera := 14.0
+var SOM_OURO_CARDUME: AudioStream = load("res://songs/ouro_ping.wav")
 # Efeitos da Rodada 17. load() e não preload(): o Godot 4.6 nunca descarrega
 # um script já carregado, e o que ele pré-carrega ficaria na memória.
 var TEX_CAVALO: Texture2D = load("res://sprites/mar_cavalo.png")
@@ -476,6 +487,8 @@ var TEX_ONDA: Texture2D = load("res://sprites/fx_onda.png")
 var TEX_FURO_AREIA: Texture2D = load("res://sprites/fx_furo_areia.png")
 var TEX_BOLHA: Texture2D = load("res://sprites/mar_bolha.png")
 var TEX_PROFUNDIDADE: Texture2D = load("res://sprites/mar_profundidade.png")
+var TEX_CAUSTICA: Texture2D = load("res://sprites/mar_caustica.png")
+var TEX_RAIOS: Texture2D = load("res://sprites/mar_raios.png")
 const SHADER_FUNDO_PROFUNDO := preload("res://shaders/fundo_profundo.gdshader")
 var _furos: Furos = null              # furos de bala na areia (filho do fundo)
 var _pontos: PontosVoando = null      # "+80" saltando do alvo acertado
@@ -630,6 +643,7 @@ func _process(delta: float) -> void:
 	_atualizar_fx_explosao_bomba(delta)
 	_atualizar_movimento_aguavivas(delta)
 	_atualizar_bolhas_dos_objetos(delta)
+	_atualizar_cardume(delta)
 
 	fx_redraw_timer -= delta
 	if fx_redraw_timer <= 0.0:
@@ -715,58 +729,13 @@ func _atualizar_mira_hibrida(_delta: float) -> void:
 	alvo_pos = MiraGlobal.pos
 
 
-func _obter_texto_combo(hit_count: int) -> String:
-	match hit_count:
-		2:
-			return "DOUBLE HIT"
-		3:
-			return "TRIPLE HIT"
-		4:
-			return "QUADRA HIT"
-		5:
-			return "MEGA COMBO x5"
-		6:
-			return "MEGA COMBO x6"
-		7:
-			return "MEGA COMBO x7"
-		8:
-			return "MEGA COMBO x8"
-		_:
-			if hit_count >= 9:
-				return "INSANO x%d" % hit_count
-
-	return ""
-
-
+## O combo agora é anunciado grande no meio da tela, com a voz de Poseidon
+## (scripts/combo_anuncio.gd); o rótulo pequeno do canto fica escondido.
 func _mostrar_combo_hits() -> void:
-	if combo_label == null:
-		return
-
-	var texto: String = _obter_texto_combo(combo_hits_seguidos)
-	if texto == "":
+	if combo_label != null:
 		combo_label.visible = false
-		return
-
-	combo_label.text = texto
-	combo_label.visible = true
-	combo_label.modulate = Color(1.0, 1.0, 1.0, 1.0)
-	combo_label.scale = Vector2.ONE * escala_combo_visual_base
-
-	var tw := create_tween()
-	tw.set_parallel(true)
-	tw.tween_property(
-		combo_label,
-		"scale",
-		Vector2.ONE * (escala_combo_visual_base * 1.10),
-		0.10
-	).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-
-	tw.tween_property(
-		combo_label,
-		"scale",
-		Vector2.ONE * escala_combo_visual_base,
-		0.22
-	).set_delay(0.10).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	if _anuncio != null:
+		_anuncio.combo(combo_hits_seguidos)
 
 func _obter_nivel_dificuldade() -> int:
 	if pontos_por_nivel_dificuldade <= 0:
@@ -2481,6 +2450,7 @@ func _criar_hud_combo() -> void:
 	Leve.color(combo_label, "font_outline_color", Color.BLACK)
 	Leve.constant(combo_label, "outline_size", 6)
 	combo_layer.add_child(combo_label)
+	_anuncio = ComboAnuncio.criar(self, "mar")
 
 	_ajustar_layout_combo()
 
@@ -3329,6 +3299,9 @@ func _ajustar_background_fullscreen() -> void:
 		mat_fundo = ShaderMaterial.new()
 		mat_fundo.shader = SHADER_FUNDO_PROFUNDO
 		mat_fundo.set_shader_parameter("profundidade", TEX_PROFUNDIDADE)
+		mat_fundo.set_shader_parameter("caustica", TEX_CAUSTICA)
+		mat_fundo.set_shader_parameter("caustica_perto", TEX_CAUSTICA)
+		mat_fundo.set_shader_parameter("raios", TEX_RAIOS)
 		background.material = mat_fundo
 	if mat_fundo != null:
 		mat_fundo.set_shader_parameter("escala", escala)
@@ -3974,6 +3947,11 @@ func _spawnar_alvo(tipo: String, estilo_pedido: String = "") -> void:
 
 	if tipo == "aguaviva":
 		novo.rotation_degrees = randf_range(-8.0, 8.0)
+		# água-viva nada para cima (os pulsos empurram o sino): vem de baixo
+		if pos_final.y > pos_inicial.y:
+			var troca := pos_inicial
+			pos_inicial = pos_final
+			pos_final = troca
 	elif tipo == "vaso":
 		novo.rotation_degrees = randf_range(-6.0, 6.0)
 	elif tipo == "bau":
@@ -3993,6 +3971,20 @@ func _spawnar_alvo(tipo: String, estilo_pedido: String = "") -> void:
 		pos_final = pos_inicial.lerp(pos_final, s)
 		duracao *= s
 		ate_o_chao = true
+
+	if tipo == "aguaviva":
+		# nada em pulsos (scripts: _nado_aguaviva); o tween é dela
+		novo.set_meta("pulsos", maxi(2, int(round(duracao / AGUAVIVA_PERIODO))))
+		novo.set_meta("ini_2d", pos_inicial)
+		novo.set_meta("fim_2d", pos_final)
+		var tw_a: Tween = novo.create_tween()
+		tw_a.tween_method(_mover_aguaviva_2d.bind(novo), 0.0, 1.0, duracao)
+		novo.set_meta("tween_queda", tw_a)
+		tw_a.finished.connect(func() -> void:
+			if is_instance_valid(novo) and not bool(novo.get_meta("atingido", false)):
+				_remover_alvo(novo)
+		)
+		return
 
 	var tween: Tween = create_tween()
 	tween.set_parallel(true)
@@ -4121,6 +4113,9 @@ func _lancar_3d(alvo: Area2D, tipo: String, estilo: String, duracao: float, esca
 	alvo.set_meta("cai", cai)
 	alvo.set_meta("curva", [p0, c1, c2, p3])
 	var giro: float = randf_range(320.0, 560.0) if tipo == "bomba" else randf_range(-16.0, 16.0)
+	if tipo == "aguaviva":
+		giro = 0.0
+		alvo.set_meta("pulsos", maxi(2, int(round(dur / AGUAVIVA_PERIODO))))
 	alvo.set_meta("rot_ini", randf_range(-180.0, 180.0) if tipo == "bomba" else randf_range(-6.0, 6.0))
 	alvo.set_meta("rot_giro", giro)
 	alvo.set_meta("balanco", randf() * TAU)
@@ -4150,8 +4145,9 @@ func _mover_3d(t: float, alvo: Area2D) -> void:
 	if curva.size() < 4:
 		return
 	var cai: bool = alvo.get_meta("cai", false)
-	# a queda acelera um pouco (a água segura); o resto anda igual
-	var u: float = t * t * 0.35 + t * 0.65 if cai else t
+	# a queda acelera um pouco (a água segura); a água-viva nada em pulsos; o
+	# resto anda igual
+	var u: float = t * t * 0.35 + t * 0.65 if cai else _nado_aguaviva(alvo, t)
 	var v := 1.0 - u
 	var p: Vector3 = curva[0] * (v * v * v) + curva[1] * (3.0 * v * v * u) + curva[2] * (3.0 * v * u * u) + curva[3] * (u * u * u)
 	var z: float = maxf(p.z, 0.2)
@@ -4179,6 +4175,27 @@ func _mover_3d(t: float, alvo: Area2D) -> void:
 	# já passou por nós e sumiu: não pega mais tiro
 	alvo.visible = t < 0.5 or a > 0.05
 	alvo.z_index = MarVida.z_desenho(z) + (1 if String(alvo.get_meta("tipo_alvo", "")) == "bomba" else 0)
+
+
+## Água-viva nada em pulsos, como as de verdade: o sino fecha e ela dá um
+## tranco para a frente, depois desliza perdendo velocidade enquanto o sino
+## abre de novo. Recebe t (0..1 do tempo) e devolve o quanto do caminho ela
+## já fez (velocidade 1 + AGUAVIVA_TRANCO * cos, que soma o caminho certo no
+## fim); guarda a fase do pulso para o sino (_atualizar_idle_aguaviva).
+func _nado_aguaviva(alvo: Area2D, t: float) -> float:
+	var n: int = alvo.get_meta("pulsos", 0)
+	if n <= 0:
+		return t
+	alvo.set_meta("pulso_fase", fposmod(t * n, 1.0))
+	return t + AGUAVIVA_TRANCO * sin(TAU * n * t) / (TAU * n)
+
+
+func _mover_aguaviva_2d(t: float, alvo: Area2D) -> void:
+	if not is_instance_valid(alvo) or bool(alvo.get_meta("atingido", false)):
+		return
+	var ini: Vector2 = alvo.get_meta("ini_2d", alvo.position)
+	var fim: Vector2 = alvo.get_meta("fim_2d", alvo.position)
+	alvo.position = ini.lerp(fim, _nado_aguaviva(alvo, t))
 
 
 ## Vaso, baú ou bomba que caiu até o chão do mar: espatifa (sem ponto e sem
@@ -4265,14 +4282,28 @@ func _atualizar_idle_aguaviva(alvo: Area2D, delta: float) -> void:
 		else:
 			anim.stop()
 
-	var sway_x: float = sin((t * aguaviva_freq_x) + seed) * aguaviva_balanço_x
-	var sway_y: float = cos((t * aguaviva_freq_y) + seed * 0.73) * aguaviva_balanço_y
-	var rot: float = sin((t * aguaviva_freq_rot) + seed * 1.17) * aguaviva_rotacao_idle
-	var pulso: float = 1.0 + sin((t * aguaviva_freq_pulso) + seed * 0.41) * aguaviva_pulso_escala
+	var sway_x: float = sin((t * aguaviva_freq_x) + seed) * aguaviva_balanço_x * 0.35
+	var sway_y: float = cos((t * aguaviva_freq_y) + seed * 0.73) * aguaviva_balanço_y * 0.35
+	# o sino no ritmo do nado: fecha (estreita e alonga) no tranco, abre
+	# (alarga e achata) enquanto desliza
+	var fase: float = float(alvo.get_meta("pulso_fase", fposmod(t * 0.8 + seed, 1.0)))
+	var cs := cos(TAU * fase)
+	var fecha := maxf(cs, 0.0)
+	fecha *= fecha
+	var abre := maxf(-cs, 0.0)
+	var pulso: float = 1.0 + 0.5 * (abre * 0.07 - fecha * 0.05)
+	# inclina para onde está indo (a cabeça na frente), sem virar
+	var antes: Vector2 = alvo.get_meta("pos_antes", alvo.position)
+	alvo.set_meta("pos_antes", alvo.position)
+	var vel_tela: Vector2 = (alvo.position - antes) / maxf(delta, 0.001)
+	var incl_alvo: float = clampf(vel_tela.x / (absf(vel_tela.x) + absf(vel_tela.y) + 60.0), -1.0, 1.0) * 24.0
+	var incl: float = lerpf(float(alvo.get_meta("inclina", 0.0)), incl_alvo, 1.0 - exp(-delta * 3.0))
+	alvo.set_meta("inclina", incl)
+	var rot: float = incl + sin((t * aguaviva_freq_rot) + seed * 1.17) * aguaviva_rotacao_idle * 0.4
 
 	anim.position = Vector2(sway_x, sway_y)
 	anim.rotation_degrees = rot
-	anim.scale = Vector2.ONE * pulso
+	anim.scale = Vector2(1.0 - 0.13 * fecha + 0.08 * abre, 1.0 + 0.11 * fecha - 0.06 * abre)
 
 	# brilho bioluminescente atrás do sino, respirando com ele
 	var halo := alvo.get_node_or_null("Brilho") as Sprite2D
@@ -4390,6 +4421,8 @@ func _processar_tiro_global(pos_global: Vector2, primeiro_tiro: bool = false) ->
 
 	if alvo_acertado != null:
 		_acertar_alvo(alvo_acertado, pos_global)
+	elif _acertar_cardume(pos_global):
+		pass
 	elif _acertar_pedra(pos_global):
 		_set_status("PEDRA!")
 	else:
@@ -5034,6 +5067,8 @@ func _acertar_alvo(alvo: Area2D, pos_impacto: Vector2 = Vector2.ZERO) -> void:
 		if combo_label != null:
 			combo_label.visible = false
 			combo_label.text = ""
+		if _anuncio != null:
+			_anuncio.zerar()
 
 		_atualizar_bombas_hud()
 
@@ -5185,6 +5220,53 @@ func _acertar_alvo(alvo: Area2D, pos_impacto: Vector2 = Vector2.ZERO) -> void:
 	
 	
 	
+
+
+## Cardume dourado: na partida, de tempos em tempos um cardume de ouro
+## atravessa a água (scripts/mar_cardume_dourado.gd); só um por vez.
+func _atualizar_cardume(delta: float) -> void:
+	if _cardume != null and not is_instance_valid(_cardume):
+		_cardume = null
+	if _cardume != null:
+		if encerrado or not partida_iniciada:
+			_cardume.queue_free()
+			_cardume = null
+			return
+		_cardume.desloca = _profundo.paralaxe(Z_CARDUME) if _profundo != null else Vector2.ZERO
+		return
+	if not partida_iniciada or encerrado or alvos_root == null:
+		return
+	_cardume_espera -= delta
+	if _cardume_espera > 0.0:
+		return
+	_cardume_espera = randf_range(20.0, 30.0)
+	_cardume = MarCardumeDourado.new()
+	_cardume.name = "CardumeDourado"
+	_cardume.z_as_relative = false
+	_cardume.z_index = MarVida.z_desenho(Z_CARDUME)
+	alvos_root.add_child(_cardume)
+	_cardume.montar(get_viewport_rect().size, Z_CARDUME, 0.62)
+	Maquina.efeito(SOM_OURO_CARDUME, -14.0, 1.6)   # um tilintar avisa que ele chegou
+
+
+func _acertar_cardume(pos_global: Vector2) -> bool:
+	if _cardume == null or not is_instance_valid(_cardume) or alvos_root == null:
+		return false
+	if not _cardume.acertar(alvos_root.to_local(pos_global)):
+		return false
+	pontuacao_total += BONUS_CARDUME
+	total_acertos += 1
+	combo_hits_seguidos += 1
+	combo_timer_restante = janela_combo_seg
+	if _anuncio != null:
+		_anuncio.especial("POSEIDON'S TREASURE!")
+	_set_status("CARDUME DOURADO! +%d" % BONUS_CARDUME, "acerto")
+	_mostrar_pontos(pos_global, BONUS_CARDUME, true)
+	_flash_tela(Color(1.0, 0.85, 0.40, 0.16))
+	Maquina.efeito(SOM_OURO_CARDUME, -2.0, 1.15)
+	if som_bau_hit_stream != null:
+		_tocar_som(som_bau_hit_stream, -6.0, 1.25, inicio_bau_hit_seg)
+	return true
 
 
 func _remover_alvo(alvo: Area2D) -> void:
