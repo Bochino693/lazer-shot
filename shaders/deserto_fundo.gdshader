@@ -49,6 +49,15 @@ uniform vec3 ouro_toque = vec3(0.0, 0.0, -1.0);   // tiro no ouro: xy = ponto (U
 // do obelisco esquerdo), y = do meio (cristal do meio), z = da direita. 0 =
 // cristal quebrado: a ponta para de brilhar e fica ouro velho, apagado.
 uniform vec3 pontas_acesas = vec3(1.0);
+// Crepúsculo (no meio da troca sol/lua, 0..1): o céu em brasa (vermelho e
+// rosa perto do horizonte, roxo no alto) e a terra na luz baixa e quente.
+uniform float crepusculo = 0.0;
+// O céu sem o astro (tools/gerar_ceu_astro.py): quando o sol / a lua sai do
+// lugar (pôr do sol, nascer da lua), o disco pintado nesta imagem dá lugar
+// ao céu, e o brilho em volta do lugar dele se apaga um pouco.
+uniform sampler2D ceu_sem : filter_linear, repeat_disable;
+uniform vec4 ceu_sem_caixa = vec4(0.0, 0.0, 1.0, 1.0);   // em UV da imagem
+uniform float ceu_sem_forca = 0.0;
 
 // Câmera 3D (só no jogo, scripts/deserto_vivo.gd): no jogo este é só o
 // fundo (céu, pirâmides e chão, com as coisas em pé tiradas e reconstruídas
@@ -157,6 +166,15 @@ void fragment() {
 	}
 
 	vec4 base = texture(TEXTURE, uv);
+	if (ceu_sem_forca > 0.001) {
+		vec2 q = (uv - ceu_sem_caixa.xy) / ceu_sem_caixa.zw;
+		if (q.x > 0.0 && q.x < 1.0 && q.y > 0.0 && q.y < 1.0) {
+			vec4 c = texture(ceu_sem, q);
+			base.rgb = mix(base.rgb, c.rgb, c.a * ceu_sem_forca);
+		}
+		vec2 pa = (uv - ceu_sem_caixa.xy - ceu_sem_caixa.zw * 0.5) * vec2(1.0, 1.5);
+		base.rgb *= 1.0 - 0.38 * ceu_sem_forca * smoothstep(0.36, 0.06, length(pa)) * luz_ceu.g;
+	}
 	vec3 m = usa_mascara ? texture(mascara, uv).rgb : vec3(0.0);
 	// a luz do cristal só bate do horizonte para baixo
 	float lz = luz_ceu.r;
@@ -228,5 +246,10 @@ void fragment() {
 	}
 
 	vec3 rgb = base.rgb * (1.0 + 0.06 * batida) + soma * forca;
+	if (crepusculo > 0.001) {
+		vec3 brasa = mix(vec3(1.28, 0.56, 0.44), vec3(0.70, 0.38, 0.86), smoothstep(0.34, 0.06, uv.y));
+		vec3 terra = vec3(0.92, 0.62, 0.52);
+		rgb = mix(rgb, rgb * mix(terra, brasa, luz_ceu.g), crepusculo * 0.8);
+	}
 	COLOR = vec4(rgb, base.a) * cor_no;
 }

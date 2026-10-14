@@ -74,6 +74,9 @@ var TEX_LUA: Array = [load("res://sprites/egito_lua_disco.png"), load("res://spr
 	load("res://sprites/egito_lua_iris.png"), load("res://sprites/egito_lua_palpebra.png"),
 	load("res://sprites/egito_lua_halo.png"), load("res://sprites/egito_lua_palpebra_baixo.png")]
 var AGUIA: Texture2D = load("res://sprites/egito_aguia.png")
+var CEU_SEM_SOL: Texture2D = load("res://sprites/egito_ceu_sol.png")
+var CEU_SEM_LUA: Texture2D = load("res://sprites/egito_ceu_lua.png")
+const SHADER_ASTRO := preload("res://shaders/egito_astro.gdshader")
 var AGUIA_POUSADA: Texture2D = load("res://sprites/egito_aguia_pousada.png")
 var SOM_AGUIA: AudioStream = load("res://songs/aguia.wav")
 var SOM_AGUIA_NOITE: AudioStream = load("res://songs/aguia_noite.wav")
@@ -166,7 +169,16 @@ const COR_LUA := Color(0.62, 0.80, 1.0)
 const BRILHOS_CRISTAL := [Vector2(506, 634), Vector2(466, 721), Vector2(548, 721), Vector2(486, 792),
 		Vector2(527, 846), Vector2(505, 893), Vector2(461, 944), Vector2(551, 944)]
 const BRILHOS_PONTAS := [Vector2(229, 520), Vector2(509, 448), Vector2(774, 520)]
-const TEMPO_TROCA := 1.6
+# Pôr do sol / nascer da lua (a troca sol <-> lua no jogo): o astro que sai
+# desce e some atrás das pirâmides (shaders/egito_astro.gdshader corta o que
+# fica atrás delas), o céu passa pelo crepúsculo em brasa enquanto o dia
+# vira noite (fundos, planos, ouro/prata, luzes, águias, tudo junto) e o
+# outro astro sobe de trás das pirâmides até o lugar dele; de manhã, o
+# contrário. Onde o astro estava aparece o céu sem ele (sprites/
+# egito_ceu_*.png, tools/gerar_ceu_astro.py).
+const TEMPO_POENTE := 5.4
+const DESCIDA := 640.0        # px que o astro desce até sumir de todo
+const CEU_SEM_CANTO := Vector2(512 - 232, 300 - 210)   # canto de egito_ceu_*.png na imagem
 # Câmera 3D: com a mira no canto ela anda CAMERA_PASSO px; uma coisa à
 # distância Z anda CAMERA_PASSO * (1 - 1/Z) (Z = 1 é o plano dos brasões).
 # O mapa vai de Z = 10 (preto: céu, pirâmides) a Z = 0,7 (branco: chão perto).
@@ -242,6 +254,12 @@ var _estrelas: Array = []     # {no, w, f}
 var _modo := ""
 var _noite := 0.0             # 0 = sol ... 1 = lua
 var _tw: Tween = null
+var _poente := -1.0            # 0..1 durante o pôr do sol / nascer da lua; -1 parado
+var _poente_de := 0.0
+var _poente_para := 0.0
+var _crepusculo := 0.0
+var _desce := [0.0, 0.0]       # px que o sol / a lua está abaixo do lugar dele
+var _mat_astro: ShaderMaterial
 var _pisco := 0.0
 var _proximo_pisco := 5.0
 var _onda := 9.0
@@ -312,6 +330,15 @@ func _init() -> void:
 	var sem_mascara := ImageTexture.create_from_image(vazia)
 	_fundo_sol = _criar_fundo(FUNDO_SOL, sem_mascara, Color(1.0, 0.74, 0.34), 0.0)
 	_fundo_lua = _criar_fundo(FUNDO_LUA, sem_mascara, Color(1.0, 0.28, 0.30), 3.7)
+	# o céu sem o astro (aparece quando ele sai do lugar): o shader de cada
+	# fundo põe o pedaço por cima do disco pintado
+	var caixa_ceu := Vector4(CEU_SEM_CANTO.x / IMG.x, CEU_SEM_CANTO.y / IMG.y,
+		float(CEU_SEM_SOL.get_width()) / IMG.x, float(CEU_SEM_SOL.get_height()) / IMG.y)
+	for par in [[_fundo_sol, CEU_SEM_SOL], [_fundo_lua, CEU_SEM_LUA]]:
+		var mf := (par[0] as Sprite2D).material as ShaderMaterial
+		mf.set_shader_parameter("ceu_sem", par[1])
+		mf.set_shader_parameter("ceu_sem_caixa", caixa_ceu)
+		mf.set_shader_parameter("ceu_sem_forca", 0.0)
 	_criar_planos()
 	_criar_feixes()
 	_raios_sol = _criar_raios(CENTRO_SOL, RAIO_SOL, 3.1, false, COR_SOL)
@@ -381,11 +408,90 @@ func mostrar(modo: String, suave: bool = true) -> void:
 	if _tw != null and _tw.is_valid():
 		_tw.kill()
 	if not suave:
+		_poente = -1.0
+		_crepusculo = 0.0
+		_desce = [0.0, 0.0]
+		_astros_cortados(false)
 		_definir_noite(alvo)
+		_aplicar_poente()
 		return
-	_pisco = 1.0
-	_tw = create_tween()
-	_tw.tween_method(_definir_noite, _noite, alvo, TEMPO_TROCA).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	# o pôr do sol (ou da lua): _animar_poente
+	_poente_de = _noite
+	_poente_para = alvo
+	_poente = 0.0
+	_astros_cortados(true)
+
+
+func _animar_poente(delta: float) -> void:
+	_poente = minf(1.0, _poente + delta / TEMPO_POENTE)
+	var k := _poente
+	var sai := 0 if _poente_para > 0.5 else 1      # 0 = sol, 1 = lua
+	var entra := 1 - sai
+	# o que sai desce acelerando até sumir; o que entra sobe freando
+	var a := clampf(k / 0.5, 0.0, 1.0)
+	_desce[sai] = DESCIDA * a * a
+	var b := clampf((k - 0.46) / 0.54, 0.0, 1.0)
+	_desce[entra] = DESCIDA * (1.0 - b) * (1.0 - b)
+	# o dia vira noite no meio, com o crepúsculo em brasa no caminho
+	_definir_noite(lerpf(_poente_de, _poente_para, smoothstep(0.24, 0.76, k)))
+	_crepusculo = pow(sin(PI * k), 1.3)
+	if _mat_astro != null:
+		var g := _camada_ceu.get_global_transform()
+		_mat_astro.set_shader_parameter("para_imagem", Vector4(g.origin.x, g.origin.y, g.get_scale().x, g.get_scale().y))
+	if k >= 1.0:
+		_poente = -1.0
+		_crepusculo = 0.0
+		_desce = [0.0, 0.0]
+		_definir_noite(_poente_para)
+		_astros_cortados(false)
+	_aplicar_poente()
+
+
+## Põe o sol e a lua (e os raios, e o céu sem eles) onde estão agora.
+func _aplicar_poente() -> void:
+	var discos: Array[Node2D] = [_disco_sol, _disco_lua]
+	var raios: Array[ColorRect] = [_raios_sol, _raios_lua]
+	var centros := [CENTRO_SOL, CENTRO_LUA]
+	var em_troca := _poente >= 0.0
+	for i in 2:
+		var d: float = _desce[i]
+		var c: Vector2 = centros[i] + Vector2(0.0, d)
+		var disco := discos[i]
+		var r := raios[i]
+		disco.position = c
+		r.position = c - r.size * 0.5
+		if em_troca:
+			# baixo no céu o astro fica mais quente (a luz atravessa mais ar)
+			var baixo := smoothstep(0.0, 320.0, d)
+			disco.visible = d < DESCIDA - 1.0
+			disco.modulate = Color(1.0, 1.0 - 0.22 * baixo, 1.0 - 0.42 * baixo, 1.0)
+			var no_ceu := 1.0 - smoothstep(0.0, 170.0, d)
+			r.visible = no_ceu > 0.01
+			r.modulate.a = no_ceu
+		else:
+			disco.modulate = Color(1.0, 1.0, 1.0, disco.modulate.a)
+		# no fundo de cada um, o céu sem o disco pintado conforme ele sai
+		var mf := ([_fundo_sol, _fundo_lua][i] as Sprite2D).material as ShaderMaterial
+		mf.set_shader_parameter("ceu_sem_forca", smoothstep(0.0, 70.0, d))
+		mf.set_shader_parameter("crepusculo", _crepusculo)
+	_mat_planos.set_shader_parameter("crepusculo", _crepusculo)
+
+
+## Durante a troca o sol e a lua passam atrás das pirâmides (o shader corta
+## o que fica atrás delas); parados no céu, sem shader nenhum.
+func _astros_cortados(sim: bool) -> void:
+	if sim and _mat_astro == null:
+		_mat_astro = ShaderMaterial.new()
+		_mat_astro.shader = SHADER_ASTRO
+		_mat_astro.set_shader_parameter("horizonte", HORIZONTE)
+		var tri := PackedVector2Array()
+		for p in PIRAMIDES:
+			tri.append_array(p)
+		_mat_astro.set_shader_parameter("piramides", tri)
+	for disco: Node2D in [_disco_sol, _disco_lua]:
+		disco.material = _mat_astro if sim else null
+		for filho in disco.get_children():
+			(filho as CanvasItem).use_parent_material = sim
 
 
 # ───────────────────────────────────────────── montagem
@@ -611,7 +717,7 @@ func _bater_asas(a: Dictionary, s: Sprite2D, delta: float) -> void:
 
 ## Luz: contra o sol/a lua vira silhueta; longe some na névoa do céu.
 func _cor_aguia(a: Dictionary, alfa: float) -> Color:
-	var astro := CENTRO_SOL.lerp(CENTRO_LUA, _noite)
+	var astro := (CENTRO_SOL + Vector2(0.0, _desce[0])).lerp(CENTRO_LUA + Vector2(0.0, _desce[1]), _noite)
 	var raio_astro := lerpf(RAIO_SOL, RAIO_LUA, _noite)
 	var contra := clampf(1.0 - ((a["pos"] as Vector2).distance_to(astro) - raio_astro * 0.9) / (raio_astro * 0.6), 0.0, 1.0)
 	var dia := Color(1.0, 0.93, 0.84).lerp(Color(0.16, 0.10, 0.06), contra)
@@ -619,6 +725,8 @@ func _cor_aguia(a: Dictionary, alfa: float) -> Color:
 	var cor := dia.lerp(noite, _noite)
 	var nevoa: float = clampf(1.0 - (a["escala"] - 0.15) / 0.18, 0.0, 1.0) * 0.35 * (1.0 - contra)
 	cor = cor.lerp(Color(1.0, 0.78, 0.48).lerp(Color(0.22, 0.30, 0.48), _noite), nevoa)
+	if _crepusculo > 0.001:
+		cor = cor.lerp(cor * Color(1.0, 0.68, 0.58), _crepusculo * 0.7)
 	cor.a = alfa
 	return cor
 
@@ -1189,6 +1297,8 @@ func _process(delta: float) -> void:
 	m2.set_shader_parameter("batida", som.y)
 	_faiscas.speed_scale = 1.0 + som.y * 1.3
 
+	if _poente >= 0.0:
+		_animar_poente(delta)
 	_animar_olhos(delta)
 	_animar_aguias(delta)
 	_animar_brilhos(delta)
@@ -1387,7 +1497,9 @@ func _animar_brilhos(delta: float) -> void:
 		var s: Sprite2D = b["no"]
 		if b["espera"] > 0.0:
 			b["espera"] -= delta
-			if b["espera"] <= 0.0 and b["tipo"] == "cristal" and _energia < 0.6:
+			if b["espera"] <= 0.0 and b["tipo"] == "disco" and _poente >= 0.0:
+				b["espera"] = randf_range(1.0, 2.0)   # o astro está se pondo / nascendo
+			elif b["espera"] <= 0.0 and b["tipo"] == "cristal" and _energia < 0.6:
 				b["espera"] = randf_range(0.5, 1.5)
 			elif b["espera"] <= 0.0 and b["tipo"] == "ponta" and _ponta_apagada(s.position):
 				b["espera"] = randf_range(0.5, 1.5)   # ponta de ouro apagada não cintila

@@ -12,6 +12,7 @@ shader_type canvas_item;
 uniform sampler2D folha_lua : filter_linear_mipmap, repeat_disable;
 uniform sampler2D brilho : filter_linear_mipmap, repeat_disable;
 uniform float noite = 0.0;
+uniform float crepusculo = 0.0;   // no meio da troca sol/lua: a luz baixa e quente do poente
 uniform float grave = 0.0;
 uniform float batida = 0.0;
 uniform vec3 cor_dia = vec3(1.0, 0.74, 0.34);
@@ -55,6 +56,9 @@ void fragment() {
 		// quebrado: o cristal vira vidro escuro, sem luz
 		vec3 morto = vec3(lum * 0.42, lum * 0.40, lum * 0.46);
 		col = mix(col, morto, apagado * clamp(g * 1.6, 0.0, 1.0));
+	}
+	if (crepusculo > 0.001) {
+		col *= mix(vec3(1.0), vec3(0.96, 0.66, 0.58), crepusculo * 0.8);
 	}
 	COLOR = vec4(col, base.a) * cor_no;
 }
