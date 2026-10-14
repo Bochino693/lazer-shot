@@ -28,15 +28,23 @@ extends Node2D
 ##   diamante            arco-íris nas arestas de dia, vermelho de noite
 ##   brilhos             estrelas que piscam no diamante, nas pontas e no
 ##                       disco; estrelas no céu e estrela cadente de noite
-##   câmera 3D           a câmera anda um pouco com a mira e cada pixel da foto
-##                       anda conforme a sua distância (mapa de profundidade
-##                       tirado da imagem, tools/gerar_profundidade.py): céu e
-##                       pirâmides com a mira, chão perto contra, o plano dos
-##                       brasões parado. As camadas de cima andam junto (céu e
-##                       cristal, cada uma na sua distância) e os brasões, que
-##                       vivem nessa mesma cena, somem atrás do cristal, dos
-##                       obeliscos, das estátuas e das colunas
-##                       (shaders/egito_alvo.gdshader, material_alvo).
+##   planos 3D           a cena é feita de planos tirados da própria imagem
+##                       (tools/gerar_camadas.py): o fundo (céu, pirâmides e
+##                       chão, com o que estava atrás das coisas reconstruído)
+##                       e, separados, colunas, Anúbis, obeliscos e o cristal
+##                       com o pedestal. A câmera anda com a mira e cada plano
+##                       anda pela sua distância (o chão, pixel a pixel pela
+##                       altura); os brasões entram na mesma ordem de desenho
+##                       (passam atrás e na frente das coisas de verdade).
+##   feixes              os quatro feixes de energia do cristal aos obeliscos
+##                       são peças vivas (scripts/egito_feixes.gd): pulsam com
+##                       a música, apagam de um lado quando o cristal daquele
+##                       obelisco quebra e todos quando o do meio quebra; a
+##                       carga dos acertos vira a descarga do cristal.
+##   cristais das pontas os dois cristais dos obeliscos levam tiro: trincam e,
+##                       quebrados, apagam (voltam sozinhos depois).
+##   nuvens              ondulam e correm conforme o humor do astro: agitadas
+##                       quando ele está feliz, calmas quando está tenso.
 ##
 ## Uso: var vivo := DesertoVivo.new(); pai.add_child(vivo)
 ## (sem zoom: a imagem só cobre a tela, como as outras fases)
@@ -49,10 +57,13 @@ const IMG := Vector2(1024, 1536)
 # junto na memória até o jogo fechar (~50 MB do Egito presos depois da
 # primeira partida). Assim tudo some com a fase. A troca de tela já pede
 # estes arquivos numa thread (scripts/precarga.gd): o load() acha pronto.
-var FUNDO_SOL: Texture2D = load("res://sprites/deserto_sol.png")
-var FUNDO_LUA: Texture2D = load("res://sprites/deserto_lua.png")
-var MASCARA_SOL: Texture2D = load("res://sprites/deserto_sol_mascara.png")
-var MASCARA_LUA: Texture2D = load("res://sprites/deserto_lua_mascara.png")
+# fundo sem as coisas em pé (reconstruído atrás delas) e a folha dos planos
+var FUNDO_SOL: Texture2D = load("res://sprites/egito_fundo_sol.png")
+var FUNDO_LUA: Texture2D = load("res://sprites/egito_fundo_lua.png")
+var PLANOS_SOL: Texture2D = load("res://sprites/egito_planos_sol.png")
+var PLANOS_LUA: Texture2D = load("res://sprites/egito_planos_lua.png")
+var PLANOS_BRILHO: Texture2D = load("res://sprites/egito_planos_brilho.png")
+var LUZ_FUNDO: Texture2D = load("res://sprites/egito_fundo_luz.png")
 # Sol e lua em 4x (tools/gerar_astros.py), camadas comuns sem shader:
 # halo (1x, ampliado), esclera, íris (anda), pálpebra (desce ao piscar) e o disco por cima.
 var TEX_SOL: Array = [load("res://sprites/egito_sol_disco.png"), load("res://sprites/egito_sol_esclera.png"),
@@ -70,6 +81,7 @@ var ESTRELA: Texture2D = load("res://sprites/egito_estrela.png")
 var PROFUNDIDADE: Texture2D = load("res://sprites/egito_profundidade.png")
 const SHADER_FUNDO := preload("res://shaders/deserto_fundo.gdshader")
 const SHADER_ALVO := preload("res://shaders/egito_alvo.gdshader")
+const SHADER_PLANO := preload("res://shaders/egito_plano.gdshader")
 const SHADER_RAIOS := preload("res://shaders/egito_raios.gdshader")
 const SHADER_CRISTAL := preload("res://shaders/egito_cristal.gdshader")
 
@@ -112,6 +124,15 @@ const CRISTAL_CAIXA := Rect2(440, 620, 136, 340)
 # por CRISTAL_VOLTA s, até se refazer. As pontas de ouro tocam (clarão e
 # anel no metal, faíscas e lasquinhas de ouro), pedra lasca e areia levanta.
 const TIROS_CRISTAL := 9
+# cristais das pontas dos obeliscos (px da imagem): trincam e quebram com
+# menos tiros que o do meio e voltam sozinhos
+const POLI_PONTAS := [
+	[Vector2(209, 760), Vector2(195, 790), Vector2(193, 842), Vector2(225, 842), Vector2(223, 790)],
+	[Vector2(812, 760), Vector2(799, 790), Vector2(797, 842), Vector2(830, 842), Vector2(826, 790)],
+]
+const TIROS_PONTA := 4
+const PONTA_VOLTA := 22.0
+const Z_OBELISCO := 1.554
 const CRISTAL_VOLTA := 30.0
 const CAIXA_MORTO := Rect2(428, 608, 160, 376)
 var CRISTAL_MORTO_SOL: Texture2D = load("res://sprites/egito_cristal_morto_sol.png")
@@ -143,7 +164,7 @@ const TEMPO_TROCA := 1.6
 # Câmera 3D: com a mira no canto ela anda CAMERA_PASSO px; uma coisa à
 # distância Z anda CAMERA_PASSO * (1 - 1/Z) (Z = 1 é o plano dos brasões).
 # O mapa vai de Z = 10 (preto: céu, pirâmides) a Z = 0,7 (branco: chão perto).
-const CAMERA_PASSO := 20.0
+const CAMERA_PASSO := 30.0
 const CAMERA_SUAVE := 2.6
 const Z_LONGE := 10.0
 const Z_PERTO := 0.7
@@ -206,6 +227,22 @@ var _cadente_para := Vector2.ZERO
 var _aguias: Array = []
 var _grito_espera := 4.0
 
+# planos 3D (recortes da imagem): {no, canto, z}
+var _planos: Array[Dictionary] = []
+var _mat_planos: ShaderMaterial
+var _plano_cristal: Sprite2D
+var _plano_obeliscos: Array = [null, null]
+var _feixes: EgitoFeixes
+var _camada_obeliscos: Node2D          # trincas dos cristais das pontas (anda como os obeliscos)
+# cristais das pontas: {danos, quebrado, volta, refaz, morte, trincas}
+var _pontas: Array[Dictionary] = []
+# descarga do cristal: a carga sobe com os acertos (deserto.gd)
+var carga := 0.0
+# nuvens: agito (0 calmas .. 1 agitadas) e a fase que corre com ele
+var _nuvens := 0.35
+var _fase_nuvens := 0.0
+var _poeira_perto: CPUParticles2D
+
 # câmera 3D
 var mira := Vector2.INF        # posição da mira (o jogo atualiza; INF = parada)
 var camera := Vector2.ZERO     # quanto a câmera andou agora (px de tela)
@@ -237,8 +274,13 @@ var _toque_ouro := Vector3(0, 0, -1)
 
 func _init() -> void:
 	name = "DesertoVivo"
-	_fundo_sol = _criar_fundo(FUNDO_SOL, MASCARA_SOL, Color(1.0, 0.74, 0.34), 0.0)
-	_fundo_lua = _criar_fundo(FUNDO_LUA, MASCARA_LUA, Color(1.0, 0.28, 0.30), 3.7)
+	# no jogo o fundo não tem mais feixes nem cristais pintados (são peças):
+	# a máscara de efeitos dele fica vazia
+	var vazia := Image.create(4, 4, false, Image.FORMAT_RGB8)
+	var sem_mascara := ImageTexture.create_from_image(vazia)
+	_fundo_sol = _criar_fundo(FUNDO_SOL, sem_mascara, Color(1.0, 0.74, 0.34), 0.0)
+	_fundo_lua = _criar_fundo(FUNDO_LUA, sem_mascara, Color(1.0, 0.28, 0.30), 3.7)
+	_criar_planos()
 	_raios_sol = _criar_raios(CENTRO_SOL, RAIO_SOL, 3.1, false, COR_SOL)
 	_raios_lua = _criar_raios(CENTRO_LUA, RAIO_LUA, 2.7, true, COR_LUA)
 	_disco_sol = _criar_astro(TEX_SOL, ASTRO_SOL, CENTRO_SOL)
@@ -278,6 +320,7 @@ func _init() -> void:
 	_cadente.material = soma
 	_cadente.visible = false
 	add_child(_cadente)
+	_criar_poeira_perto()
 	_montar_camera()
 	_definir_noite(0.0)
 
@@ -311,6 +354,7 @@ func _criar_fundo(tex: Texture2D, mascara: Texture2D, cor: Color, fase: float) -
 	var mat := ShaderMaterial.new()
 	mat.shader = SHADER_FUNDO
 	mat.set_shader_parameter("mascara", mascara)
+	mat.set_shader_parameter("luz_lancada", LUZ_FUNDO)
 	mat.set_shader_parameter("cor_energia", Vector3(cor.r, cor.g, cor.b))
 	mat.set_shader_parameter("respiro", 0.0)   # quem respira é o nó inteiro
 	mat.set_shader_parameter("ceu", 0.0)       # raios e disco são camadas
@@ -649,9 +693,10 @@ func _montar_camera() -> void:
 		_prof.decompress()
 	for fundo: Sprite2D in [_fundo_sol, _fundo_lua]:
 		var mf := fundo.material as ShaderMaterial
-		mf.set_shader_parameter("profundidade", PROFUNDIDADE)
 		mf.set_shader_parameter("inv_z_longe", 1.0 / Z_LONGE)
 		mf.set_shader_parameter("inv_z_perto", 1.0 / Z_PERTO)
+		mf.set_shader_parameter("horizonte_uv", HORIZONTE / IMG.y)
+		mf.set_shader_parameter("chao1_uv", CHAO_1 / IMG.y)
 	material_alvo = ShaderMaterial.new()
 	material_alvo.shader = SHADER_ALVO
 	material_alvo.set_shader_parameter("profundidade", PROFUNDIDADE)
@@ -680,7 +725,21 @@ func _montar_camera() -> void:
 	for no in perto:
 		remove_child(no)
 		_camada_perto.add_child(no)
-
+	# o brilho do cristal, as trincas e as faíscas ficam na frente do plano
+	# do cristal (e atrás dos brasões que estão mais perto que ele)
+	remove_child(_faiscas)
+	_camada_perto.add_child(_faiscas)
+	_camada_perto.z_as_relative = false
+	_camada_perto.z_index = z_desenho(Z_CRISTAL) + 1
+	# trincas dos cristais das pontas: andam como os obeliscos
+	_camada_obeliscos = Node2D.new()
+	_camada_obeliscos.name = "CamadaObeliscos"
+	_camada_obeliscos.z_as_relative = false
+	_camada_obeliscos.z_index = z_desenho(Z_OBELISCO) + 2
+	_camada_obeliscos.draw.connect(_desenhar_pontas)
+	add_child(_camada_obeliscos)
+	for i in 2:
+		_pontas.append({"danos": 0, "quebrado": false, "volta": 0.0, "refaz": -1.0, "morte": 0.0, "tremor": 0.0, "trincas": []})
 
 func _animar_camera(delta: float) -> void:
 	var alvo := Vector2.ZERO
@@ -693,6 +752,11 @@ func _animar_camera(delta: float) -> void:
 	var esc := scale.x
 	_camada_ceu.position = camera * (1.0 - 1.0 / Z_LONGE) / esc
 	_camada_perto.position = camera * (1.0 - 1.0 / Z_CRISTAL) / esc
+	_camada_obeliscos.position = camera * (1.0 - 1.0 / Z_OBELISCO) / esc
+	for pl in _planos:
+		(pl["no"] as Node2D).position = pl["canto"] + camera * (1.0 - 1.0 / float(pl["z"])) / esc
+	_feixes.camera_local = camera / esc
+	_poeira_perto.position = Vector2(-60.0, 300.0) + camera * (1.0 - 1.0 / 0.45) / esc
 	for fundo: Sprite2D in [_fundo_sol, _fundo_lua]:
 		if fundo.visible:
 			(fundo.material as ShaderMaterial).set_shader_parameter("olhar", camera)
@@ -757,6 +821,8 @@ func _definir_noite(v: float) -> void:
 		no.visible = par[1] > 0.001
 		no.modulate.a = par[1]
 	(_cristal.material as ShaderMaterial).set_shader_parameter("noite", _noite)
+	_mat_planos.set_shader_parameter("noite", _noite)
+	_feixes.noite = _noite
 	# névoa da distância nos brasões: areia quente de dia, azul-escuro de noite
 	var nevoa := Color(0.96, 0.74, 0.46).lerp(Color(0.16, 0.18, 0.30), _noite)
 	material_alvo.set_shader_parameter("cor_nevoa", Vector3(nevoa.r, nevoa.g, nevoa.b))
@@ -780,12 +846,20 @@ func _process(delta: float) -> void:
 		_pisco = maxf(_pisco, 0.45)
 	_pisco = move_toward(_pisco, 0.0, delta * 1.1)
 
+	_animar_nuvens(delta)
 	for fundo: Sprite2D in [_fundo_sol, _fundo_lua]:
 		if fundo.visible:
 			var mf := fundo.material as ShaderMaterial
 			mf.set_shader_parameter("grave", som.x)
 			mf.set_shader_parameter("batida", som.y)
 			mf.set_shader_parameter("onda", _onda)
+			mf.set_shader_parameter("nuvens", _nuvens)
+			mf.set_shader_parameter("fase_nuvens", _fase_nuvens)
+	_mat_planos.set_shader_parameter("grave", som.x)
+	_mat_planos.set_shader_parameter("batida", som.y)
+	_feixes.grave = som.x
+	_feixes.batida = som.y
+	_feixes.carga = carga
 	for no: CanvasItem in [_raios_sol, _raios_lua]:
 		if no.visible:
 			var m := no.material as ShaderMaterial
@@ -1066,18 +1140,36 @@ func _animar_ceu(delta: float) -> void:
 func material_em(p: Vector2) -> String:
 	if Geometry2D.is_point_in_polygon(p, POLI_CRISTAL):
 		return "cristal"
+	for i in 2:
+		if Geometry2D.is_point_in_polygon(p, PackedVector2Array(POLI_PONTAS[i])):
+			return "cristal_esq" if i == 0 else "cristal_dir"
 	for tri: PackedVector2Array in OURO:
 		if Geometry2D.is_point_in_polygon(p, tri):
 			return "ouro"
 	for tri2: PackedVector2Array in PIRAMIDES:
 		if Geometry2D.is_point_in_polygon(p, tri2):
 			return "pedra"
+	if em_plano(p):
+		return "pedra"      # coluna, Anúbis, obelisco, pedestal: tudo pedra
 	if p.y > 700.0:
-		if Rect2(388, 958, 248, 170).has_point(p) or Rect2(170, 770, 95, 300).has_point(p) or Rect2(785, 770, 95, 300).has_point(p) \
-				or p.x < 150.0 or p.x > 874.0 or (p - Vector2(510, 1180)).length() < 300.0:
-			return "pedra"
+		if (p - Vector2(510, 1180)).length() < 300.0:
+			return "pedra"  # degraus do altar
 		return "areia"
 	return "ceu"
+
+
+## O ponto (px da imagem) é de uma coisa em pé (um plano recortado) e não do
+## chão? (o mapa de profundidade tem o Z de cada recorte; o chão, o da altura)
+func em_plano(p: Vector2) -> bool:
+	if p.y <= HORIZONTE or _prof == null:
+		return false
+	var chao := clampf((p.y - HORIZONTE) / (CHAO_1 - HORIZONTE), 1.0 / Z_LONGE, 1.0 / Z_PERTO)
+	return absf(_inv_z_local(p) - chao) > 0.04
+
+
+## O tiro pegou o chão (deixa furo de bala) e não uma coisa em pé?
+func no_chao(pos_global: Vector2) -> bool:
+	return not em_plano(ponto_da_imagem(pos_global))
 
 
 ## Tiro que não pegou alvo: cada lugar responde do seu jeito. Devolve o
@@ -1088,6 +1180,10 @@ func impacto(pos_global: Vector2) -> String:
 	match mat:
 		"cristal":
 			_ferir_cristal(p)
+			carga = 0.0
+		"cristal_esq", "cristal_dir":
+			_ferir_ponta(0 if mat == "cristal_esq" else 1, p)
+			carga = maxf(0.0, carga - 0.5)
 		"ouro":
 			_tocar_ouro(p)
 		"pedra":
@@ -1097,6 +1193,209 @@ func impacto(pos_global: Vector2) -> String:
 			_estilhacar(p, Color(0.92, 0.72, 0.42).lerp(Color(0.50, 0.48, 0.56), _noite), 0, 9)
 			Maquina.efeito(SOM_AREIA, -6.0, randf_range(0.9, 1.1))
 	return mat
+
+
+# ───────────────────────────────────────────── planos 3D
+func z_desenho(z: float) -> int:
+	# a mesma conta dos brasões (scripts/deserto.gd): mais perto, por cima
+	return 100 + clampi(int(round(60.0 / maxf(z, 0.3))), 0, 190)
+
+
+## Um sprite por recorte (folha do dia como textura; a da noite e o brilho no
+## material), cada um na ordem de desenho da sua distância.
+func _criar_planos() -> void:
+	_mat_planos = ShaderMaterial.new()
+	_mat_planos.shader = SHADER_PLANO
+	_mat_planos.set_shader_parameter("folha_lua", PLANOS_LUA)
+	_mat_planos.set_shader_parameter("brilho", PLANOS_BRILHO)
+	for d: Dictionary in EgitoPlanos.PLANOS:
+		var s := Sprite2D.new()
+		s.name = "Plano_" + str(d["nome"])
+		s.texture = PLANOS_SOL
+		s.centered = false
+		s.region_enabled = true
+		s.region_rect = d["folha"]
+		s.position = d["canto"]
+		s.material = _mat_planos
+		s.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+		s.z_as_relative = false
+		s.z_index = z_desenho(float(d["z"]))
+		add_child(s)
+		var nome := str(d["nome"])
+		var lado := 0 if nome.ends_with("_esq") else (1 if nome.ends_with("_dir") else -1)
+		_planos.append({"no": s, "canto": d["canto"], "z": float(d["z"]), "lado": lado})
+		match str(d["nome"]):
+			"cristal":
+				_plano_cristal = s
+			"obelisco_esq":
+				_plano_obeliscos[0] = s
+			"obelisco_dir":
+				_plano_obeliscos[1] = s
+	_feixes = EgitoFeixes.new()
+	_feixes.z_as_relative = false
+	_feixes.z_index = z_desenho(Z_OBELISCO) + 3
+	add_child(_feixes)
+
+
+## Poeira bem perto da câmera (grãos grandes e desfocados que passam na frente
+## de tudo e andam muito quando a câmera anda: dá a noção de profundidade).
+func _criar_poeira_perto() -> void:
+	var rampa := Gradient.new()
+	rampa.offsets = PackedFloat32Array([0.0, 0.25, 0.8, 1.0])
+	rampa.colors = PackedColorArray([Color(1, 1, 1, 0), Color(1, 1, 1, 0.55), Color(1, 1, 1, 0.3), Color(1, 1, 1, 0)])
+	var p := CPUParticles2D.new()
+	p.name = "PoeiraPerto"
+	p.amount = 9
+	p.lifetime = 9.0
+	p.preprocess = 9.0
+	p.emission_shape = CPUParticles2D.EMISSION_SHAPE_RECTANGLE
+	p.emission_rect_extents = Vector2(30, 560)
+	p.direction = Vector2(1, -0.08)
+	p.spread = 12.0
+	p.gravity = Vector2.ZERO
+	p.initial_velocity_min = 70.0
+	p.initial_velocity_max = 140.0
+	p.scale_amount_min = 0.9
+	p.scale_amount_max = 2.2
+	p.texture = FundoVivo.brilho_redondo()
+	p.color_ramp = rampa
+	p.color = Color(1.0, 0.88, 0.66, 0.5)
+	p.z_as_relative = false
+	p.z_index = 330
+	add_child(p)
+	_poeira_perto = p
+
+
+## Nuvens com o humor do astro: feliz/radiante agitadas, calmo devagar, tenso
+## (atento, bravo) e com sono quase paradas.
+func _animar_nuvens(delta: float) -> void:
+	var humor := _reacao if _reacao != "" else _humor_base()
+	var alvo := 0.35
+	match humor:
+		"radiante":
+			alvo = 1.0
+		"feliz":
+			alvo = 0.8
+		"surpreso":
+			alvo = 0.6
+		"atento":
+			alvo = 0.12
+		"bravo":
+			alvo = 0.08
+		"sono":
+			alvo = 0.05
+	_nuvens = lerpf(_nuvens, alvo, 1.0 - exp(-delta * 0.8))
+	_fase_nuvens += delta * (0.25 + 2.4 * _nuvens)
+	_poeira_perto.color = Color(1.0, 0.88, 0.66, 0.5).lerp(Color(0.70, 0.78, 1.0, 0.4), _noite)
+
+
+# ───────────────────────────────────────────── cristais das pontas
+func _ferir_ponta(i: int, p: Vector2) -> void:
+	var pt: Dictionary = _pontas[i]
+	var cor := Color(1.0, 0.55, 0.9).lerp(Color(1.0, 0.25, 0.35), _noite)
+	if pt["quebrado"]:
+		_soltar_cacos(p, 3, Color(0.35, 0.35, 0.45), 140.0)
+		return
+	pt["danos"] += 1
+	pt["tremor"] = 1.0
+	var poli := PackedVector2Array(POLI_PONTAS[i])
+	for g in randi_range(2, 3):
+		var linha := PackedVector2Array([p])
+		var ang := randf() * TAU
+		for k in randi_range(3, 5):
+			ang += randf_range(-0.7, 0.7)
+			var q: Vector2 = linha[linha.size() - 1] + Vector2.RIGHT.rotated(ang) * randf_range(5.0, 11.0)
+			if not Geometry2D.is_point_in_polygon(q, poli):
+				break
+			linha.append(q)
+		if linha.size() > 1:
+			(pt["trincas"] as Array).append(linha)
+	_soltar_cacos(p, 6, cor, 200.0)
+	_claroes.append({"pos": p, "t": 0.0, "vida": 0.3, "raio": 50.0, "cor": cor})
+	if pt["danos"] >= TIROS_PONTA:
+		pt["quebrado"] = true
+		pt["volta"] = PONTA_VOLTA
+		var centro: Vector2 = PONTAS_OBELISCO[i]
+		for k2 in 16:
+			_soltar_cacos(centro + Vector2(randf_range(-10, 10), randf_range(-30, 30)), 1, cor if k2 % 2 else Color(0.4, 0.4, 0.5), 380.0)
+		_claroes.append({"pos": centro, "t": 0.0, "vida": 0.5, "raio": 160.0, "cor": cor})
+		_claroes.append({"pos": centro, "t": 0.0, "vida": 0.6, "raio": 80.0, "cor": Color.WHITE})
+		_reagir("surpreso", 0.6)
+		Maquina.efeito(SOM_QUEBRA, -6.0, 1.25)
+	else:
+		Maquina.efeito(SOM_TRINCA, -6.0, randf_range(1.1, 1.3))
+	_camada_obeliscos.queue_redraw()
+
+
+func _atualizar_pontas(delta: float) -> void:
+	var sujo := false
+	for i in 2:
+		var pt: Dictionary = _pontas[i]
+		if pt["tremor"] > 0.0:
+			pt["tremor"] = maxf(0.0, pt["tremor"] - delta * 2.0)
+			sujo = true
+		if pt["quebrado"]:
+			pt["morte"] = minf(1.0, pt["morte"] + delta * 4.0)
+			pt["volta"] -= delta
+			if pt["volta"] <= 0.0 and not _cristal_quebrado:
+				pt["quebrado"] = false
+				pt["danos"] = 0
+				pt["refaz"] = 0.0
+				Maquina.efeito(SOM_VOLTA, -8.0, 1.2)
+			sujo = true
+		elif pt["refaz"] >= 0.0:
+			pt["refaz"] += delta / 1.6
+			pt["morte"] = 1.0 - pt["refaz"]
+			if pt["refaz"] >= 1.0:
+				pt["refaz"] = -1.0
+				pt["morte"] = 0.0
+				(pt["trincas"] as Array).clear()
+			sujo = true
+		elif pt["danos"] > 0:
+			# trincado: pisca um pouco (a energia vaza)
+			pt["morte"] = (0.10 * float(pt["danos"]) / TIROS_PONTA + 0.5 * pt["tremor"]) * randf()
+			sujo = true
+		else:
+			pt["morte"] = 0.0
+	if sujo or _pontas_sujo:
+		_camada_obeliscos.queue_redraw()
+	_pontas_sujo = sujo
+
+var _pontas_sujo := false
+const PONTAS_OBELISCO := [Vector2(209, 800), Vector2(812, 800)]
+
+
+func _desenhar_pontas() -> void:
+	for i in 2:
+		var pt: Dictionary = _pontas[i]
+		var trincas: Array = pt["trincas"]
+		if trincas.is_empty():
+			continue
+		var a: float = 1.0 if pt["refaz"] < 0.0 else 1.0 - float(pt["refaz"])
+		for linha: PackedVector2Array in trincas:
+			for k in range(linha.size() - 1):
+				Pincel.linha(_camada_obeliscos, linha[k], linha[k + 1], Color(0.06, 0.02, 0.08, 0.9 * a), 1.2)
+
+
+## Descarga do cristal (deserto.gd): raios das pontas acesas até os alvos.
+func disparar_descarga(alvos_global: Array) -> void:
+	var inv := get_global_transform().affine_inverse()
+	var locais: Array = []
+	for g: Vector2 in alvos_global:
+		locais.append(inv * g)
+	_feixes.descarga(locais)
+	var cor := Color(1.0, 0.85, 0.5).lerp(Color(1.0, 0.35, 0.45), _noite)
+	_claroes.append({"pos": Vector2(508, 700), "t": 0.0, "vida": 0.5, "raio": 380.0, "cor": cor})
+	_onda = 0.0
+	carga = 0.0
+	_reagir("radiante", 1.4)
+	Maquina.efeito(SOM_VOLTA, -2.0, 1.75)
+	Maquina.efeito(SOM_QUEBRA, -10.0, 1.9)
+
+
+## A descarga pode sair? (cristal do meio inteiro)
+func cristal_inteiro() -> bool:
+	return not _cristal_quebrado and _cristal_refaz < 0.0
 
 
 func _criar_cristal_vivo() -> void:
@@ -1230,10 +1529,30 @@ func _atualizar_tiros_fundo(delta: float) -> void:
 	if _cristal_danos > 0 and not _cristal_quebrado:
 		piscar = (0.25 * float(_cristal_danos) / TIROS_CRISTAL + 0.6 * _cristal_tremor) * randf()
 	_energia = clampf(alvo * (1.0 - piscar), 0.0, 1.0)
-	for fundo: Sprite2D in [_fundo_sol, _fundo_lua]:
-		(fundo.material as ShaderMaterial).set_shader_parameter("energia", _energia)
 	_cristal.modulate.a = _energia
 	_faiscas.emitting = _energia > 0.35
+	_atualizar_pontas(delta)
+	_feixes.energia = _energia
+	# a luz some de tudo com o cristal do meio; de um lado, com a ponta dele
+	var lados := Vector2(1.0 - float(_pontas[0]["morte"]), 1.0 - float(_pontas[1]["morte"]))
+	for fundo: Sprite2D in [_fundo_sol, _fundo_lua]:
+		var mf := fundo.material as ShaderMaterial
+		mf.set_shader_parameter("energia", _energia)
+		mf.set_shader_parameter("luz_lados", lados)
+	for pl in _planos:
+		var no := pl["no"] as Sprite2D
+		var lado: int = pl["lado"]
+		var acesa := _energia
+		if no == _plano_obeliscos[0] or no == _plano_obeliscos[1]:
+			acesa *= lados[lado]
+		elif lado >= 0:
+			acesa *= lerpf(1.0, lados[lado], 0.7)
+		var apagado := clampf(1.0 - acesa, 0.0, 1.0)
+		if absf(apagado - float(pl.get("apagado", -1.0))) > 0.004:
+			pl["apagado"] = apagado
+			no.set_instance_shader_parameter("apagado", apagado)
+	for i in 2:
+		_feixes.lado_aceso[i] = lados[i]
 	_morto.visible = _cristal_morte > 0.001
 	if _morto.visible:
 		(_morto.get_child(0) as Sprite2D).modulate.a = _cristal_morte * (1.0 - _noite)

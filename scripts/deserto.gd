@@ -70,6 +70,9 @@ const TeiaAlvo := preload("res://scripts/teia_alvo.gd")
 const ESTILOS_3D := {"lado": 0.32, "horizonte": 0.30, "alto_l": 0.24, "atras": 0.14}
 const SAIDA_TEMPO := 0.55
 const Z_DE_LONGE := 2.0
+# descarga do cristal: cada acerto certo carrega 1/8; brasão errado tira 1/4
+const CARGA_POR_ACERTO := 0.125
+const CARGA_ERRO := 0.25
 const BONUS_DE_LONGE := 0.5
 # de trás de quem um brasão "atras" pode sair (px da imagem do fundo)
 const SAIDAS_DE_TRAS := [Vector2(507, 760), Vector2(209, 880), Vector2(812, 880)]
@@ -1746,7 +1749,7 @@ func _processar_tiro(pos_global: Vector2) -> void:
 		# cada lugar responde: o cristal trinca (e quebra), o ouro toca,
 		# pedra lasca, areia levanta; marca de bala só na pedra e na areia
 		var mat: String = _vivo.impacto(pos_global) if _vivo != null else "areia"
-		if mat == "pedra" or mat == "areia":
+		if (mat == "pedra" or mat == "areia") and _vivo != null and _vivo.no_chao(pos_global):
 			_furar_fundo(pos_global, mat)
 		_set_status("ERRO!", Color(1.0, 0.28, 0.22, 1.0), 1.2)
 
@@ -2018,7 +2021,12 @@ func _resolver_acerto(indice: int) -> void:
 		else:
 			_set_status("%s %s" % [alvo.tipo.to_upper(), _texto_resultado(alvo.valor_correto)], cor_ok, 1.45)
 		_mostrar_pontos(alvo.tela, alvo.valor_correto + bonus_longe + bonus_combo, de_longe)
+		_explodir_alvo_visual(alvo)
+		_carregar_cristal()
+		return
 	else:
+		if _vivo != null:
+			_vivo.carga = maxf(0.0, _vivo.carga - CARGA_ERRO)
 		pontuacao_total -= alvo.penalidade_errado
 		total_erros += 1
 		_quebrar_combo()
@@ -2028,6 +2036,40 @@ func _resolver_acerto(indice: int) -> void:
 		_mostrar_pontos(alvo.tela, -alvo.penalidade_errado, false)
 
 	_explodir_alvo_visual(alvo)
+
+
+## Cada acerto certo carrega o cristal (os feixes engrossam, correm e estalam).
+## Cheio e inteiro, ele descarrega: raios das pontas dos obeliscos acesos em
+## todos os brasões certos da tela, que estouram e dão os pontos.
+func _carregar_cristal() -> void:
+	if _vivo == null:
+		return
+	_vivo.carga = minf(1.0, _vivo.carga + CARGA_POR_ACERTO)
+	if _vivo.carga < 1.0 or not _vivo.cristal_inteiro():
+		return
+	var pegos: Array[TargetData] = []
+	var pontos_raio: Array = []
+	for i in range(alvos_ativos.size() - 1, -1, -1):
+		var a: TargetData = alvos_ativos[i]
+		if a == null or a.node == null or not is_instance_valid(a.node) or not a.node.visible or a.alfa < 0.5:
+			continue
+		if a.tipo != modo_atual:
+			continue
+		alvos_ativos.remove_at(i)
+		pegos.append(a)
+		pontos_raio.append(a.tela)
+	_vivo.disparar_descarga(pontos_raio)
+	if pegos.is_empty():
+		_set_status("DESCARGA DO CRISTAL!", Color(1.0, 0.86, 0.36, 1.0), 1.4)
+		return
+	var soma := 0
+	for a in pegos:
+		var v: int = a.valor_correto
+		soma += v
+		_mostrar_pontos(a.tela, v, false)
+		_explodir_alvo_visual(a)
+	pontuacao_total += soma
+	_set_status("DESCARGA DO CRISTAL! +%d" % soma, Color(1.0, 0.86, 0.36, 1.0), 1.9)
 
 
 func _registrar_hit_combo(tipo: String) -> void:

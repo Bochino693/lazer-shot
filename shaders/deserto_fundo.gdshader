@@ -25,6 +25,11 @@ uniform float ceu = 1.0;
 // energia do cristal (1 = inteiro; cai com os tiros; 0 = quebrado, feixes
 // apagados). Vem do scripts/deserto_vivo.gd; no menu fica 1.
 uniform float energia = 1.0;
+// Luz do cristal pintada no chão e nos degraus (sprites/egito_fundo_luz.png,
+// só no jogo): pulsa um pouco com a música e some quando o cristal quebra; o
+// lado de cada obelisco some também quando o cristal da ponta dele quebra.
+uniform sampler2D luz_lancada : hint_default_black, filter_linear, repeat_disable;
+uniform vec2 luz_lados = vec2(1.0);
 
 // Pontas de ouro das pirâmides (só no jogo, scripts/deserto_vivo.gd). São
 // pintadas aqui dentro, pixel a pixel na grade da foto: mesma resolução, mesma
@@ -39,17 +44,23 @@ uniform float ouro_brilho = 0.0;          // humor do jogo: > 0 combo (mais vivo
 uniform float ouro_varre = -1.0;          // 0..1: reflexo correndo pelas três pontas (acerto)
 uniform vec3 ouro_toque = vec3(0.0, 0.0, -1.0);   // tiro no ouro: xy = ponto (UV da caixa), z = idade (s)
 
-// Câmera 3D (só no jogo, scripts/deserto_vivo.gd): cada pixel tem a sua
-// distância (sprites/egito_profundidade.png, tirada da própria imagem por
-// tools/gerar_profundidade.py) e anda olhar * (1 - 1/Z) px de tela quando a
-// câmera anda com a mira: o céu e as pirâmides andam com a mira, o chão perto
-// anda contra, o plano dos brasões (Z = 1) fica parado. Paralaxe pixel a
-// pixel; as camadas de cima (sol, raios, águias, cristal) andam igual.
-uniform sampler2D profundidade : filter_linear, repeat_disable;
+// Câmera 3D (só no jogo, scripts/deserto_vivo.gd): no jogo este é só o
+// fundo (céu, pirâmides e chão, com as coisas em pé tiradas e reconstruídas
+// atrás: tools/gerar_camadas.py); colunas, estátuas, obeliscos e cristal são
+// planos separados. O chão tem distância pela altura (perspectiva até o pé
+// das pirâmides) e cada pixel anda olhar * (1 - 1/Z) px de tela quando a
+// câmera anda com a mira: o céu com a mira, o chão perto contra, o plano dos
+// brasões (Z = 1) parado. Contínuo, sem rasgar nada.
 uniform vec2 olhar = vec2(0.0);           // quanto a câmera andou (px de tela)
 uniform vec2 px_uv = vec2(0.0);           // 1 px de tela em UV da imagem
-uniform float inv_z_longe = 0.1;          // 1/Z do preto do mapa
-uniform float inv_z_perto = 1.4285714;    // 1/Z do branco do mapa
+uniform float inv_z_longe = 0.1;          // 1/Z do céu e do horizonte
+uniform float inv_z_perto = 1.4285714;    // 1/Z do chão bem perto
+uniform float horizonte_uv = 0.4557;      // y (UV) do pé das pirâmides
+uniform float chao1_uv = 0.8464;          // y (UV) do chão a Z = 1
+// Nuvens vivas: agitadas quando o sol/a lua está feliz, calmas quando tenso
+// (0 = paradas). fase_nuvens anda no script com a rapidez do humor.
+uniform float nuvens = 0.0;
+uniform float fase_nuvens = 0.0;
 
 // No fragment o COLOR já vem multiplicado pela textura; a cor do nó
 // (modulate, usado no cruzamento sol/lua) é guardada aqui no vertex.
@@ -63,6 +74,16 @@ void vertex() {
 	float t = TIME + fase;
 	float z = 1.0 + respiro * (0.030 + 0.014 * sin(t * 0.17) + 0.008 * batida);
 	uv_vivo = (UV - 0.5) / z + 0.5 + respiro * vec2(0.006 * sin(t * 0.11), 0.004 * cos(t * 0.09));
+}
+
+// 1 dentro do triângulo (com borda suave de alguns px), 0 fora
+float _aresta(vec2 u, vec2 v, vec2 p) {
+	return (v.x - u.x) * (p.y - u.y) - (v.y - u.y) * (p.x - u.x);
+}
+float dentro_tri(vec2 p, vec2 a, vec2 b, vec2 c) {
+	float o = sign(_aresta(a, b, c));
+	float e = min(min(_aresta(a, b, p) * o / length(b - a), _aresta(b, c, p) * o / length(c - b)), _aresta(c, a, p) * o / length(a - c));
+	return smoothstep(-3.0, 3.0, e);
 }
 
 vec3 ouro(vec3 pedra, vec4 msk, vec2 up) {
@@ -99,9 +120,23 @@ void fragment() {
 	vec2 uv = uv_vivo;
 
 	if (olhar.x != 0.0 || olhar.y != 0.0) {
-		float inv_z = mix(inv_z_longe, inv_z_perto, texture(profundidade, uv).r);
+		float inv_z = clamp((uv.y - horizonte_uv) / (chao1_uv - horizonte_uv), inv_z_longe, inv_z_perto);
 		uv -= olhar * (1.0 - inv_z) * px_uv;
 		uv = 1.0 - abs(1.0 - abs(uv));   // na borda, espelha (fica sob o placar)
+	}
+
+	// nuvens: o céu (fora das pirâmides) ondula e corre; mais com o humor alegre
+	if (nuvens > 0.001 && uv.y < horizonte_uv) {
+		vec2 q = uv * vec2(1024.0, 1536.0);
+		float fora = 1.0;
+		fora *= 1.0 - dentro_tri(q, vec2(508.0, 440.0), vec2(292.0, 746.0), vec2(724.0, 746.0));
+		fora *= 1.0 - dentro_tri(q, vec2(229.0, 510.0), vec2(82.0, 710.0), vec2(368.0, 710.0));
+		fora *= 1.0 - dentro_tri(q, vec2(776.0, 510.0), vec2(634.0, 710.0), vec2(922.0, 710.0));
+		float k_ceu = fora * smoothstep(horizonte_uv, horizonte_uv - 0.06, uv.y) * nuvens;
+		vec2 w = vec2(sin(uv.y * 23.0 + fase_nuvens * 1.3) + 0.6 * sin(uv.x * 17.0 - fase_nuvens * 0.9 + uv.y * 9.0),
+			cos(uv.x * 19.0 + fase_nuvens * 1.1) + 0.6 * sin(uv.y * 13.0 + fase_nuvens * 0.7));
+		uv += w * vec2(0.0042, 0.0026) * k_ceu;
+		uv.x += sin(fase_nuvens * 0.21 + uv.y * 6.0) * 0.004 * k_ceu;
 	}
 
 	// ar quente tremendo na faixa do horizonte
@@ -112,6 +147,19 @@ void fragment() {
 
 	vec4 base = texture(TEXTURE, uv);
 	vec3 m = texture(mascara, uv).rgb;
+	float lz = texture(luz_lancada, uv).r;
+	if (lz > 0.004) {
+		float wl = smoothstep(0.40, 0.24, uv.x);
+		float wr = smoothstep(0.60, 0.76, uv.x);
+		float acesa = energia * mix(1.0, luz_lados.x, wl) * mix(1.0, luz_lados.y, wr);
+		// apagada: de noite tira o vermelho da luz e escurece (fica a pedra
+		// azulada no escuro); de dia (areia já laranja do sol) só escurece.
+		// ouro_noite é 0 na imagem do sol e 1 na da lua.
+		vec3 sem_noite = min(vec3(min(base.r, max(base.g, base.b) * 1.12), base.g, base.b) * 0.78, vec3(0.17, 0.18, 0.24));
+		vec3 sem = mix(base.rgb * 0.80, sem_noite, ouro_noite);
+		base.rgb = mix(base.rgb, sem, (1.0 - acesa) * lz);
+		base.rgb += base.rgb * lz * acesa * (0.10 * batida + 0.07 * grave);
+	}
 	float lum = dot(base.rgb, vec3(0.3, 0.59, 0.11));
 	// cristal quebrando: os feixes pintados na imagem viram cinza apagado
 	if (energia < 0.999 && m.r + m.g > 0.01) {

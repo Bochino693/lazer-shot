@@ -26,6 +26,7 @@ esconde os brasões que passam atrás das coisas (shaders/egito_alvo.gdshader).
     python3 tools/gerar_profundidade.py
 """
 import os
+import re
 import numpy as np
 from PIL import Image
 from PIL import ImageDraw
@@ -132,22 +133,37 @@ def z_chao_egito(y):
     return np.clip((EG_CHAO_1 - EG_HORIZONTE) / np.maximum(d, 1e-3), EG_Z_PERTO, EG_Z_LONGE)
 
 
+def planos_egito():
+    """Os recortes do Egito (scripts/egito_planos.gd, tools/gerar_camadas.py):
+    [(alfa 1024x1536, Z)], do longe para o perto."""
+    txt = open(os.path.join(RAIZ, "scripts", "egito_planos.gd"), encoding="utf-8").read()
+    folha = np.asarray(Image.open(os.path.join(SP, "egito_planos_sol.png")).convert("RGBA"))[..., 3].astype(np.float32) / 255
+    saida = []
+    for m in re.finditer(r'"canto": Vector2\((\d+), (\d+)\), "folha": Rect2\((\d+), (\d+), (\d+), (\d+)\), "z": ([\d.]+)', txt):
+        cx, cy, fx, fy, fw, fh = (int(v) for v in m.groups()[:6])
+        a = np.zeros((TEX[1], TEX[0]), np.float32)
+        x0, y0 = max(cx, 0), max(cy, 0)
+        x1, y1 = min(cx + fw, TEX[0]), min(cy + fh, TEX[1])
+        a[y0:y1, x0:x1] = folha[fy + y0 - cy:fy + y1 - cy, fx + x0 - cx:fx + x1 - cx]
+        saida.append((a, float(m.group(7))))
+    return saida
+
+
 def egito():
-    E = 2  # desenha os contornos em 2x e reduz: borda lisa
+    # o chão (com as colunas pequenas do fundo, que ficaram pintadas nele) é o
+    # mesmo da conta do shader do fundo: Z pelo y; céu e pirâmides longe. Cada
+    # plano recortado (colunas, Anúbis, obeliscos, cristal) tem o Z dele, pelo
+    # alfa do próprio recorte: o mapa bate com o que a tela mostra.
     yy = np.mgrid[0:TEX[1], 0:TEX[0]][0].astype(np.float64)
     z = z_chao_egito(yy)
     z = np.where(yy <= EG_HORIZONTE, EG_Z_LONGE, z)
-    for pol, pe in EG_COISAS:
-        m = Image.new("L", (TEX[0] * E, TEX[1] * E), 0)
-        ImageDraw.Draw(m).polygon([(x * E, y * E) for x, y in pol], fill=255)
-        m = np.asarray(m.resize(TEX, Image.LANCZOS)).astype(np.float32) / 255
-        z = np.where(m > 0.5, float(z_chao_egito(pe)), z)
+    for a, zp in planos_egito():
+        z = np.where(a > 0.5, zp, z)
     inv = 1.0 / z
     t = (inv - 1 / EG_Z_LONGE) / (1 / EG_Z_PERTO - 1 / EG_Z_LONGE)
     img = Image.fromarray((np.clip(t, 0, 1) * 255 + 0.5).astype(np.uint8), "L").resize((TEX[0] // 2, TEX[1] // 2), Image.BILINEAR)
     img.save(os.path.join(SP, "egito_profundidade.png"), optimize=True)
-    print("  egito_profundidade.png %dx%d  cristal Z=%.2f obeliscos Z=%.2f anubis Z=%.2f colunas Z=%.2f" % (
-        img.width, img.height, z_chao_egito(1200), z_chao_egito(1086), z_chao_egito(930), z_chao_egito(1290)))
+    print("  egito_profundidade.png %dx%d  (%d planos recortados)" % (img.width, img.height, len(planos_egito())))
 
 
 if __name__ == "__main__":

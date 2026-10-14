@@ -34,6 +34,8 @@ const SHADERS := [
 	preload("res://shaders/deserto_fundo.gdshader"),
 	preload("res://shaders/egito_alvo.gdshader"),
 	preload("res://shaders/egito_cristal.gdshader"),
+	preload("res://shaders/egito_feixe.gdshader"),
+	preload("res://shaders/egito_plano.gdshader"),
 	preload("res://shaders/egito_raios.gdshader"),
 	preload("res://shaders/fundo_profundo.gdshader"),
 	preload("res://shaders/fundo_vivo.gdshader"),
