@@ -1186,6 +1186,57 @@ de sempre.
 
 APK 1.19.0 (código 21).
 
+## Rodada 20: alvos bônus, pôr do sol no Egito, águias que pousam e tiro que sai da mira
+
+**A bala sai da mira** (`scripts/trajetoria.gd`): o traço do tiro é curto e
+em perspectiva, nascendo logo abaixo da mira e afinando até o ponto — não
+cruza mais a tela vindo de baixo. O recuo sai dali também.
+
+**Avisos de tiro discretos** (`scripts/aviso_tiro.gd`): o resultado do tiro
+aparece pequeno, em cor suave, um pouco acima do ponto (sem cobrir a mira) e
+some em 0,8 s; recados do jogo numa pílula discreta logo abaixo do placar; os
+pontos saltam do alvo. As faixas antigas do rodapé saíram das quatro telas.
+Ao abrir cada tela as letras são montadas uma vez fora da tela e os sons dos
+efeitos são preparados (`Maquina.aquecer`): o primeiro tiro não engasga.
+
+**Alvos bônus** (tiro neles não é erro nem quebra o combo):
+- **Egito:** quebrar o cristal do meio vale +300; o de um obelisco, +150.
+- **Bar:** cada furo no barril vale +40 (até 6): o vinho espirra, jorra em
+  arco até o chão, vira um fio que escorre pela madeira e pinga, deixa a
+  madeira molhada e uma poça que cresce (`scripts/bar_vinho.gd`).
+- **Mar:** cada peixe do cardume dourado vale +40 (estoura em ouro e sai
+  girando; o resto nada mais rápido); o cardume inteiro, +200 a mais. Passa
+  mais vezes.
+- **Arena:** o LED do alto vale +50: estoura (clarão, faíscas, cacos do vidro
+  vermelho), fica queimado soltando fumaça 7 s e volta piscando.
+
+**Egito:**
+- **Pôr do sol e nascer da lua** (e o contrário): na troca, o astro desce e
+  some atrás da pirâmide do meio, o céu passa por um crepúsculo em brasa e a
+  terra fica na luz baixa e quente enquanto o dia vira noite; depois o outro
+  astro sobe de trás da pirâmide. Tudo muda junto (fundos, planos, ouro e
+  prata das pontas, raios, águias). No lugar do disco pintado aparece o céu
+  sem ele (`tools/gerar_ceu_astro.py`, `shaders/egito_astro.gdshader`).
+- **Águias que pousam:** com o cristal de uma pirâmide quebrado, às vezes
+  uma águia vem (direto, em espiral ou num mergulho) e pousa de frente na
+  ponta apagada, grita uma vez e fica lá virando a cabeça, olhando para baixo
+  e abrindo as asas como o falcão dos hieróglifos, até a energia voltar;
+  outras vezes só dá umas voltas por cima; às vezes nada.
+- O cristal e as pontas se refazem como energia (fios em espiral), sem os
+  quadrados de antes. As pontas acesas brilham mais (metal mais claro,
+  energia subindo até o pico e um halo); apagadas ficam ouro velho.
+- Os brasões longe ficam nítidos (só um véu leve da distância).
+
+**Mar:** os alvos que vêm do fundo são sempre cheios e nítidos (nada meio
+transparente) e nunca miúdos; o navio que afunda tem cor de galeão (casco de
+madeira, faixa ocre, velas de linho), um rombo de tiro soltando bolhas e mais
+vida na queda (`tools/gerar_navio_cor.py`).
+
+**Fundos em alta:** Mar e Egito (fundos e planos) também em super-resolução
+ETC2, como o Bar.
+
+APK 1.20.0 (código 22).
+
 ## Para testar no PC como se fosse a TV Box
 
 ```
