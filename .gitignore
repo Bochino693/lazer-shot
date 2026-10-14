@@ -8,3 +8,6 @@
 *.idsig
 
 __pycache__/
+
+# fundos em 2x da super-resolução (fonte de sprites/hd/*.res, refeitos por tools/gerar_hd.py)
+tools/hd/*.png

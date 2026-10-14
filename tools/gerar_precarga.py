@@ -35,6 +35,16 @@ def arquivo(res):
     return os.path.join(RAIZ, res[len("res://"):])
 
 
+def hd(res):
+    """Fundo com versão em alta (sprites/hd/<nome>.res, scripts/hd.gd): a
+    tela carrega o .res no lugar do png."""
+    if res.startswith("res://sprites/") and res.endswith(".png"):
+        alta = "res://sprites/hd/" + os.path.basename(res)[:-4] + ".res"
+        if os.path.exists(arquivo(alta)):
+            return alta
+    return res
+
+
 def classes():
     """class_name -> script (componentes criados por código, ex.: FundoVivo)."""
     mapa = {}
@@ -117,6 +127,7 @@ def main():
             for res in LITERAL.findall(texto) + literais_fundo_vivo(texto, fundos) + vozes_anuncio(texto):
                 if res in ja_vem and texto.count('"%s"' % res) == 1:
                     continue
+                res = hd(res)
                 # outras telas não: só o que esta tela usa
                 if res.startswith("res://scenes/") or res == cena:
                     continue

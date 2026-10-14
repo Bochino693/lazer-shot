@@ -1119,6 +1119,73 @@ rodada.
 
 APK 1.18.0 (código 20).
 
+## Rodada 19: recuo, cenário catalogado, bar de cinema, vaso de cerâmica e fundos em alta
+
+**Recuo como nos jogos de tiro** (`scripts/MiraGlobal.gd`, nas quatro telas):
+o primeiro tiro vai exatamente na mira; tiros em sequência levantam a arma
+(tranco para cima e um pouco para o lado, mais forte quanto mais rápida a
+rajada) e a bala seguinte cai onde a arma subiu. Sem atirar, a arma volta
+sozinha para a mira em ~0,4 s. A mira na tela dá o tranco junto, então a
+bala cai exatamente onde a mira mostra. A pistola do Bar dá o tranco mais
+forte, o arpão do Mar um pouco menos (a água segura) e o laser da Arena é
+leve.
+
+**Cenário catalogado (onde a bala chega):** cada lugar responde do seu jeito e
+o que está longe demais não leva tiro. No Egito o catálogo sai do mapa de
+profundidade: céu, **pirâmides** (e as pontas de ouro), colunas do horizonte e
+o chão lá no fundo ficam fora do alcance — o tiro some na distância, sem
+lasca nem marca (o brilho das pirâmides continua igual); as colunas grandes da
+frente lascam pedra também no alto. No Bar: vidro da janela, cartaz, barril e
+madeira. No Mar: pedras recortadas, chão perto (furo) e água.
+
+**Recortes invisíveis:** as colunas grandes do Egito e as pedras com escritas
+do Mar tinham, atrás delas, um fundo que mostrava o recorte quando a câmera
+andava; o fundo atrás delas foi refeito continuando os vizinhos
+(`tools/gerar_camadas.py`), e não aparece mais emenda.
+
+**Bar** (`scripts/bar_janela.gd`, `bar_garrafa_fx.gd`, `estilhacos.gd`,
+`shaders/bar_sol.gdshader`):
+- A **janela** leva tiro: a vidraça racha do furo para fora e estoura; os
+  cacos (do próprio vidro) giram, piscam quando pegam a luz, caem na tábua de
+  baixo (ou no peitoril), quicam, se partem e ficam deitados um pouco; pó de
+  vidro, faíscas de luz e lascas do caixilho. Ficam as pontas presas na
+  moldura com as bordas brilhando, a luz de fora entra mais forte no buraco e
+  o feixe de sol do bar cresce a cada vidraça quebrada; as vizinhas trincam.
+  Som novo de vidro + madeira (`songs/janela_quebra.wav`). Tiro numa vidraça
+  já quebrada derruba as pontas que sobraram (no buraco a bala sai lá fora).
+- As **garrafas chegam caindo** do alto na tábua e assentam (achatam e voltam
+  balançando presas pela base), com pó da madeira, um brilho correndo no
+  ombro e o toque do vidro na tábua (`songs/garrafa_pousa.wav`); saem subindo.
+- **Profundidade nas prateleiras:** cada garrafa tem sombra na parede de trás
+  (luz da janela) e sombra de contato; embaixo de cada tábua a parede fica na
+  sombra dela.
+- **Garrafa estourando como em filme:** clarão no vidro, a bebida sai numa
+  massa da cor dela que se abre e cai em gotas, e os cacos que giram de
+  frente para a luz soltam faíscas.
+- As listras do feixe de sol ficaram lisas (sem degraus na diagonal).
+
+**Mar:** o vaso do cavalo-marinho quebra como **cerâmica de verdade**
+(`scripts/mar_acerto.gd`): a trinca corre pelo vaso inteiro e só então os
+cacos se soltam — poucos e grandes, recortados da silhueta real do vaso,
+abrindo devagar (a água segura), tombando e mostrando o barro sem verniz de
+costas e a espessura da borda, e afundando; o cascalho do pé cai como pedra.
+O cavalo-marinho espírito continua saindo do vaso.
+
+**Egito:** os pontos de acerto da lua saem em **prata** (os do sol em ouro).
+
+**Cenários:** cada cartão mostra o nível certo, em 4 estrelas e escrito no
+selo: Fundo do Mar FÁCIL, Bar MÉDIO, Deserto DIFÍCIL, Arena EXPERT.
+
+**Fundos em alta (impressão de 4K)** (`scripts/hd.gd`, `tools/gerar_hd.py`,
+`tools/gerar_hd.gd`): os fundos grandes foram refeitos por super-resolução
+(rede EDSR) e entram na TV em 1,5x, comprimidos em ETC2 (a Mali-G31 lê
+direto). O jogo continua vendo o tamanho antigo (todas as coordenadas valem
+igual) e a TV desenha com mais detalhe — e a memória cai, porque o ETC2 ocupa
+menos que o PNG sem perda de antes. Sem o arquivo em alta, o jogo usa o PNG
+de sempre.
+
+APK 1.19.0 (código 21).
+
 ## Para testar no PC como se fosse a TV Box
 
 ```

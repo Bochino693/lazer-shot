@@ -58,10 +58,11 @@ const IMG := Vector2(1024, 1536)
 # primeira partida). Assim tudo some com a fase. A troca de tela já pede
 # estes arquivos numa thread (scripts/precarga.gd): o load() acha pronto.
 # fundo sem as coisas em pé (reconstruído atrás delas) e a folha dos planos
-var FUNDO_SOL: Texture2D = load("res://sprites/egito_fundo_sol.png")
-var FUNDO_LUA: Texture2D = load("res://sprites/egito_fundo_lua.png")
-var PLANOS_SOL: Texture2D = load("res://sprites/egito_planos_sol.png")
-var PLANOS_LUA: Texture2D = load("res://sprites/egito_planos_lua.png")
+# fundos e planos em alta (scripts/hd.gd): o mesmo tamanho para o jogo
+var FUNDO_SOL: Texture2D = Hd.textura("res://sprites/egito_fundo_sol.png")
+var FUNDO_LUA: Texture2D = Hd.textura("res://sprites/egito_fundo_lua.png")
+var PLANOS_SOL: Texture2D = Hd.textura("res://sprites/egito_planos_sol.png")
+var PLANOS_LUA: Texture2D = Hd.textura("res://sprites/egito_planos_lua.png")
 var PLANOS_BRILHO: Texture2D = load("res://sprites/egito_planos_brilho.png")
 var LUZ_FUNDO: Texture2D = load("res://sprites/egito_fundo_luz.png")
 # Sol e lua em 4x (tools/gerar_astros.py), camadas comuns sem shader:
@@ -169,6 +170,7 @@ const CAMERA_PASSO := 30.0
 const CAMERA_SUAVE := 2.6
 const Z_LONGE := 10.0
 const Z_PERTO := 0.7
+const Z_BALA := 6.0          # além disto a bala não chega em nada (catálogo do tiro)
 const Z_CRISTAL := 1.2
 # ponto de fuga (pé das pirâmides) e o chão a Z = 1, em px da imagem
 # (os mesmos de tools/gerar_profundidade.py)
@@ -1156,27 +1158,28 @@ func _animar_ceu(delta: float) -> void:
 
 
 # ───────────────────────────────────────────── tiros no fundo
-## O que há no ponto (px da imagem do fundo): "cristal", "ouro", "pedra",
-## "areia" ou "ceu".
+## O que há no ponto (px da imagem do fundo): "cristal", "cristal_esq",
+## "cristal_dir", "pedra", "areia" ou "longe".
+## O catálogo da bala sai do mapa de profundidade: o que está além de Z_BALA
+## (céu, pirâmides, colunas do horizonte, o chão lá no fundo) fica longe
+## demais e o tiro some na distância, sem lasca nem marca. As pirâmides e as
+## pontas de ouro continuam brilhando: só não levam tiro.
 func material_em(p: Vector2) -> String:
 	if Geometry2D.is_point_in_polygon(p, POLI_CRISTAL):
 		return "cristal"
 	for i in 2:
 		if Geometry2D.is_point_in_polygon(p, PackedVector2Array(POLI_PONTAS[i])):
 			return "cristal_esq" if i == 0 else "cristal_dir"
-	for tri: PackedVector2Array in OURO:
+	for tri: PackedVector2Array in PIRAMIDES:
 		if Geometry2D.is_point_in_polygon(p, tri):
-			return "ouro"
-	for tri2: PackedVector2Array in PIRAMIDES:
-		if Geometry2D.is_point_in_polygon(p, tri2):
-			return "pedra"
-	if em_plano(p):
+			return "longe"
+	if _inv_z_local(p) < 1.0 / Z_BALA:
+		return "longe"
+	if p.y <= HORIZONTE or em_plano(p):
 		return "pedra"      # coluna, Anúbis, obelisco, pedestal: tudo pedra
-	if p.y > 700.0:
-		if (p - Vector2(510, 1180)).length() < 300.0:
-			return "pedra"  # degraus do altar
-		return "areia"
-	return "ceu"
+	if (p - Vector2(510, 1180)).length() < 300.0:
+		return "pedra"      # degraus do altar
+	return "areia"
 
 
 ## O ponto (px da imagem) é de uma coisa em pé (um plano recortado) e não do

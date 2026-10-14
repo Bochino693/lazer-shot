@@ -15,10 +15,12 @@ var tamanho := 46
 var _lista: Array[Dictionary] = []
 
 
-func mostrar(pos_tela: Vector2, texto: String, cor: Color, escala: float = 1.0) -> void:
+## brilho: cor da borda clara por dentro do contorno (o ouro e a prata
+## parecem metal); transparente = sem.
+func mostrar(pos_tela: Vector2, texto: String, cor: Color, escala: float = 1.0, brilho := Color(0, 0, 0, 0)) -> void:
 	if fonte == null:
 		return
-	_lista.append({"pos": pos_tela, "texto": texto, "cor": cor, "esc": clampf(escala, 0.6, 1.6), "t": 0.0})
+	_lista.append({"pos": pos_tela, "texto": texto, "cor": cor, "esc": clampf(escala, 0.6, 1.6), "t": 0.0, "brilho": brilho})
 	while _lista.size() > MAX:
 		_lista.pop_front()
 	queue_redraw()
@@ -49,5 +51,8 @@ func _draw() -> void:
 		draw_set_transform(p["pos"] + Vector2(0, -sobe), 0.0, Vector2(esc, esc))
 		var base := Vector2(-largura * 0.5, tamanho * 0.35)
 		draw_string_outline(fonte, base, texto, HORIZONTAL_ALIGNMENT_LEFT, -1, tamanho, 10, Color(0.02, 0.04, 0.08, 0.85 * a))
+		var brilho: Color = p["brilho"]
+		if brilho.a > 0.0:
+			draw_string_outline(fonte, base, texto, HORIZONTAL_ALIGNMENT_LEFT, -1, tamanho, 4, Color(brilho, brilho.a * a))
 		draw_string(fonte, base, texto, HORIZONTAL_ALIGNMENT_LEFT, -1, tamanho, Color(p["cor"], a))
 	draw_set_transform(Vector2.ZERO)

@@ -528,6 +528,9 @@ func _ready() -> void:
 	encerrado = false
 
 	background = get_node_or_null("Sprite2D") as Sprite2D
+	if background != null and background.texture == null:
+		# fundo em alta (scripts/hd.gd): o mesmo tamanho para o jogo
+		background.texture = Hd.textura(caminho_background)
 	alvos_root = get_node_or_null("Alvos") as Node2D
 	aguaviva_modelo = get_node_or_null("Alvos/Aguaviva20") as Area2D
 	vaso_modelo = get_node_or_null("Alvos/Vaso80") as Area2D
@@ -726,7 +729,7 @@ func _process(delta: float) -> void:
 
 func _atualizar_mira_hibrida(_delta: float) -> void:
 	# mira única do jogo (MiraGlobal): mesma em todas as telas, sem saltos
-	alvo_pos = MiraGlobal.pos
+	alvo_pos = MiraGlobal.mira()
 
 
 ## O combo agora é anunciado grande no meio da tela, com a voz de Poseidon
@@ -3277,7 +3280,8 @@ func _ajustar_background_fullscreen() -> void:
 		return
 
 	if background.texture == null and ResourceLoader.exists(caminho_background):
-		background.texture = load(caminho_background)
+		# fundo em alta (scripts/hd.gd)
+		background.texture = Hd.textura(caminho_background)
 
 	if background.texture == null:
 		return
@@ -4406,6 +4410,7 @@ func _processar_tiro_global(pos_global: Vector2, primeiro_tiro: bool = false) ->
 
 	balas_no_cartucho -= 1
 	total_tiros += 1
+	MiraGlobal.coice(0.85)    # arpão debaixo d'água: a água segura um pouco
 	# a bala corta a água: risco claro e rastro de bolhas até a mira
 	Trajetoria.disparar(self, get_viewport().get_canvas_transform() * pos_global, "mar")
 
@@ -5944,7 +5949,7 @@ var tempo_trava_input_arma: float = 0.0
 
 
 func _pos_arma() -> Vector2:
-	return MiraGlobal.pos
+	return MiraGlobal.mira()
 
 
 func _evento_tiro_arma(me: InputEventMouseButton) -> bool:
