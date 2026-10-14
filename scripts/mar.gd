@@ -146,6 +146,10 @@ var som_recharge_stream: AudioStream = null
 @export var aguaviva_balanço_y: float = 10.0
 @export var aguaviva_rotacao_idle: float = 8.0
 @export var aguaviva_pulso_escala: float = 0.05
+# nado da água-viva: um pulso a cada AGUAVIVA_PERIODO s; no tranco ela anda
+# (1 + AGUAVIVA_TRANCO) vezes a velocidade média, deslizando (1 - ...)
+const AGUAVIVA_PERIODO := 1.15
+const AGUAVIVA_TRANCO := 0.8
 # Rodada 14: balanço das águas-vivas mais lento (acompanha a queda mais lenta)
 @export var aguaviva_freq_x: float = 1.2
 @export var aguaviva_freq_y: float = 1.8
@@ -3974,6 +3978,11 @@ func _spawnar_alvo(tipo: String, estilo_pedido: String = "") -> void:
 
 	if tipo == "aguaviva":
 		novo.rotation_degrees = randf_range(-8.0, 8.0)
+		# água-viva nada para cima (os pulsos empurram o sino): vem de baixo
+		if pos_final.y > pos_inicial.y:
+			var troca := pos_inicial
+			pos_inicial = pos_final
+			pos_final = troca
 	elif tipo == "vaso":
 		novo.rotation_degrees = randf_range(-6.0, 6.0)
 	elif tipo == "bau":
@@ -3993,6 +4002,20 @@ func _spawnar_alvo(tipo: String, estilo_pedido: String = "") -> void:
 		pos_final = pos_inicial.lerp(pos_final, s)
 		duracao *= s
 		ate_o_chao = true
+
+	if tipo == "aguaviva":
+		# nada em pulsos (scripts: _nado_aguaviva); o tween é dela
+		novo.set_meta("pulsos", maxi(2, int(round(duracao / AGUAVIVA_PERIODO))))
+		novo.set_meta("ini_2d", pos_inicial)
+		novo.set_meta("fim_2d", pos_final)
+		var tw_a: Tween = novo.create_tween()
+		tw_a.tween_method(_mover_aguaviva_2d.bind(novo), 0.0, 1.0, duracao)
+		novo.set_meta("tween_queda", tw_a)
+		tw_a.finished.connect(func() -> void:
+			if is_instance_valid(novo) and not bool(novo.get_meta("atingido", false)):
+				_remover_alvo(novo)
+		)
+		return
 
 	var tween: Tween = create_tween()
 	tween.set_parallel(true)
@@ -4121,6 +4144,9 @@ func _lancar_3d(alvo: Area2D, tipo: String, estilo: String, duracao: float, esca
 	alvo.set_meta("cai", cai)
 	alvo.set_meta("curva", [p0, c1, c2, p3])
 	var giro: float = randf_range(320.0, 560.0) if tipo == "bomba" else randf_range(-16.0, 16.0)
+	if tipo == "aguaviva":
+		giro = 0.0
+		alvo.set_meta("pulsos", maxi(2, int(round(dur / AGUAVIVA_PERIODO))))
 	alvo.set_meta("rot_ini", randf_range(-180.0, 180.0) if tipo == "bomba" else randf_range(-6.0, 6.0))
 	alvo.set_meta("rot_giro", giro)
 	alvo.set_meta("balanco", randf() * TAU)
@@ -4150,8 +4176,9 @@ func _mover_3d(t: float, alvo: Area2D) -> void:
 	if curva.size() < 4:
 		return
 	var cai: bool = alvo.get_meta("cai", false)
-	# a queda acelera um pouco (a água segura); o resto anda igual
-	var u: float = t * t * 0.35 + t * 0.65 if cai else t
+	# a queda acelera um pouco (a água segura); a água-viva nada em pulsos; o
+	# resto anda igual
+	var u: float = t * t * 0.35 + t * 0.65 if cai else _nado_aguaviva(alvo, t)
 	var v := 1.0 - u
 	var p: Vector3 = curva[0] * (v * v * v) + curva[1] * (3.0 * v * v * u) + curva[2] * (3.0 * v * u * u) + curva[3] * (u * u * u)
 	var z: float = maxf(p.z, 0.2)
@@ -4179,6 +4206,27 @@ func _mover_3d(t: float, alvo: Area2D) -> void:
 	# já passou por nós e sumiu: não pega mais tiro
 	alvo.visible = t < 0.5 or a > 0.05
 	alvo.z_index = MarVida.z_desenho(z) + (1 if String(alvo.get_meta("tipo_alvo", "")) == "bomba" else 0)
+
+
+## Água-viva nada em pulsos, como as de verdade: o sino fecha e ela dá um
+## tranco para a frente, depois desliza perdendo velocidade enquanto o sino
+## abre de novo. Recebe t (0..1 do tempo) e devolve o quanto do caminho ela
+## já fez (velocidade 1 + AGUAVIVA_TRANCO * cos, que soma o caminho certo no
+## fim); guarda a fase do pulso para o sino (_atualizar_idle_aguaviva).
+func _nado_aguaviva(alvo: Area2D, t: float) -> float:
+	var n: int = alvo.get_meta("pulsos", 0)
+	if n <= 0:
+		return t
+	alvo.set_meta("pulso_fase", fposmod(t * n, 1.0))
+	return t + AGUAVIVA_TRANCO * sin(TAU * n * t) / (TAU * n)
+
+
+func _mover_aguaviva_2d(t: float, alvo: Area2D) -> void:
+	if not is_instance_valid(alvo) or bool(alvo.get_meta("atingido", false)):
+		return
+	var ini: Vector2 = alvo.get_meta("ini_2d", alvo.position)
+	var fim: Vector2 = alvo.get_meta("fim_2d", alvo.position)
+	alvo.position = ini.lerp(fim, _nado_aguaviva(alvo, t))
 
 
 ## Vaso, baú ou bomba que caiu até o chão do mar: espatifa (sem ponto e sem
@@ -4265,14 +4313,28 @@ func _atualizar_idle_aguaviva(alvo: Area2D, delta: float) -> void:
 		else:
 			anim.stop()
 
-	var sway_x: float = sin((t * aguaviva_freq_x) + seed) * aguaviva_balanço_x
-	var sway_y: float = cos((t * aguaviva_freq_y) + seed * 0.73) * aguaviva_balanço_y
-	var rot: float = sin((t * aguaviva_freq_rot) + seed * 1.17) * aguaviva_rotacao_idle
-	var pulso: float = 1.0 + sin((t * aguaviva_freq_pulso) + seed * 0.41) * aguaviva_pulso_escala
+	var sway_x: float = sin((t * aguaviva_freq_x) + seed) * aguaviva_balanço_x * 0.35
+	var sway_y: float = cos((t * aguaviva_freq_y) + seed * 0.73) * aguaviva_balanço_y * 0.35
+	# o sino no ritmo do nado: fecha (estreita e alonga) no tranco, abre
+	# (alarga e achata) enquanto desliza
+	var fase: float = float(alvo.get_meta("pulso_fase", fposmod(t * 0.8 + seed, 1.0)))
+	var cs := cos(TAU * fase)
+	var fecha := maxf(cs, 0.0)
+	fecha *= fecha
+	var abre := maxf(-cs, 0.0)
+	var pulso: float = 1.0 + 0.5 * (abre * 0.07 - fecha * 0.05)
+	# inclina para onde está indo (a cabeça na frente), sem virar
+	var antes: Vector2 = alvo.get_meta("pos_antes", alvo.position)
+	alvo.set_meta("pos_antes", alvo.position)
+	var vel_tela: Vector2 = (alvo.position - antes) / maxf(delta, 0.001)
+	var incl_alvo: float = clampf(vel_tela.x / (absf(vel_tela.x) + absf(vel_tela.y) + 60.0), -1.0, 1.0) * 24.0
+	var incl: float = lerpf(float(alvo.get_meta("inclina", 0.0)), incl_alvo, 1.0 - exp(-delta * 3.0))
+	alvo.set_meta("inclina", incl)
+	var rot: float = incl + sin((t * aguaviva_freq_rot) + seed * 1.17) * aguaviva_rotacao_idle * 0.4
 
 	anim.position = Vector2(sway_x, sway_y)
 	anim.rotation_degrees = rot
-	anim.scale = Vector2.ONE * pulso
+	anim.scale = Vector2(1.0 - 0.13 * fecha + 0.08 * abre, 1.0 + 0.11 * fecha - 0.06 * abre)
 
 	# brilho bioluminescente atrás do sino, respirando com ele
 	var halo := alvo.get_node_or_null("Brilho") as Sprite2D

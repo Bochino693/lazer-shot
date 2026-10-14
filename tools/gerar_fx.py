@@ -2,7 +2,8 @@
 """Artes dos efeitos da Rodada 17 (Mar e Egito).
 
 Gera (em sprites/):
-  mar_cavalo.png        cavalo-marinho de jade (sai do vaso quebrado no Mar)
+  (mar_cavalo.png agora é o espírito de tools/gerar_cavalo_espirito.py; o
+   cavalo de jade antigo daqui não é mais gravado)
   fx_fumaca.png         nuvem macia (fumaça da bomba, poeira e areia; tingida
                         no jogo)
   fx_onda.png           anel de choque (explosão debaixo d'água)
@@ -291,7 +292,6 @@ def facho():
 
 
 if __name__ == "__main__":
-    cavalo()
     fumaca()
     onda()
     furo_areia()
