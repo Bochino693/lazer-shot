@@ -499,6 +499,7 @@ var _mat_soma: CanvasItemMaterial = null
 
 
 func _ready() -> void:
+	_aquecer_fase.call_deferred()
 	randomize()
 
 # Mira controlada localmente por _atualizar_mira_hibrida.
@@ -6163,3 +6164,12 @@ func _estilo_faixa_interna_mar(cor: Color) -> StyleBoxFlat:
 	estilo.shadow_size = 14
 	estilo.shadow_offset = Vector2.ZERO
 	return estilo
+
+
+## Ao abrir a tela: monta as letras dos avisos e prepara os sons dos
+## efeitos antes do primeiro tiro (a TV box não engasga no começo).
+func _aquecer_fase() -> void:
+	if not is_inside_tree():
+		return
+	AvisoTiro.preparar(self)
+	Maquina.aquecer([SOM_OURO_CARDUME])

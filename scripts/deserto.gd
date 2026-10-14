@@ -308,6 +308,7 @@ var fim_pulso_t: float = 0.0
 
 
 func _ready() -> void:
+	_aquecer_fase.call_deferred()
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 
 	var tela := get_viewport_rect().size
@@ -3438,3 +3439,14 @@ func _atualizar_estilo_modais_por_modo() -> void:
 		Leve.color(ranking_nome_timer_label, "font_color",
 			Color(1.0, 0.68, 0.18, 1.0) if modo_atual == MODO_SOL
 			else Color(0.56, 0.84, 1.0, 1.0))
+
+
+## Ao abrir a tela: monta as letras dos avisos e prepara os sons dos
+## efeitos antes do primeiro tiro (a TV box não engasga no começo).
+func _aquecer_fase() -> void:
+	if not is_inside_tree():
+		return
+	AvisoTiro.preparar(self)
+	if _vivo != null:
+		Maquina.aquecer([_vivo.SOM_TRINCA, _vivo.SOM_QUEBRA, _vivo.SOM_VOLTA, _vivo.SOM_OURO, _vivo.SOM_PEDRA,
+			_vivo.SOM_AREIA, _vivo.SOM_AGUIA, _vivo.SOM_AGUIA_NOITE])

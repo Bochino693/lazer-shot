@@ -609,6 +609,13 @@ var _efeitos: Dictionary = {}
 func efeito(stream: AudioStream, volume_db: float = 0.0, pitch: float = 1.0, inicio: float = 0.0) -> void:
 	if stream == null:
 		return
+	var p := _player_efeito(stream)
+	p.volume_db = volume_db
+	p.pitch_scale = pitch
+	p.play(maxf(0.0, inicio))
+
+
+func _player_efeito(stream: AudioStream) -> AudioStreamPlayer:
 	var p: AudioStreamPlayer = _efeitos.get(stream)
 	if p == null or not is_instance_valid(p):
 		p = AudioStreamPlayer.new()
@@ -618,9 +625,20 @@ func efeito(stream: AudioStream, volume_db: float = 0.0, pitch: float = 1.0, ini
 		p.max_polyphony = 6
 		add_child(p)
 		_efeitos[stream] = p
-	p.volume_db = volume_db
-	p.pitch_scale = pitch
-	p.play(maxf(0.0, inicio))
+	return p
+
+
+## Prepara os efeitos de uma fase ao abrir: cria o player de cada um e toca
+## mudo um instante (a TV box não engasga no primeiro tiro montando o som).
+func aquecer(streams: Array) -> void:
+	for s in streams:
+		var stream := s as AudioStream
+		if stream == null or _efeitos.has(stream):
+			continue
+		var p := _player_efeito(stream)
+		p.volume_db = -80.0
+		p.play()
+		get_tree().create_timer(0.1).timeout.connect(p.stop)
 
 
 func _bus(nome: String) -> int:

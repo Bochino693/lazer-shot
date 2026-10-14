@@ -17,11 +17,14 @@ const MAX := 4
 const TAMANHO := 30
 const TAMANHO_INSTRUCAO := 26
 const Y_INSTRUCAO := 152.0        # logo abaixo do placar
+# as letras que os avisos usam (montadas uma vez, invisíveis, ao abrir a fase)
+const LETRAS := "+-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZÁÃÂÀÇÉÊÍÓÔÕÚ!?.,:'"
 
 var _fonte: Font
 var _lista: Array[Dictionary] = []
 var _instrucao := {}
 var _pontos: PontosVoando
+var _aquecer := 0
 
 
 static func _no(fase: Node) -> AvisoTiro:
@@ -55,11 +58,29 @@ static func pontos(fase: Node, pos_tela: Vector2, texto: String, cor: Color, bri
 	var no := _no(fase)
 	if no == null:
 		return
-	if no._pontos == null:
-		no._pontos = PontosVoando.new()
-		no._pontos.fonte = load("res://fonts/Exo2-ExtraBold.ttf") as Font
-		no.get_parent().add_child(no._pontos)
+	no._criar_pontos()
 	no._pontos.mostrar(pos_tela, texto, cor, 1.0, brilho)
+
+
+## Ao abrir a fase: cria a camada, carrega as fontes e monta as letras uma
+## vez, fora da tela (o primeiro aviso da partida não engasga a TV box
+## desenhando as letras pela primeira vez).
+static func preparar(fase: Node) -> void:
+	var no := _no(fase)
+	if no == null:
+		return
+	no._criar_pontos()
+	no._pontos.mostrar(Vector2(-4000.0, -4000.0), LETRAS, Color(1, 1, 1, 0), 1.0, Color(1, 1, 1, 0.01))
+	no._aquecer = 2
+	no.set_process(true)
+	no.queue_redraw()
+
+
+func _criar_pontos() -> void:
+	if _pontos == null:
+		_pontos = PontosVoando.new()
+		_pontos.fonte = load("res://fonts/Exo2-ExtraBold.ttf") as Font
+		get_parent().add_child(_pontos)
 
 
 static func instrucao(fase: Node, texto: String, cor := Color(0.85, 0.95, 1.0)) -> void:
@@ -85,6 +106,8 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
+	if _aquecer > 0:
+		_aquecer -= 1
 	for p in _lista:
 		p["t"] += delta
 	while not _lista.is_empty() and _lista[0]["t"] > VIDA:
@@ -94,13 +117,18 @@ func _process(delta: float) -> void:
 		if _instrucao["t"] > VIDA_INSTRUCAO:
 			_instrucao = {}
 	queue_redraw()
-	if _lista.is_empty() and _instrucao.is_empty():
+	if _lista.is_empty() and _instrucao.is_empty() and _aquecer <= 0:
 		set_process(false)
 
 
 func _draw() -> void:
 	if _fonte == null:
 		return
+	if _aquecer > 0:
+		var fora := Vector2(-4000.0, -4000.0)
+		draw_string_outline(_fonte, fora, LETRAS, HORIZONTAL_ALIGNMENT_LEFT, -1, TAMANHO, 6, Color(0, 0, 0, 0.01))
+		draw_string(_fonte, fora, LETRAS, HORIZONTAL_ALIGNMENT_LEFT, -1, TAMANHO, Color(1, 1, 1, 0.01))
+		draw_string(_fonte, fora, LETRAS, HORIZONTAL_ALIGNMENT_LEFT, -1, TAMANHO_INSTRUCAO, Color(1, 1, 1, 0.01))
 	var tela := get_viewport_rect().size
 	for p in _lista:
 		var k: float = p["t"] / VIDA

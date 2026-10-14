@@ -387,6 +387,7 @@ var intro_contagem_valor: int = 3
 # ═══════════════════════════════════════════════════════════
  
 func _ready() -> void:
+	_aquecer_fase.call_deferred()
 	randomize()
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 	# fundo em alta (scripts/hd.gd): o mesmo tamanho para o jogo
@@ -3602,3 +3603,13 @@ func _aplicar_config_admin_na_cena() -> void:
 	get_tree().set_meta("admin_tempo_partida", tempo_total)
 	get_tree().set_meta("admin_tempo_modal_final", fim_tempo_voltar)
 	get_tree().set_meta("admin_tempo_ranking_nome", ranking_nome_tempo)
+
+
+## Ao abrir a tela: monta as letras dos avisos e prepara os sons dos
+## efeitos antes do primeiro tiro (a TV box não engasga no começo).
+func _aquecer_fase() -> void:
+	if not is_inside_tree():
+		return
+	AvisoTiro.preparar(self)
+	if _vivo != null:
+		Maquina.aquecer([_vivo.SOM_LED, ArenaVivo.SOM_FAISCA, ArenaVivo.SOM_VAPOR, ArenaVivo.SOM_TROCA])

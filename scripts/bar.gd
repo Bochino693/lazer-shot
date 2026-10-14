@@ -377,6 +377,7 @@ var garrafas_pos_base: Vector2 = Vector2.ZERO
 
 
 func _ready() -> void:
+	_aquecer_fase.call_deferred()
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 	randomize()
 	# fundo em alta (scripts/hd.gd): o mesmo tamanho para o jogo, o dobro de
@@ -5523,3 +5524,13 @@ func _estilo_modal_bar() -> StyleBoxFlat:
 	estilo.shadow_size   = 46
 	estilo.shadow_offset = Vector2.ZERO
 	return estilo
+
+
+## Ao abrir a tela: monta as letras dos avisos e prepara os sons dos
+## efeitos antes do primeiro tiro (a TV box não engasga no começo).
+func _aquecer_fase() -> void:
+	if not is_inside_tree():
+		return
+	AvisoTiro.preparar(self)
+	Maquina.aquecer([BarTiro.SOM_MADEIRA, BarTiro.SOM_PAPEL, BarGarrafaFx.SOM_POUSO, BarJanela.SOM,
+		BarVinho.SOM_JORRA])
