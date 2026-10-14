@@ -38,7 +38,8 @@ const SHADER_RECORTE := preload("res://shaders/mar_recorte.gdshader")
 # load() e não preload(): o Godot 4.6 nunca descarrega um script já carregado,
 # e o que ele pré-carrega ficava na memória depois da primeira partida.
 var PEIXE: Texture2D = load("res://sprites/mar_peixe.png")
-var NAVIO: Texture2D = load("res://sprites/mar_navio.png")
+# com cor de galeão e o rombo do tiro no casco (tools/gerar_navio_cor.py)
+var NAVIO: Texture2D = load("res://sprites/mar_navio_cor.png")
 var MASCARA_FRENTE: Texture2D = load("res://sprites/mar_frente_navio_mascara.png")
 var BOLHA: Texture2D = load("res://sprites/mar_bolha.png")
 var LODO: Texture2D = load("res://sprites/mar_lodo.png")
@@ -94,7 +95,10 @@ const NAVIO_ALTURA := 1000.0
 # tingido pela água como o templo.
 const NAVIO_LONGE := Vector2(380, 768)
 const NAVIO_ESCALA := 0.70
-const NAVIO_NEVOA := Color(0.80, 0.91, 1.0, 0.96)
+const NAVIO_NEVOA := Color(0.90, 0.96, 1.0, 1.0)
+# o rombo do tiro no casco (px da caixa do navio, tools/gerar_navio_cor.py):
+# solta bolhas e pó de madeira enquanto ele afunda
+const NAVIO_FURO := Vector2(176, 404)
 # O que fica na frente dele (tools/gerar_mar.py, mar_frente_navio_mascara.png)
 const FRENTE_CANTO := Vector2(195, 530)
 const FRENTE_TAM := Vector2(430, 381)
@@ -129,6 +133,7 @@ var _poeira_pedra: CPUParticles2D = null
 var _bolhas_pedra: CPUParticles2D = null
 
 var _navio: Sprite2D = null
+var _bolhas_furo: CPUParticles2D = null
 var _frente: Sprite2D = null           # templo e poneglifo pequeno por cima do navio
 var _navio_estado := ""          # "" fora, "caindo", "pousado", "fim"
 var _navio_t := 0.0
@@ -474,6 +479,31 @@ func _criar_navio() -> void:
 	_bolhas_casco.color_ramp = _rampa(Color(0.88, 0.96, 1.0), 0.9)
 	_navio.add_child(_bolhas_casco)
 
+	# o ar saindo pelo rombo do tiro: um fio de bolhas grandes e pó de
+	# madeira (a água entrando)
+	_bolhas_furo = CPUParticles2D.new()
+	_bolhas_furo.name = "BolhasFuro"
+	_bolhas_furo.amount = 36
+	_bolhas_furo.lifetime = 2.0
+	_bolhas_furo.emitting = false
+	_bolhas_furo.local_coords = false
+	_bolhas_furo.texture = BOLHA
+	_bolhas_furo.position = NAVIO_FURO - (NAVIO_PIVO - NAVIO_CANTO)
+	_bolhas_furo.emission_shape = CPUParticles2D.EMISSION_SHAPE_SPHERE
+	_bolhas_furo.emission_sphere_radius = 10.0
+	_bolhas_furo.direction = Vector2(-0.4, -1)
+	_bolhas_furo.spread = 22.0
+	_bolhas_furo.gravity = Vector2(0, -220)
+	_bolhas_furo.initial_velocity_min = 40.0
+	_bolhas_furo.initial_velocity_max = 110.0
+	_bolhas_furo.tangential_accel_min = -30.0
+	_bolhas_furo.tangential_accel_max = 30.0
+	_bolhas_furo.scale_amount_min = 0.25
+	_bolhas_furo.scale_amount_max = 0.6
+	_bolhas_furo.scale_amount_curve = _curva(0.7, 1.4)
+	_bolhas_furo.color_ramp = _rampa(Color(0.92, 0.98, 1.0), 0.95)
+	_navio.add_child(_bolhas_furo)
+
 
 ## O templo, o Poseidon e o poneglifo pequeno (com a ilha de pedras na frente
 ## dele) desenhados de novo por cima do navio: o mesmo fundo, recortado pela
@@ -521,6 +551,7 @@ func cair_navio() -> void:
 	_rastro.emitting = true
 	_esteira.emitting = true
 	_bolhas_casco.emitting = true
+	_bolhas_furo.emitting = true
 	Maquina.efeito(SOM_NAVIO_DESCE, -5.0)
 
 
@@ -536,7 +567,11 @@ func _animar_navio(delta: float) -> void:
 		var desce := clampf(f / f_fim, 0.0, 1.0)
 		var resta := 1.0 - k
 		_navio.position = NAVIO_LONGE - Vector2(24.0 * NAVIO_ESCALA * resta * sin(_navio_t * 0.9 + 0.4), NAVIO_ALTURA * (1.0 - desce))
-		_navio.rotation = deg_to_rad(5.5) * resta + deg_to_rad(2.2) * sin(_navio_t * 1.45) * resta
+		# afunda adernando: balança de proa e de lado, o casco range (um
+		# tico de torção) e o mastro chicoteia
+		_navio.rotation = deg_to_rad(6.5) * resta + deg_to_rad(3.2) * sin(_navio_t * 1.45) * resta \
+			+ deg_to_rad(1.2) * sin(_navio_t * 3.1 + 0.7) * resta
+		_navio.skew = 0.035 * sin(_navio_t * 2.2) * resta
 		# tábuas do fundo do casco se soltando na descida (ficam para trás)
 		if _soltas < 4 and _navio_t > 0.9 + _soltas * 0.75:
 			_soltas += 1
@@ -551,6 +586,7 @@ func _animar_navio(delta: float) -> void:
 		var t := _navio_t
 		_navio.position = NAVIO_LONGE + Vector2(0, 5.0 * NAVIO_ESCALA * exp(-t * 4.0) * sin(t * 9.0 + 0.6))
 		_navio.rotation = deg_to_rad(1.6) * exp(-t * 3.0) * cos(t * 7.0)
+		_navio.skew = 0.0
 		if t > 2.0:
 			_navio.position = NAVIO_LONGE
 			_navio.rotation = 0.0
@@ -563,6 +599,7 @@ func _pousar() -> void:
 	_rastro.emitting = false
 	_esteira.emitting = false
 	_bolhas_casco.emitting = false
+	_bolhas_furo.amount = 12          # depois de pousado ainda escapa um pouco de ar
 	for p: CPUParticles2D in [_lodo, _lodo_jatos, _areia, _farpas, _bolhas_pouso]:
 		p.restart()
 		p.emitting = true
