@@ -22,7 +22,15 @@ const CAMINHO_IMG_4: String = "res://sprites/cene_arena.png"
 # Fundo vivo de cada cartão (mesma ordem de card_1..card_4 e CENA_CENARIO_1..4).
 const FUNDO_CARDS: Array[String] = ["deserto", "mar", "bar", "arena"]
 
-const DIFICULDADES: Array[int] = [2, 2, 3, 3]
+# Dificuldade de cada cenário (Deserto, Mar, Bar, Arena), em 4 estrelas e
+# com o nome do nível no selo do cartão:
+#   Mar      fácil    alvos lentos e grandes
+#   Bar      médio    garrafas paradas, mas com as impostoras
+#   Deserto  difícil  alvos rápidos que encolhem e troca de sol e lua
+#   Arena    expert   sequência de memória com as lanternas
+const DIFICULDADES: Array[int] = [3, 1, 2, 4]
+const NIVEIS: Array[String] = ["DIFÍCIL", "FÁCIL", "MÉDIO", "EXPERT"]
+const MAX_ESTRELAS := 4
 
 # ── Sensibilidade ─────────────────────────────────────────────────────────────
 const SENS_XBOX_MIN: float = 1500.0
@@ -820,7 +828,8 @@ func _configurar_imagens_e_estrelas() -> void:
 			"OverlayEscuro" + str(i + 1),
 			"HoverBrilho" + str(i + 1),
 			"FaixaEstrelas" + str(i + 1),
-			"Estrelas" + str(i + 1)
+			"Estrelas" + str(i + 1),
+			"Nivel" + str(i + 1)
 		]:
 			var n := card.find_child(nome_filho, false, false)
 			if n:
@@ -876,11 +885,11 @@ func _configurar_imagens_e_estrelas() -> void:
 		hbox.alignment = BoxContainer.ALIGNMENT_CENTER
 		Leve.constant(hbox, "separation", 3)
 
-		for s in range(3):
+		for s in range(MAX_ESTRELAS):
 			var lbl := Label.new()
 			lbl.text = "★"
 			lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			Leve.font_size(lbl, "font_size", 30)
+			Leve.font_size(lbl, "font_size", 28)
 			Leve.color(lbl, "font_outline_color", Color.BLACK)
 			Leve.constant(lbl, "outline_size", 6)
 
@@ -897,18 +906,45 @@ func _configurar_imagens_e_estrelas() -> void:
 
 		card.add_child(hbox)
 
-		var faixa_w: float = 120.0
+		var faixa_w: float = 150.0
 		var faixa_h: float = 42.0
 		faixa.position = Vector2(larg - faixa_w - 18.0, alt - faixa_h - 16.0)
 		faixa.size = Vector2(faixa_w, faixa_h)
 		hbox.position = faixa.position + Vector2(8.0, 0.0)
 		hbox.size = Vector2(faixa_w - 16.0, faixa_h)
 
+		# selo com o nome do nível, no canto de cima
+		var selo_estilo := faixa_estilo.duplicate() as StyleBoxFlat
+		selo_estilo.corner_radius_top_left = 18
+		selo_estilo.corner_radius_top_right = 18
+		selo_estilo.corner_radius_bottom_left = 18
+		selo_estilo.corner_radius_bottom_right = 18
+		var selo := Panel.new()
+		selo.name = "Nivel" + str(i + 1)
+		selo.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		Leve.stylebox(selo, "panel", selo_estilo)
+		selo.size = Vector2(150.0, 38.0)
+		selo.position = Vector2(larg - selo.size.x - 18.0, 16.0)
+		var nivel := Label.new()
+		nivel.text = NIVEIS[i]
+		nivel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		nivel.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		nivel.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		nivel.position = Vector2.ZERO
+		nivel.size = selo.size
+		Leve.font_size(nivel, "font_size", 24)
+		Leve.color(nivel, "font_color", cor_card.lerp(Color.WHITE, 0.25))
+		Leve.color(nivel, "font_outline_color", Color.BLACK)
+		Leve.constant(nivel, "outline_size", 6)
+		selo.add_child(nivel)
+		card.add_child(selo)
+
 		card.move_child(botoes[i], 0)
 		card.move_child(molde, 1)
 		card.move_child(nomes[i], 2)
 		card.move_child(faixa, 3)
 		card.move_child(hbox, 4)
+		card.move_child(selo, 5)
 
 		match i:
 			0: estrelas_1 = hbox
@@ -971,7 +1007,7 @@ func _configurar_textos() -> void:
 		var card: Panel = cards[i]
 		var nome: Label = nomes[i]
 		nome.position = Vector2(14.0, card.size.y - 66.0)
-		nome.size = Vector2(card.size.x - 150.0, 52.0)
+		nome.size = Vector2(card.size.x - 190.0, 52.0)
 		nome.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		nome.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		nome.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
