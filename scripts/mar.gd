@@ -472,6 +472,12 @@ const PROFUNDO_RAIO_MIN := 30.0 # px: de longe o alvo é pequeno; um mínimo jus
 const CHAO_TELA := 0.86         # o chão do mar no plano Z = 1 (fração da altura da tela)
 const COR_NEVOA_ALVO := Color(0.52, 0.80, 0.95)
 var _profundo: Node2D = null
+# cardume dourado (bônus): passa de tempos em tempos; tiro nele vale BONUS_CARDUME
+const BONUS_CARDUME := 150
+const Z_CARDUME := 1.0      # na frente das pedras (bem visível)
+var _cardume: MarCardumeDourado = null
+var _cardume_espera := 14.0
+var SOM_OURO_CARDUME: AudioStream = load("res://songs/ouro_ping.wav")
 # Efeitos da Rodada 17. load() e não preload(): o Godot 4.6 nunca descarrega
 # um script já carregado, e o que ele pré-carrega ficaria na memória.
 var TEX_CAVALO: Texture2D = load("res://sprites/mar_cavalo.png")
@@ -634,6 +640,7 @@ func _process(delta: float) -> void:
 	_atualizar_fx_explosao_bomba(delta)
 	_atualizar_movimento_aguavivas(delta)
 	_atualizar_bolhas_dos_objetos(delta)
+	_atualizar_cardume(delta)
 
 	fx_redraw_timer -= delta
 	if fx_redraw_timer <= 0.0:
@@ -4452,6 +4459,8 @@ func _processar_tiro_global(pos_global: Vector2, primeiro_tiro: bool = false) ->
 
 	if alvo_acertado != null:
 		_acertar_alvo(alvo_acertado, pos_global)
+	elif _acertar_cardume(pos_global):
+		pass
 	elif _acertar_pedra(pos_global):
 		_set_status("PEDRA!")
 	else:
@@ -5247,6 +5256,52 @@ func _acertar_alvo(alvo: Area2D, pos_impacto: Vector2 = Vector2.ZERO) -> void:
 	
 	
 	
+
+
+## Cardume dourado: na partida, de tempos em tempos um cardume de ouro
+## atravessa a água (scripts/mar_cardume_dourado.gd); só um por vez.
+func _atualizar_cardume(delta: float) -> void:
+	if _cardume != null and not is_instance_valid(_cardume):
+		_cardume = null
+	if _cardume != null:
+		if encerrado or not partida_iniciada:
+			_cardume.queue_free()
+			_cardume = null
+			return
+		_cardume.desloca = _profundo.paralaxe(Z_CARDUME) if _profundo != null else Vector2.ZERO
+		return
+	if not partida_iniciada or encerrado or alvos_root == null:
+		return
+	_cardume_espera -= delta
+	if _cardume_espera > 0.0:
+		return
+	_cardume_espera = randf_range(20.0, 30.0)
+	_cardume = MarCardumeDourado.new()
+	_cardume.name = "CardumeDourado"
+	_cardume.z_as_relative = false
+	_cardume.z_index = MarVida.z_desenho(Z_CARDUME)
+	alvos_root.add_child(_cardume)
+	_cardume.montar(get_viewport_rect().size, Z_CARDUME, 0.62)
+	Maquina.efeito(SOM_OURO_CARDUME, -14.0, 1.6)   # um tilintar avisa que ele chegou
+
+
+func _acertar_cardume(pos_global: Vector2) -> bool:
+	if _cardume == null or not is_instance_valid(_cardume) or alvos_root == null:
+		return false
+	if not _cardume.acertar(alvos_root.to_local(pos_global)):
+		return false
+	pontuacao_total += BONUS_CARDUME
+	total_acertos += 1
+	combo_hits_seguidos += 1
+	combo_timer_restante = janela_combo_seg
+	_mostrar_combo_hits()
+	_set_status("CARDUME DOURADO! +%d" % BONUS_CARDUME, "acerto")
+	_mostrar_pontos(pos_global, BONUS_CARDUME, true)
+	_flash_tela(Color(1.0, 0.85, 0.40, 0.16))
+	Maquina.efeito(SOM_OURO_CARDUME, -2.0, 1.15)
+	if som_bau_hit_stream != null:
+		_tocar_som(som_bau_hit_stream, -6.0, 1.25, inicio_bau_hit_seg)
+	return true
 
 
 func _remover_alvo(alvo: Area2D) -> void:

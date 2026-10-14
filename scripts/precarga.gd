@@ -140,6 +140,8 @@ const LISTA := {
 		"res://songs/bau_hit.wav",
 		"res://songs/pirate.mp3",
 		"res://sprites/mar_cavalo.png",
+		"res://sprites/mar_peixe_dourado.png",
+		"res://songs/ouro_ping.wav",
 		"res://sprites/fx_fumaca.png",
 		"res://sprites/fx_onda.png",
 		"res://sprites/fx_furo_areia.png",
