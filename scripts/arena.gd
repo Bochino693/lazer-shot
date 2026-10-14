@@ -176,6 +176,7 @@ var modo_fixo: bool = false               # rodada fixa (true) ou de memória
 var _rodada: int = 0                      # muda a cada rodada: corta as esperas da anterior
 var _fixa_nasceu: Array[int] = []         # ms em que cada lanterna da rodada fixa nasceu
 var _vivo: ArenaVivo = null               # vida do fundo e troca de arte
+const BONUS_LED := 50                      # estourar o LED do alto (volta a acender em 7 s)
 var _placar: Placar = null
  
  
@@ -833,6 +834,14 @@ func _tentar_atirar(pos_mouse: Vector2) -> void:
 	var alvo: Area2D = _detectar_alvo_no_ponto_visual(pos_mouse)
 
 	if alvo == null:
+		# o LED do alto é alvo de bônus (estoura; volta a acender depois)
+		if _vivo != null and _vivo.tiro_no_led(pos_mouse):
+			pontuacao += BONUS_LED
+			acertos += 1
+			AvisoTiro.pontos(self, pos_mouse, "+%d" % BONUS_LED, Color(1.0, 0.45, 0.35), Color(1.0, 0.9, 0.8, 0.6))
+			AvisoTiro.instrucao(self, "LED ESTOURADO! +%d" % BONUS_LED, Color(1.0, 0.72, 0.62))
+			_atualizar_hud()
+			return
 		_registrar_marca_laser_parede(pos_mouse)
 		_adicionar_chat_rodape("ERROU!", Color.RED)
 		_quebrar_seguidos()

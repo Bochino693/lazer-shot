@@ -17,6 +17,10 @@ extends Node2D
 ##                  em quando
 ##   ordem          faixa de 5 luzes (1 a 5 nas cores) embaixo dos furos;
 ##                  a próxima pulsa
+##   LED do alto    alvo de bônus (arena.gd): o tiro estoura a lâmpada do
+##                  giroflex (clarão, faíscas, cacos do vidro vermelho
+##                  caindo, zumbido elétrico); fica apagada soltando fumaça
+##                  uns segundos e volta piscando até acender
 ## Tudo com o Pincel (uma textura, poucos desenhos) e quase nada de cálculo.
 
 const SHADER := preload("res://shaders/fundo_vivo.gdshader")
@@ -29,9 +33,12 @@ const FONTE := preload("res://fonts/Exo2-ExtraBold.ttf")
 const SOM_VAPOR := preload("res://songs/arena_vapor.wav")
 const SOM_FAISCA := preload("res://songs/arena_faisca.wav")
 const SOM_TROCA := preload("res://songs/arena_troca.wav")
+var SOM_LED: AudioStream = load("res://songs/led_estoura.wav")
 
 # pontos em px de sprites/arena.png (1024x1536)
 const GIROFLEX := Vector2(510, 190)
+const LED_CAIXA := Rect2(484, 177, 54, 25)     # a caixa da luz
+const LED_APAGADO := 7.0                       # s apagado depois do tiro
 const ARANDELAS := [Vector2(44, 762), Vector2(978, 762)]
 const VAPOR := [Vector2(150, 748), Vector2(804, 944), Vector2(842, 1128), Vector2(118, 1180)]
 const CAIXA_ELETRICA := Vector2(842, 956)
@@ -58,6 +65,10 @@ var _giro_cor := Color(1, 0.1, 0.05)
 var _giro_arco := false     # vitória: gira nas 5 cores
 var _pisca := 0.0
 var _pisca_cor := Color.WHITE
+var _led := 0.0             # s até a luz do alto voltar (0 = acesa)
+var _led_clarao := 0.0
+var _led_fumaca := 0.0
+var _cacos_led: Array[Dictionary] = []
 var _varre := -1.0          # 0..1 linha de varredura descendo
 var _letreiro_t := -1.0
 var _letreiro_txt := ""
@@ -168,6 +179,38 @@ func vitoria() -> void:
 		_soltar_faiscas(_px(GIROFLEX) + Vector2(randf_range(-40, 40), 10), 10)
 
 
+## Tiro no LED do alto: estoura (devolve true se pegou nele aceso).
+func tiro_no_led(pos: Vector2) -> bool:
+	if fundo == null or _led > 0.0:
+		return false
+	var p := (pos - fundo.position) / fundo.scale
+	if not LED_CAIXA.grow(16.0).has_point(p):
+		return false
+	_led = LED_APAGADO
+	_led_clarao = 1.0
+	_led_fumaca = 0.0
+	var g := _px(GIROFLEX)
+	var esc := fundo.scale.x
+	_soltar_faiscas(g, 26)
+	for i in 14:
+		_cacos_led.append({"pos": g + Vector2(randf_range(-22.0, 22.0), randf_range(-6.0, 8.0)) * esc,
+			"vel": Vector2(randf_range(-150.0, 150.0), randf_range(-190.0, -20.0)), "rot": randf() * TAU,
+			"giro": randf_range(-14.0, 14.0), "tam": randf_range(2.5, 5.5) * esc, "t": 0.0})
+	Maquina.efeito(SOM_LED, -4.0, randf_range(0.95, 1.05))
+	_efeitos.queue_redraw()
+	return true
+
+
+## Quanto a luz do alto está acesa agora (0 apagada .. 1; pisca ao voltar).
+func _led_aceso() -> float:
+	if _led <= 0.0:
+		return 1.0
+	if _led < 1.4:
+		# volta piscando (cada vez mais acesa) até firmar
+		return 1.0 if fmod(_led * 6.5, 1.0) > 0.35 + 0.4 * (_led / 1.4) else 0.0
+	return 0.0
+
+
 # ───────────────────────────────────────────── quadro a quadro
 func _px(p: Vector2) -> Vector2:
 	if fundo == null:
@@ -197,6 +240,8 @@ func _process(delta: float) -> void:
 
 	_giro = maxf(0.0, _giro - delta)
 	_pisca = maxf(0.0, _pisca - delta * 2.6)
+	if _led > 0.0 or _led_clarao > 0.0 or not _cacos_led.is_empty():
+		_animar_led(delta)
 	_erro = maxf(0.0, _erro - delta * 1.6)
 	if _varre >= 0.0:
 		_varre += delta / 0.9
@@ -256,6 +301,32 @@ func _process(delta: float) -> void:
 	_luz.queue_redraw()
 
 
+func _animar_led(delta: float) -> void:
+	var antes := _led
+	_led = maxf(0.0, _led - delta)
+	_led_clarao = maxf(0.0, _led_clarao - delta * 2.4)
+	if _led > 1.4:
+		# a lâmpada queimada solta fumaça e de vez em quando estala
+		_led_fumaca -= delta
+		if _led_fumaca <= 0.0:
+			_led_fumaca = randf_range(0.25, 0.5)
+			var g := _px(GIROFLEX)
+			_baforadas.append({"pos": g + Vector2(randf_range(-10.0, 10.0), -4.0), "vel": Vector2(randf_range(-12.0, 12.0), randf_range(-40.0, -22.0)),
+				"t": 0.0, "vida": randf_range(1.0, 1.6), "tam": randf_range(8.0, 14.0)})
+			if randf() < 0.18:
+				_soltar_faiscas(g, randi_range(3, 6))
+	if antes >= 1.4 and _led < 1.4:
+		Maquina.efeito(SOM_FAISCA, -14.0, 1.3)        # religando
+	for c in _cacos_led:
+		c["t"] += delta
+		c["vel"] += Vector2(0.0, 900.0) * delta
+		c["pos"] += c["vel"] * delta
+		c["rot"] += c["giro"] * delta
+	while not _cacos_led.is_empty() and _cacos_led[0]["t"] > 1.4:
+		_cacos_led.pop_front()
+	_efeitos.queue_redraw()
+
+
 func _soltar_faiscas(de: Vector2, n: int) -> void:
 	for i in n:
 		_faiscas.append({"pos": de, "vel": Vector2(randf_range(-160.0, 160.0), randf_range(-260.0, -40.0)), "t": 0.0, "vida": randf_range(0.4, 0.9)})
@@ -265,6 +336,19 @@ func _soltar_faiscas(de: Vector2, n: int) -> void:
 
 # ───────────────────────────────────────────── desenho
 func _desenhar_efeitos() -> void:
+	# a luz do alto queimada: vidro escuro, trincado, e a parede sem o brilho
+	if _led_aceso() < 0.5 and fundo != null:
+		var esc := fundo.scale.x
+		var g := _px(GIROFLEX)
+		Pincel.brilho(_efeitos, g + Vector2(0.0, 8.0 * esc), 78.0 * esc, Color(0.0, 0.0, 0.0, 0.62))
+		Pincel.brilho(_efeitos, g + Vector2(0.0, 34.0 * esc), 92.0 * esc, Color(0.0, 0.0, 0.0, 0.5))
+		var r := Rect2(_px(LED_CAIXA.position + Vector2(3, 3)), (LED_CAIXA.size - Vector2(6, 6)) * esc)
+		_efeitos.draw_rect(r, Color(0.10, 0.03, 0.03, 0.96))
+		_efeitos.draw_rect(Rect2(r.position, Vector2(r.size.x, r.size.y * 0.35)), Color(0.35, 0.12, 0.12, 0.35))
+		var c := r.get_center() + Vector2(-4.0, 1.0) * esc
+		for k in 5:
+			var ang := k * 1.3 + 0.4
+			_efeitos.draw_line(c, c + Vector2(cos(ang), sin(ang) * 0.5) * r.size.x * 0.42, Color(0.75, 0.62, 0.62, 0.55), 1.0)
 	for b in _baforadas:
 		var t: float = b["t"]
 		if t <= 0.0:
@@ -303,8 +387,18 @@ func _desenhar_luz() -> void:
 	var cor_g := Color(0.75, 0.3, 1.0) if _fixo else Color(1.0, 0.12, 0.06)
 	if _pisca > 0.0:
 		cor_g = cor_g.lerp(_pisca_cor, _pisca)
-	Pincel.brilho(_luz, g, (34.0 + 26.0 * _pisca + 10.0 * som.y) * esc, Color(cor_g, 0.35 + 0.4 * _pisca))
-	if _giro > 0.0:
+	var aceso := _led_aceso()
+	if aceso > 0.0:
+		Pincel.brilho(_luz, g, (34.0 + 26.0 * _pisca + 10.0 * som.y) * esc, Color(cor_g, (0.35 + 0.4 * _pisca) * aceso))
+	if _led_clarao > 0.0:
+		var kc := 1.0 - _led_clarao
+		Pincel.brilho(_luz, g, (60.0 + 260.0 * kc) * esc, Color(1.0, 0.85, 0.75, 0.9 * _led_clarao))
+		Pincel.brilho(_luz, g, (30.0 + 60.0 * kc) * esc, Color(1.0, 1.0, 1.0, _led_clarao))
+	for c4 in _cacos_led:
+		var kk: float = c4["t"] / 1.4
+		var dc: Vector2 = Vector2(cos(c4["rot"]), sin(c4["rot"])) * float(c4["tam"])
+		Pincel.linha(_luz, c4["pos"] - dc, c4["pos"] + dc, Color(1.0, 0.25, 0.18, 0.9 * (1.0 - kk)), 2.0)
+	if _giro > 0.0 and aceso > 0.0:
 		var forca := minf(1.0, _giro / 0.4)
 		for k in 2:
 			var ang := _t * 7.5 + k * PI
