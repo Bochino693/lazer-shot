@@ -55,7 +55,7 @@ Ele abre o jogo, espera 40 s e salva `build/android/LOGCAT-TVBOX.txt` e a
 pasta `build/android/caixa_preta`. Com `-Instalar`, o mesmo acontece logo
 depois de instalar o APK novo.
 
-A versão do APK aparece em Configurações > Apps da TV Box (1.15.0, código 17).
+A versão do APK aparece em Configurações > Apps da TV Box (1.16.0, código 18).
 
 ## Tela em pé na TV Box
 
@@ -908,6 +908,53 @@ aconteceu e o astro muda de humor:
   arma na recarga.
 
 APK 1.15.0 (código 17).
+
+## Rodada 16: pontas de ouro na própria pedra e o Mar com profundidade (2,5D)
+
+**Pontas das pirâmides** (`shaders/deserto_fundo.gdshader`,
+`scripts/deserto_vivo.gd`, `tools/gerar_egito.py`). As pontas de ouro não são
+mais uma peça desenhada por cima: o ouro é pintado dentro do próprio shader
+do fundo, pixel a pixel na grade da foto. Mesma resolução, mesma luz, sombra
+e névoa da pirâmide, e o brilho do cristal e da batida passa por elas igual
+passa pela pedra. A máscara segue a ponta que já estava pintada na foto (a
+borda de baixo quebrada no lado aceso). O ouro reage ao jogo:
+- combo de 3 deixa o ouro mais quente; combo de 6, aceso, com as quinas
+  brilhando;
+- cada acerto passa um reflexo correndo de uma pirâmide para a outra;
+- erros seguidos apagam o ouro; acertar o astro errado dá uma apagada rápida;
+- tiro no ouro continua dando clarão, anel e faíscas.
+`shaders/egito_pontas.gdshader` saiu (não é mais usado).
+
+**Mar em 2,5D** (`scripts/mar.gd`, `scripts/mar_profundo.gd`,
+`scripts/mar_vida.gd`):
+- **Alvos que vêm do fundo:** parte das águas-vivas (35%), vasos (35%),
+  baús (40%) e bombas (25%) nasce pequenininha na porta do templo, lá no
+  fundo, e vem vindo até perto, crescendo e saindo da névoa azul da água
+  (perspectiva de verdade: devagar longe, rápido perto). Passa um pouco do
+  plano dos outros alvos e some, como quem passou por nós. As bolhas deles
+  têm o tamanho deles.
+- **Acertar de longe vale o dobro** ("DE LONGE!"). Longe o alvo é pequeno,
+  então a mira ganha um mínimo justo em volta dele (a bomba não ganha).
+  Quando um alvo está na frente de outro, o tiro pega o da frente.
+- **Paralaxe com a mira:** o fundo anda um pouco para o lado da mira e
+  balança de leve como debaixo d'água; a frente anda mais e para o outro
+  lado. Os alvos ficam parados na tela (a mira continua justa).
+- **Camada da frente** (`tools/gerar_mar_frente.py`): touceiras de alga
+  escura, fora de foco, nos cantos de baixo, balançando; bolhas grandes
+  subindo devagar; e de vez em quando a sombra de um peixe grande passando
+  bem perto, meio transparente.
+- **Navio atrás do templo:** o navio agora afunda longe, atrás do templo de
+  Poseidon e do poneglifo pequeno (menor e tingido pela água, como o
+  templo). Esse pedaço do fundo é desenhado de novo por cima dele, recortado
+  por uma máscara (`sprites/mar_frente_navio_mascara.png`, gerada por
+  `tools/gerar_mar.py` com a forma exata do templo, da estátua e das pedras);
+  só os mastros aparecem por cima. A areia, a água e as tábuas da batida
+  também ficam atrás, e o tremor da tela é menor (a batida é longe).
+  `mar_navio_pouso.png` saiu.
+- Custo medido: cerca de 8 chamadas de desenho a mais por quadro na partida
+  (51 → 59), sem shader novo pesado e sem aumento de processamento.
+
+APK 1.16.0 (código 18).
 
 ## Para testar no PC como se fosse a TV Box
 

@@ -21,8 +21,10 @@ extends Node2D
 ##   águias              planando ao fundo em térmicas, batendo as asas de vez
 ##                       em quando, inclinando nas curvas, gritando (eco do
 ##                       vale); de noite silhuetas, às vezes cruzando a lua
-##   pontas de ouro      topo das 3 pirâmides: ouro quente ao sol, prateado
-##                       ao luar, reflexo correndo de uma para outra
+##   pontas de ouro      topo das 3 pirâmides, pintado dentro do próprio
+##                       fundo (mesma resolução e luz da pedra): ouro ao sol,
+##                       claro ao luar; o combo acende, os erros apagam, cada
+##                       acerto passa um reflexo de uma para outra
 ##   diamante            arco-íris nas arestas de dia, vermelho de noite
 ##   brilhos             estrelas que piscam no diamante, nas pontas e no
 ##                       disco; estrelas no céu e estrela cadente de noite
@@ -58,7 +60,6 @@ var CRISTAL: Texture2D = load("res://sprites/egito_cristal_mascara.png")
 var ESTRELA: Texture2D = load("res://sprites/egito_estrela.png")
 const SHADER_FUNDO := preload("res://shaders/deserto_fundo.gdshader")
 const SHADER_RAIOS := preload("res://shaders/egito_raios.gdshader")
-const SHADER_PONTAS := preload("res://shaders/egito_pontas.gdshader")
 const SHADER_CRISTAL := preload("res://shaders/egito_cristal.gdshader")
 
 # Mesmos números de tools/gerar_egito.py.
@@ -113,9 +114,10 @@ var SOM_AREIA: AudioStream = load("res://songs/areia_tiro.wav")
 const Pincel := preload("res://scripts/pincel.gd")
 var POLI_CRISTAL := PackedVector2Array([Vector2(506, 626), Vector2(546, 668), Vector2(560, 720), Vector2(558, 900),
 	Vector2(536, 968), Vector2(478, 968), Vector2(454, 900), Vector2(452, 720), Vector2(466, 668)])
-var OURO: Array[PackedVector2Array] = [PackedVector2Array([Vector2(508, 444), Vector2(450, 522), Vector2(566, 522)]),
-	PackedVector2Array([Vector2(229, 514), Vector2(190, 580), Vector2(268, 580)]),
-	PackedVector2Array([Vector2(776, 514), Vector2(736, 580), Vector2(814, 580)])]
+# pontas de ouro = a ponta pintada de cada pirâmide (tools/gerar_egito.py)
+var OURO: Array[PackedVector2Array] = [PackedVector2Array([Vector2(509, 447), Vector2(449, 524), Vector2(509, 501), Vector2(546, 497)]),
+	PackedVector2Array([Vector2(229, 519), Vector2(170, 580), Vector2(229, 558), Vector2(256, 554)]),
+	PackedVector2Array([Vector2(774, 519), Vector2(721, 582), Vector2(774, 560), Vector2(806, 556)])]
 var PIRAMIDES: Array[PackedVector2Array] = [PackedVector2Array([Vector2(508, 444), Vector2(298, 742), Vector2(718, 742)]),
 	PackedVector2Array([Vector2(229, 514), Vector2(88, 706), Vector2(362, 706)]),
 	PackedVector2Array([Vector2(776, 514), Vector2(640, 706), Vector2(916, 706)])]
@@ -153,7 +155,10 @@ var _reacao := ""              # humor curto por cima do de base
 var _reacao_t := 0.0
 var _espiar := Vector2.INF     # ponto (tela) que o olho espia por um instante
 var _espiar_t := 0.0
-var _pontas: Sprite2D
+# pontas de ouro: humor (combo acende, erro apaga) e o reflexo de cada acerto
+var _ouro_brilho := 0.0
+var _ouro_pulso := 0.0         # pulso curto (acerto +, astro errado -)
+var _ouro_varre := -1.0
 var _cristal: Sprite2D
 var _faiscas: CPUParticles2D
 var _poeira: CPUParticles2D
@@ -208,7 +213,15 @@ func _init() -> void:
 	_disco_lua = _criar_astro(TEX_LUA, ASTRO_LUA, CENTRO_LUA)
 	_criar_aguias()
 
-	_pontas = _sprite_2x(PONTAS, PONTAS_CAIXA.position, SHADER_PONTAS)
+	# pontas de ouro: pintadas dentro do próprio fundo, pixel a pixel na grade
+	# da foto (mesma resolução, luz e brilho da pedra); só o ouro reage ao jogo
+	var caixa := Vector4(PONTAS_CAIXA.position.x / IMG.x, PONTAS_CAIXA.position.y / IMG.y,
+		PONTAS_CAIXA.size.x / IMG.x, PONTAS_CAIXA.size.y / IMG.y)
+	for par in [[_fundo_sol, 0.0], [_fundo_lua, 1.0]]:
+		var mf := (par[0] as Sprite2D).material as ShaderMaterial
+		mf.set_shader_parameter("pontas", PONTAS)
+		mf.set_shader_parameter("pontas_caixa", caixa)
+		mf.set_shader_parameter("ouro_noite", par[1])
 	_cristal = _sprite_2x(CRISTAL, CRISTAL_CAIXA.position, SHADER_CRISTAL)
 	_criar_cristal_vivo()
 
@@ -597,7 +610,6 @@ func _definir_noite(v: float) -> void:
 		var no: CanvasItem = par[0]
 		no.visible = par[1] > 0.001
 		no.modulate.a = par[1]
-	(_pontas.material as ShaderMaterial).set_shader_parameter("noite", _noite)
 	(_cristal.material as ShaderMaterial).set_shader_parameter("noite", _noite)
 	_ceu_noite.visible = _noite > 0.01
 	_faiscas.color = Color(1.0, 0.80, 0.42).lerp(Color(1.0, 0.42, 0.40), _noite)
@@ -635,10 +647,9 @@ func _process(delta: float) -> void:
 	for o in _olhos:
 		(o["disco"] as Sprite2D).self_modulate = Color(luz, luz, luz, 1.0)
 		(o["halo"] as Sprite2D).self_modulate = Color(luz, luz, luz, 1.0)
-	for no: CanvasItem in [_pontas, _cristal]:
-		var m2 := no.material as ShaderMaterial
-		m2.set_shader_parameter("grave", som.x)
-		m2.set_shader_parameter("batida", som.y)
+	var m2 := _cristal.material as ShaderMaterial
+	m2.set_shader_parameter("grave", som.x)
+	m2.set_shader_parameter("batida", som.y)
 	_faiscas.speed_scale = 1.0 + som.y * 1.3
 
 	_animar_olhos(delta)
@@ -663,6 +674,8 @@ func evento(nome: String, pos_global: Vector2 = Vector2.INF, valor: int = 0) -> 
 			_erros_recentes = maxf(0.0, _erros_recentes - 0.6)
 			if _combo < 3:
 				_reagir("feliz", 0.5)
+			_ouro_varre = 0.0
+			_ouro_pulso = 0.35
 		"erro":
 			_combo = 0
 			_erros_recentes += 1.0
@@ -672,6 +685,7 @@ func evento(nome: String, pos_global: Vector2 = Vector2.INF, valor: int = 0) -> 
 			_erros_recentes += 1.0
 			_reagir("bravo", 1.4)
 			_espiar_ponto(pos_global, 0.9)
+			_ouro_pulso = -0.45
 		"combo_quebrou":
 			_combo = 0
 		"tempo_final":
@@ -687,6 +701,35 @@ func evento(nome: String, pos_global: Vector2 = Vector2.INF, valor: int = 0) -> 
 		"recarga":
 			# olha para a arma (embaixo) num instante
 			_espiar_ponto(get_viewport().get_visible_rect().size * Vector2(0.5, 1.0), 0.5)
+
+
+## As pontas de ouro acompanham o jogo: combo deixa o ouro quente e vivo,
+## erros seguidos o apagam um pouco, cada acerto passa um reflexo pelas três
+## pirâmides e acertar o astro errado dá uma apagada rápida.
+func _animar_ouro(delta: float) -> void:
+	var alvo := 0.0
+	if _fim:
+		alvo = -0.2
+	elif _erros_recentes >= 2.5:
+		alvo = -0.35
+	elif _combo >= 6:
+		alvo = 0.7
+	elif _combo >= 3:
+		alvo = 0.35
+	_ouro_brilho = lerpf(_ouro_brilho, alvo, 1.0 - exp(-delta * 3.0))
+	_ouro_pulso = move_toward(_ouro_pulso, 0.0, delta * 0.9)
+	if _ouro_varre >= 0.0:
+		_ouro_varre += delta / 0.8
+		if _ouro_varre > 1.0:
+			_ouro_varre = -1.0
+	_ouro("ouro_brilho", clampf(_ouro_brilho + _ouro_pulso, -0.6, 1.0))
+	_ouro("ouro_varre", _ouro_varre)
+
+
+## Parâmetro do ouro nos dois fundos (o sol e a lua cruzam pela opacidade).
+func _ouro(nome: StringName, valor: Variant) -> void:
+	(_fundo_sol.material as ShaderMaterial).set_shader_parameter(nome, valor)
+	(_fundo_lua.material as ShaderMaterial).set_shader_parameter(nome, valor)
 
 
 func _reagir(nome: String, dur: float) -> void:
@@ -735,6 +778,7 @@ func _animar_olhos(delta: float) -> void:
 	if _espiar_t > 0.0:
 		_espiar_t -= delta
 	var h: Dictionary = HUMORES[_reacao if _reacao != "" else _humor_base()]
+	_animar_ouro(delta)
 	for i in _olhos.size():
 		var o: Dictionary = _olhos[i]
 		var visivel: bool = (_disco_sol if i == 0 else _disco_lua).visible
@@ -1048,12 +1092,12 @@ func _atualizar_tiros_fundo(delta: float) -> void:
 		if _onda_quebra > 0.8:
 			_onda_quebra = -1.0
 
-	# toque no ouro (shader das pontas)
+	# toque no ouro (pontas, no shader do fundo)
 	if _toque_ouro.z >= 0.0:
 		_toque_ouro.z += delta
 		if _toque_ouro.z > 0.7:
 			_toque_ouro.z = -1.0
-		(_pontas.material as ShaderMaterial).set_shader_parameter("toque", _toque_ouro)
+		_ouro("ouro_toque", _toque_ouro)
 
 	for c in _cacos:
 		c["t"] += delta

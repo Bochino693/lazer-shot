@@ -33,13 +33,13 @@ const SHADERS := [
 	preload("res://shaders/bar_sol.gdshader"),
 	preload("res://shaders/deserto_fundo.gdshader"),
 	preload("res://shaders/egito_cristal.gdshader"),
-	preload("res://shaders/egito_pontas.gdshader"),
 	preload("res://shaders/egito_raios.gdshader"),
 	preload("res://shaders/fundo_vivo.gdshader"),
 	preload("res://shaders/mar_baleia.gdshader"),
 	preload("res://shaders/mar_cardume.gdshader"),
 	preload("res://shaders/mar_cascata.gdshader"),
 	preload("res://shaders/mar_pedra.gdshader"),
+	preload("res://shaders/mar_recorte.gdshader"),
 ]
 ## Números e sinais que aparecem depois (placar, contagem, pontos).
 const SINAIS := " 0123456789:+-%/!?.,x×"

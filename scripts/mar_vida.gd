@@ -12,8 +12,10 @@ extends Node2D
 #                dele; a água cede: redemoinhos sobem pelo casco, bolhas saem
 #                das vergas e do fundo, tábuas do fundo se soltam; bate no
 #                fundo: colunas de areia e água jogadas para cima, jatos nas
-#                pontas do casco, tábuas do fundo voando, farpas e bolhas, e o
-#                cenário volta a ser exatamente a foto
+#                pontas do casco, tábuas do fundo voando, farpas e bolhas.
+#                Ele afunda longe, ATRÁS do templo e do poneglifo pequeno
+#                (menor e um pouco enevoado): esse pedaço do fundo é desenhado
+#                de novo por cima dele (máscara de tools/gerar_mar.py)
 #   pedras       as escritas acendem de cima para baixo; tiro na pedra solta
 #                lascas e deixa o buraco com rachaduras no lugar
 #   templo       ruína de Atlântida ao fundo (pintada no fundo pelo
@@ -29,11 +31,12 @@ const SHADER_CASCATA := "res://shaders/mar_cascata.gdshader"
 const SHADER_BALEIA := "res://shaders/mar_baleia.gdshader"
 const SHADER_CARDUME := preload("res://shaders/mar_cardume.gdshader")
 const SHADER_PEDRA := preload("res://shaders/mar_pedra.gdshader")
+const SHADER_RECORTE := preload("res://shaders/mar_recorte.gdshader")
 # load() e não preload(): o Godot 4.6 nunca descarrega um script já carregado,
 # e o que ele pré-carrega ficava na memória depois da primeira partida.
 var PEIXE: Texture2D = load("res://sprites/mar_peixe.png")
 var NAVIO: Texture2D = load("res://sprites/mar_navio.png")
-var NAVIO_POUSO: Texture2D = load("res://sprites/mar_navio_pouso.png")
+var MASCARA_FRENTE: Texture2D = load("res://sprites/mar_frente_navio_mascara.png")
 var BOLHA: Texture2D = load("res://sprites/mar_bolha.png")
 var LODO: Texture2D = load("res://sprites/mar_lodo.png")
 var FARPA: Texture2D = load("res://sprites/mar_farpa.png")
@@ -77,6 +80,15 @@ const NAVIO_CANTO := Vector2(176, 429)
 const NAVIO_PIVO := Vector2(370, 905)
 const NAVIO_QUEDA := 4.2
 const NAVIO_ALTURA := 1000.0
+# Onde ele afunda: longe, atrás do templo (o casco fica escondido atrás do
+# templo e do poneglifo pequeno; os mastros aparecem por cima), menor e
+# tingido pela água como o templo.
+const NAVIO_LONGE := Vector2(380, 768)
+const NAVIO_ESCALA := 0.70
+const NAVIO_NEVOA := Color(0.80, 0.91, 1.0, 0.96)
+# O que fica na frente dele (tools/gerar_mar.py, mar_frente_navio_mascara.png)
+const FRENTE_CANTO := Vector2(195, 530)
+const FRENTE_TAM := Vector2(430, 381)
 # Pontos no alto do casco, mastros e vergas (px do recorte): de onde sai o
 # rastro de bolhas enquanto ele afunda (tools/gerar_mar.py).
 const NAVIO_RASTRO := [Vector2(20, 110), Vector2(39, 132), Vector2(44, 106), Vector2(46, 106), Vector2(53, 98), Vector2(55, 275), Vector2(60, 95), Vector2(60, 146), Vector2(90, 85), Vector2(99, 402), Vector2(119, 176), Vector2(129, 108), Vector2(150, 277), Vector2(154, 396), Vector2(158, 312), Vector2(164, 55), Vector2(200, 396), Vector2(202, 151), Vector2(202, 315), Vector2(209, 28), Vector2(209, 393), Vector2(217, 138), Vector2(226, 101), Vector2(227, 294), Vector2(232, 338), Vector2(233, 27), Vector2(240, 118), Vector2(241, 88), Vector2(250, 63), Vector2(251, 278), Vector2(256, 62), Vector2(256, 90), Vector2(256, 175), Vector2(257, 157), Vector2(267, 65), Vector2(269, 66), Vector2(278, 341), Vector2(284, 338), Vector2(291, 315), Vector2(292, 327), Vector2(294, 311), Vector2(294, 312), Vector2(295, 319), Vector2(300, 42), Vector2(300, 316), Vector2(307, 27), Vector2(313, 66), Vector2(357, 349)]
@@ -97,7 +109,7 @@ var _poeira_pedra: CPUParticles2D = null
 var _bolhas_pedra: CPUParticles2D = null
 
 var _navio: Sprite2D = null
-var _navio_pouso: Sprite2D = null
+var _frente: Sprite2D = null           # templo e poneglifo pequeno por cima do navio
 var _navio_estado := ""          # "" fora, "caindo", "pousado", "fim"
 var _navio_t := 0.0
 var _rastro: CPUParticles2D = null      # bolhas saindo das vergas enquanto afunda
@@ -117,17 +129,20 @@ func _ready() -> void:
 	_criar_baleias()
 	_criar_templo()
 	_criar_navio()
+	_criar_frente_do_navio()
 	_criar_pedras()
 	_criar_efeitos()
 
 
 var _templo_luz: Sprite2D = null
 var _templo_miolo: Sprite2D = null
+var _templo_pontos: CPUParticles2D = null
 var _templo_t := 0.0
 
 
-## Luz de cristal na porta do templo (atrás do navio): halo que respira com
-## a música e pontinhos de luz subindo devagar.
+## Luz de cristal na porta do templo: halo que respira com a música e
+## pontinhos de luz subindo devagar (vai para cima do recorte do templo que
+## fica na frente do navio).
 func _criar_templo() -> void:
 	var soma := CanvasItemMaterial.new()
 	soma.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
@@ -165,6 +180,7 @@ func _criar_templo() -> void:
 	p.color_ramp = _rampa(Color(0.6, 1.0, 1.0), 0.8)
 	p.material = soma
 	add_child(p)
+	_templo_pontos = p
 
 
 func _animar_templo(delta: float) -> void:
@@ -351,7 +367,8 @@ func _criar_navio() -> void:
 	_navio.texture = NAVIO
 	_navio.centered = false
 	_navio.offset = -(NAVIO_PIVO - NAVIO_CANTO)
-	_navio.position = NAVIO_PIVO
+	_navio.position = NAVIO_LONGE
+	_navio.scale = Vector2.ONE * NAVIO_ESCALA
 	_navio.visible = false
 	add_child(_navio)
 
@@ -436,14 +453,38 @@ func _criar_navio() -> void:
 	_bolhas_casco.color_ramp = _rampa(Color(0.88, 0.96, 1.0), 0.9)
 	_navio.add_child(_bolhas_casco)
 
-	# a foto original na caixa do navio: entra quando ele pousa
-	_navio_pouso = Sprite2D.new()
-	_navio_pouso.name = "NavioPousado"
-	_navio_pouso.texture = NAVIO_POUSO
-	_navio_pouso.centered = false
-	_navio_pouso.position = NAVIO_CANTO
-	_navio_pouso.visible = false
-	add_child(_navio_pouso)
+
+## O templo, o Poseidon e o poneglifo pequeno (com a ilha de pedras na frente
+## dele) desenhados de novo por cima do navio: o mesmo fundo, recortado pela
+## máscara. A luz da porta do templo sobe para cima do recorte.
+func _criar_frente_do_navio() -> void:
+	var fundo := get_parent() as Sprite2D
+	if fundo == null or fundo.texture == null:
+		return
+	var tex_tam := fundo.texture.get_size()
+	_frente = Sprite2D.new()
+	_frente.name = "FrenteDoNavio"
+	_frente.texture = fundo.texture
+	_frente.centered = false
+	_frente.region_enabled = true
+	_frente.region_rect = Rect2(FRENTE_CANTO, FRENTE_TAM)
+	_frente.position = FRENTE_CANTO
+	var mat := ShaderMaterial.new()
+	mat.shader = SHADER_RECORTE
+	mat.set_shader_parameter("mascara", MASCARA_FRENTE)
+	mat.set_shader_parameter("regiao", Vector4(FRENTE_CANTO.x / tex_tam.x, FRENTE_CANTO.y / tex_tam.y,
+		FRENTE_TAM.x / tex_tam.x, FRENTE_TAM.y / tex_tam.y))
+	_frente.material = mat
+	add_child(_frente)
+	for no: Node in [_templo_luz, _templo_miolo, _templo_pontos]:
+		if no != null:
+			move_child(no, -1)
+
+
+## Ponto do navio pousado (px da caixa original do navio na foto) levado para
+## onde ele afunda agora (longe, menor).
+func _no_longe(p: Vector2) -> Vector2:
+	return NAVIO_LONGE + (p - NAVIO_PIVO) * NAVIO_ESCALA
 
 
 ## Começa a queda (a cena chama aos 9 s de partida). Só uma vez.
@@ -453,8 +494,8 @@ func cair_navio() -> void:
 	_navio_estado = "caindo"
 	_navio_t = 0.0
 	_navio.visible = true
-	_navio.modulate = Color(1, 1, 1, 1)
-	_navio.position = NAVIO_PIVO - Vector2(0, NAVIO_ALTURA)
+	_navio.modulate = NAVIO_NEVOA
+	_navio.position = NAVIO_LONGE - Vector2(0, NAVIO_ALTURA)
 	_soltas = 0
 	_rastro.emitting = true
 	_esteira.emitting = true
@@ -473,30 +514,26 @@ func _animar_navio(delta: float) -> void:
 		var f_fim := NAVIO_QUEDA - tau * (1.0 - exp(-NAVIO_QUEDA / tau))
 		var desce := clampf(f / f_fim, 0.0, 1.0)
 		var resta := 1.0 - k
-		_navio.position = NAVIO_PIVO - Vector2(24.0 * resta * sin(_navio_t * 0.9 + 0.4), NAVIO_ALTURA * (1.0 - desce))
+		_navio.position = NAVIO_LONGE - Vector2(24.0 * NAVIO_ESCALA * resta * sin(_navio_t * 0.9 + 0.4), NAVIO_ALTURA * (1.0 - desce))
 		_navio.rotation = deg_to_rad(5.5) * resta + deg_to_rad(2.2) * sin(_navio_t * 1.45) * resta
 		# tábuas do fundo do casco se soltando na descida (ficam para trás)
 		if _soltas < 4 and _navio_t > 0.9 + _soltas * 0.75:
 			_soltas += 1
 			var ponto: Vector2 = NAVIO_CASCO[randi() % NAVIO_CASCO.size()] + Vector2(randf_range(-10, 10), randf_range(-16, -4))
-			var l := _soltar_lasca(_navio.transform * (ponto - (NAVIO_PIVO - NAVIO_CANTO)), randf_range(9.0, 14.0), true, NAVIO, ponto, true)
-			l["vel"] = Vector2(randf_range(-50.0, 50.0), randf_range(20.0, 60.0))
+			var l := _soltar_lasca(_navio.transform * (ponto - (NAVIO_PIVO - NAVIO_CANTO)), randf_range(9.0, 14.0) * NAVIO_ESCALA, true, NAVIO, ponto, true, true)
+			l["vel"] = Vector2(randf_range(-50.0, 50.0), randf_range(20.0, 60.0)) * NAVIO_ESCALA
 			l["vida"] = randf_range(2.0, 2.6)
 		if k >= 1.0:
 			_pousar()
 	elif _navio_estado == "pousado":
 		# assenta: afunda um pouco na areia, volta e para; o balanço morre
 		var t := _navio_t
-		_navio.position = NAVIO_PIVO + Vector2(0, 5.0 * exp(-t * 4.0) * sin(t * 9.0 + 0.6))
+		_navio.position = NAVIO_LONGE + Vector2(0, 5.0 * NAVIO_ESCALA * exp(-t * 4.0) * sin(t * 9.0 + 0.6))
 		_navio.rotation = deg_to_rad(1.6) * exp(-t * 3.0) * cos(t * 7.0)
-		if t > 0.35 and not _navio_pouso.visible:
-			_navio_pouso.visible = true
-			_navio_pouso.modulate.a = 0.0
-		if _navio_pouso.visible:
-			_navio_pouso.modulate.a = clampf((t - 0.35) / 0.9, 0.0, 1.0)
-			if _navio_pouso.modulate.a >= 1.0:
-				_navio.visible = false
-				_navio_estado = "fim"
+		if t > 2.0:
+			_navio.position = NAVIO_LONGE
+			_navio.rotation = 0.0
+			_navio_estado = "fim"
 
 
 func _pousar() -> void:
@@ -512,9 +549,9 @@ func _pousar() -> void:
 	# navio): voam para cima e para os lados, giram e afundam devagar
 	for i in 14:
 		var ponto: Vector2 = NAVIO_CASCO[i % NAVIO_CASCO.size()] + Vector2(randf_range(-16, 16), randf_range(-22, -2))
-		var l := _soltar_lasca(NAVIO_CANTO + ponto, randf_range(12.0, 21.0), true, NAVIO, ponto, true)
+		var l := _soltar_lasca(_no_longe(NAVIO_CANTO + ponto), randf_range(12.0, 21.0) * NAVIO_ESCALA, true, NAVIO, ponto, true, true)
 		var lado := (ponto.x - 230.0) / 160.0
-		l["vel"] = Vector2(lado * randf_range(120.0, 260.0) + randf_range(-60.0, 60.0), -randf_range(260.0, 460.0))
+		l["vel"] = Vector2(lado * randf_range(120.0, 260.0) + randf_range(-60.0, 60.0), -randf_range(260.0, 460.0)) * NAVIO_ESCALA
 		l["vida"] = randf_range(3.2, 4.4)
 	Maquina.efeito(SOM_NAVIO_IMPACTO, -2.0)
 	navio_pousou.emit()
@@ -597,7 +634,8 @@ func _quebrar(p: Dictionary, pos: Vector2, local: Vector2) -> void:
 ## Lasca recortada de uma textura: por padrão o próprio fundo no ponto `pos`;
 ## para o navio, a textura dele e o ponto `uv_em` dentro do recorte. `tabua`
 ## faz uma tira comprida (madeira) em vez de um caco redondo (pedra).
-func _soltar_lasca(pos: Vector2, raio: float, grande: bool, textura: Texture2D = null, uv_em: Vector2 = Vector2.INF, tabua: bool = false) -> Dictionary:
+## atras: a lasca é do navio (lá longe) e fica atrás do templo da frente.
+func _soltar_lasca(pos: Vector2, raio: float, grande: bool, textura: Texture2D = null, uv_em: Vector2 = Vector2.INF, tabua: bool = false, atras: bool = false) -> Dictionary:
 	var fundo := get_parent() as Sprite2D
 	if textura == null:
 		textura = fundo.texture
@@ -644,7 +682,11 @@ func _soltar_lasca(pos: Vector2, raio: float, grande: bool, textura: Texture2D =
 	no.color = Color(1.12, 1.12, 1.12) if grande else Color(0.95, 0.95, 0.95)
 	no.modulate.a = 1.0
 	no.visible = true
-	move_child(no, -1)
+	if atras and _frente != null:
+		var k := _frente.get_index()
+		move_child(no, k - 1 if no.get_index() < k else k)
+	else:
+		move_child(no, -1)
 	var ang := randf_range(-PI, 0.0)
 	lasca["vel"] = Vector2(cos(ang), sin(ang)) * (randf_range(30, 70) if grande else randf_range(60, 140))
 	lasca["giro"] = randf_range(-5.0, 5.0)
@@ -711,7 +753,7 @@ func _criar_efeitos() -> void:
 	# o mar cedendo na batida: colunas de areia e água jogadas para cima ao
 	# longo do fundo do casco; a água freia, elas abrem, giram e assentam
 	_lodo = _particulas("Lodo", 48, 4.0, LODO, false)
-	_lodo.position = Vector2(370, 905)
+	_lodo.position = NAVIO_LONGE
 	_lodo.explosiveness = 0.9
 	_lodo.emission_shape = CPUParticles2D.EMISSION_SHAPE_RECTANGLE
 	_lodo.emission_rect_extents = Vector2(150, 8)
@@ -734,7 +776,9 @@ func _criar_efeitos() -> void:
 	_lodo_jatos = _particulas("LodoJatos", 24, 3.0, LODO, false)
 	_lodo_jatos.explosiveness = 0.95
 	_lodo_jatos.emission_shape = CPUParticles2D.EMISSION_SHAPE_DIRECTED_POINTS
-	_lodo_jatos.emission_points = PackedVector2Array([Vector2(238, 900), Vector2(250, 906), Vector2(500, 884), Vector2(515, 866)])
+	_lodo_jatos.position = NAVIO_LONGE
+	_lodo_jatos.emission_points = PackedVector2Array([Vector2(238, 900) - NAVIO_PIVO, Vector2(250, 906) - NAVIO_PIVO,
+		Vector2(500, 884) - NAVIO_PIVO, Vector2(515, 866) - NAVIO_PIVO])
 	_lodo_jatos.emission_normals = PackedVector2Array([Vector2(-0.55, -1).normalized(), Vector2(-0.45, -1).normalized(),
 		Vector2(0.3, -1).normalized(), Vector2(0.38, -1).normalized()])
 	_lodo_jatos.direction = Vector2(0, -1)
@@ -754,7 +798,7 @@ func _criar_efeitos() -> void:
 
 	# grãos de areia jogados para cima: sobem rápido e caem de volta
 	_areia = _particulas("Areia", 70, 2.6, bola, false)
-	_areia.position = Vector2(370, 905)
+	_areia.position = NAVIO_LONGE
 	_areia.explosiveness = 0.92
 	_areia.emission_shape = CPUParticles2D.EMISSION_SHAPE_RECTANGLE
 	_areia.emission_rect_extents = Vector2(150, 6)
@@ -771,7 +815,7 @@ func _criar_efeitos() -> void:
 
 	# farpas de madeira girando e afundando devagar
 	_farpas = _particulas("Farpas", 22, 3.2, FARPA, false)
-	_farpas.position = Vector2(355, 895)
+	_farpas.position = _no_longe(Vector2(355, 895))
 	_farpas.explosiveness = 0.95
 	_farpas.emission_shape = CPUParticles2D.EMISSION_SHAPE_RECTANGLE
 	_farpas.emission_rect_extents = Vector2(160, 14)
@@ -796,7 +840,7 @@ func _criar_efeitos() -> void:
 
 	# bolhas que escapam do casco depois da batida
 	_bolhas_pouso = _particulas("BolhasPouso", 70, 3.4, BOLHA, false)
-	_bolhas_pouso.position = Vector2(370, 870)
+	_bolhas_pouso.position = _no_longe(Vector2(370, 870))
 	_bolhas_pouso.explosiveness = 0.6
 	_bolhas_pouso.emission_shape = CPUParticles2D.EMISSION_SHAPE_RECTANGLE
 	_bolhas_pouso.emission_rect_extents = Vector2(165, 40)
@@ -812,10 +856,17 @@ func _criar_efeitos() -> void:
 	_bolhas_pouso.scale_amount_curve = _curva(0.6, 1.35)
 	_bolhas_pouso.color_ramp = _rampa(Color(0.85, 0.95, 1.0), 0.85)
 
-	# o que a batida levanta fica atrás das pedras da frente (como o navio)
-	var depois_do_navio := _navio_pouso.get_index() + 1
+	# o que a batida levanta fica atrás do templo e das pedras da frente (como
+	# o navio) e na mesma escala dele (lá longe)
+	var depois_do_navio := _navio.get_index() + 1
 	for p: CPUParticles2D in [_bolhas_pouso, _farpas, _areia, _lodo_jatos, _lodo]:
+		p.scale = Vector2.ONE * NAVIO_ESCALA
 		move_child(p, depois_do_navio)
+	# a areia e a água sobem acima do telhado do templo (a água freia igual,
+	# então lá longe elas precisam sair um pouco mais fortes)
+	for p: CPUParticles2D in [_lodo, _lodo_jatos, _areia]:
+		p.initial_velocity_min *= 1.35
+		p.initial_velocity_max *= 1.35
 
 
 func _particulas(nome: String, n: int, vida: float, tex: Texture2D, continuo: bool) -> CPUParticles2D:

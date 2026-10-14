@@ -134,7 +134,7 @@ const LISTA := {
 		"res://sprites/mar_cascatas_mascara.png",
 		"res://sprites/mar_peixe.png",
 		"res://sprites/mar_navio.png",
-		"res://sprites/mar_navio_pouso.png",
+		"res://sprites/mar_frente_navio_mascara.png",
 		"res://sprites/mar_bolha.png",
 		"res://sprites/mar_lodo.png",
 		"res://sprites/mar_farpa.png",
@@ -142,6 +142,8 @@ const LISTA := {
 		"res://sprites/mar_pedra_dir_mascara.png",
 		"res://sprites/mar_baleia_2.png",
 		"res://sprites/mar_baleia_1.png",
+		"res://sprites/mar_frente_alga.png",
+		"res://sprites/mar_frente_peixe.png",
 	],
 	"res://scenes/ranking.tscn": [
 		"res://songs/ranking-song.mp3",
