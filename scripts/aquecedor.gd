@@ -42,7 +42,6 @@ const SHADERS := [
 	preload("res://shaders/mar_baleia.gdshader"),
 	preload("res://shaders/mar_cardume.gdshader"),
 	preload("res://shaders/mar_cascata.gdshader"),
-	preload("res://shaders/mar_caustica.gdshader"),
 	preload("res://shaders/mar_pedra.gdshader"),
 	preload("res://shaders/mar_recorte.gdshader"),
 ]

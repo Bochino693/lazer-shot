@@ -21,10 +21,9 @@ extends Node2D
 #   templo       ruína de Atlântida ao fundo (pintada no fundo pelo
 #                tools/gerar_mar.py): a luz de cristal da porta respira com a
 #                música e solta pontinhos de luz que sobem
-#   água viva    a água nunca para: luz cáustica dançando no chão (em
-#                perspectiva, shaders/mar_caustica.gdshader), fachos de luz
-#                descendo da superfície e balançando, e partículas boiando à
-#                deriva na correnteza
+#   água viva    partículas boiando à deriva na correnteza (a luz do sol
+#                de fora — raios balançando e a cáustica na cena toda — fica
+#                no shader do fundo, shaders/fundo_profundo.gdshader)
 
 signal navio_pousou
 
@@ -36,17 +35,15 @@ const SHADER_BALEIA := "res://shaders/mar_baleia.gdshader"
 const SHADER_CARDUME := preload("res://shaders/mar_cardume.gdshader")
 const SHADER_PEDRA := preload("res://shaders/mar_pedra.gdshader")
 const SHADER_RECORTE := preload("res://shaders/mar_recorte.gdshader")
-const SHADER_CAUSTICA := preload("res://shaders/mar_caustica.gdshader")
 # load() e não preload(): o Godot 4.6 nunca descarrega um script já carregado,
 # e o que ele pré-carrega ficava na memória depois da primeira partida.
 var PEIXE: Texture2D = load("res://sprites/mar_peixe.png")
 var NAVIO: Texture2D = load("res://sprites/mar_navio.png")
 var MASCARA_FRENTE: Texture2D = load("res://sprites/mar_frente_navio_mascara.png")
-var CAUSTICA: Texture2D = load("res://sprites/mar_caustica.png")
-var FACHO: Texture2D = load("res://sprites/mar_facho.png")
 var BOLHA: Texture2D = load("res://sprites/mar_bolha.png")
 var LODO: Texture2D = load("res://sprites/mar_lodo.png")
 var FARPA: Texture2D = load("res://sprites/mar_farpa.png")
+var CAUSTICA: Texture2D = load("res://sprites/mar_caustica.png")
 var MASCARA_PEDRA_ESQ: Texture2D = load("res://sprites/mar_pedra_esq_mascara.png")
 var MASCARA_PEDRA_DIR: Texture2D = load("res://sprites/mar_pedra_dir_mascara.png")
 # as pedras recortadas (o fundo, atlantis_fundo.png, não tem mais as pedras:
@@ -59,9 +56,10 @@ const SOM_NAVIO_IMPACTO := preload("res://songs/navio_impacto.wav")
 const SOM_PEDRA := preload("res://songs/pedra_lasca.wav")
 
 # Onde há água caindo (x0, y0, x1, y1), em pixels da textura.
+# (a de 552,492 saiu: ali a foto agora tem a pedra escura atrás do Poseidon,
+# e a água escorrendo virava riscas em cima da pedra)
 const CASCATAS := [
 	Rect2(158, 298, 46, 220),
-	Rect2(552, 492, 56, 126),
 	Rect2(634, 378, 32, 90),
 	Rect2(768, 343, 40, 95),
 	Rect2(888, 333, 40, 95),
@@ -605,6 +603,8 @@ func _criar_pedras() -> void:
 		mat.set_shader_parameter("aspecto", tam.x / tam.y)
 		mat.set_shader_parameter("fase", d["fase"])
 		mat.set_shader_parameter("n_danos", 0)
+		mat.set_shader_parameter("caustica", CAUSTICA)
+		mat.set_shader_parameter("tam_px", tex_tam)
 		s.material = mat
 		# cada pedra é uma camada na distância dela (anda pela paralaxe e os
 		# alvos passam na frente ou atrás dela)
@@ -977,44 +977,7 @@ func _curva(ini: float, fim: float) -> Curve:
 
 
 # ───────────────────────────────────────────── a água em movimento
-const CHAO_CAUSTICA := Rect2(0, 760, 1024, 776)
-# fachos: x no alto (px da textura), largura, inclinação (rad), força
-const FACHOS := [[250.0, 3.4, 0.26, 0.15], [530.0, 2.6, 0.20, 0.12], [800.0, 3.0, 0.16, 0.10]]
-var _fachos: Array = []
-var _agua_t := 0.0
-
-
 func _criar_agua_viva() -> void:
-	# luz cáustica no chão
-	var c := Sprite2D.new()
-	c.name = "LuzCaustica"
-	c.texture = CAUSTICA
-	c.centered = false
-	c.position = CHAO_CAUSTICA.position
-	c.scale = CHAO_CAUSTICA.size / CAUSTICA.get_size()
-	var mat := ShaderMaterial.new()
-	mat.shader = SHADER_CAUSTICA
-	mat.set_shader_parameter("caustica", CAUSTICA)
-	mat.set_shader_parameter("centro_x", TEMPLO_PORTA.x / 1024.0)
-	c.material = mat
-	add_child(c)
-
-	# fachos de luz descendo da superfície
-	var soma := CanvasItemMaterial.new()
-	soma.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
-	for d in FACHOS:
-		var f := Sprite2D.new()
-		f.texture = FACHO
-		f.centered = false
-		f.offset = Vector2(-FACHO.get_width() * 0.5, 0.0)
-		f.position = Vector2(d[0], -40.0)
-		f.scale = Vector2(d[1], 2.3)
-		f.rotation = d[2]
-		f.material = soma
-		f.modulate = Color(0.72, 0.93, 1.0, d[3])
-		add_child(f)
-		_fachos.append({"no": f, "rot": d[2], "forca": d[3], "fase": randf() * TAU})
-
 	# partículas boiando na correnteza
 	var p := CPUParticles2D.new()
 	p.name = "Deriva"
@@ -1038,18 +1001,9 @@ func _criar_agua_viva() -> void:
 	add_child(p)
 
 
-func _animar_agua(delta: float) -> void:
-	_agua_t += delta
-	for f in _fachos:
-		var no: Sprite2D = f["no"]
-		no.rotation = f["rot"] + 0.035 * sin(_agua_t * 0.23 + f["fase"])
-		no.modulate.a = f["forca"] * (0.7 + 0.3 * sin(_agua_t * 0.41 + f["fase"] * 1.7))
-
-
 # ───────────────────────────────────────────── quadro a quadro
 func _process(delta: float) -> void:
 	_animar_templo(delta)
-	_animar_agua(delta)
 	for b in _baleias:
 		var no: Sprite2D = b["no"]
 		if b["espera"] > 0.0:

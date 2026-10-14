@@ -7,6 +7,8 @@ shader_type canvas_item;
 //     que a luz já passou ficam acesas um pouco;
 //   - cada tiro abre um buraco (fundo escuro, parede iluminada pela luz de
 //     cima, borda clara) com rachaduras saindo dele; runa quebrada apaga.
+//   - a luz cáustica do sol lá de fora anda pela pedra (a mesma do fundo,
+//     shaders/fundo_profundo.gdshader), mais forte no alto e nas partes claras.
 // Máscara (1x da caixa da pedra): R = runas, G = altura (0 topo .. 1 base),
 // B = pedra, A = halo das runas.
 
@@ -17,6 +19,9 @@ uniform float periodo = 4.6;
 uniform float fase = 0.0;
 uniform vec4 danos[12];                            // xy = ponto (UV da caixa), z = raio (em largura), w = semente
 uniform int n_danos = 0;
+uniform sampler2D caustica : filter_linear, repeat_enable;          // sprites/mar_caustica.png (alfa; grande, sem mipmap)
+uniform vec2 tam_px = vec2(476.0, 758.0);          // tamanho da textura da pedra (px do fundo)
+uniform float forca_caustica = 0.4;
 
 varying vec4 cor_no;
 
@@ -57,6 +62,12 @@ void fragment() {
 			quebrado = max(quebrado, smoothstep(1.05, 0.7, r));
 		}
 	}
+
+	// luz cáustica (uma camada, como nas paredes do fundo)
+	float ca = texture(caustica, UV * tam_px / 445.0 + vec2(fase * 3.1 + TIME * 0.035, fase * 1.7 + TIME * 0.026)).a;
+	float lum = dot(base.rgb, vec3(0.3, 0.55, 0.15));
+	col += vec3(0.62, 0.92, 1.0) * ca * ca * forca_caustica
+		* (0.35 + 0.65 * clamp(lum / 0.55, 0.0, 1.0)) * (1.0 - 0.5 * m.g) * (1.0 - quebrado);
 
 	float p = fract(TIME / periodo + fase) * 1.4 - 0.2;
 	float dy = m.g - p;

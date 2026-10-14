@@ -152,7 +152,7 @@ const LISTA := {
 		"res://sprites/mar_navio.png",
 		"res://sprites/mar_frente_navio_mascara.png",
 		"res://sprites/mar_caustica.png",
-		"res://sprites/mar_facho.png",
+		"res://sprites/mar_raios.png",
 		"res://sprites/mar_lodo.png",
 		"res://sprites/mar_farpa.png",
 		"res://sprites/mar_pedra_esq_mascara.png",

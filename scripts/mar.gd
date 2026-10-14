@@ -486,6 +486,8 @@ var TEX_ONDA: Texture2D = load("res://sprites/fx_onda.png")
 var TEX_FURO_AREIA: Texture2D = load("res://sprites/fx_furo_areia.png")
 var TEX_BOLHA: Texture2D = load("res://sprites/mar_bolha.png")
 var TEX_PROFUNDIDADE: Texture2D = load("res://sprites/mar_profundidade.png")
+var TEX_CAUSTICA: Texture2D = load("res://sprites/mar_caustica.png")
+var TEX_RAIOS: Texture2D = load("res://sprites/mar_raios.png")
 const SHADER_FUNDO_PROFUNDO := preload("res://shaders/fundo_profundo.gdshader")
 var _furos: Furos = null              # furos de bala na areia (filho do fundo)
 var _pontos: PontosVoando = null      # "+80" saltando do alvo acertado
@@ -3340,6 +3342,9 @@ func _ajustar_background_fullscreen() -> void:
 		mat_fundo = ShaderMaterial.new()
 		mat_fundo.shader = SHADER_FUNDO_PROFUNDO
 		mat_fundo.set_shader_parameter("profundidade", TEX_PROFUNDIDADE)
+		mat_fundo.set_shader_parameter("caustica", TEX_CAUSTICA)
+		mat_fundo.set_shader_parameter("caustica_perto", TEX_CAUSTICA)
+		mat_fundo.set_shader_parameter("raios", TEX_RAIOS)
 		background.material = mat_fundo
 	if mat_fundo != null:
 		mat_fundo.set_shader_parameter("escala", escala)

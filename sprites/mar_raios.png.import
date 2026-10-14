@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://ikomdyv2sel5"
-path="res://.godot/imported/mar_facho.png-00e00da67568d37700b3d81e2ced1b80.ctex"
+uid="uid://d084t8wiv10af"
+path="res://.godot/imported/mar_raios.png-88e2b6bf3b0c623471b4f04fc4fae1b2.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://sprites/mar_facho.png"
-dest_files=["res://.godot/imported/mar_facho.png-00e00da67568d37700b3d81e2ced1b80.ctex"]
+source_file="res://sprites/mar_raios.png"
+dest_files=["res://.godot/imported/mar_raios.png-88e2b6bf3b0c623471b4f04fc4fae1b2.ctex"]
 
 [params]
 
