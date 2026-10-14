@@ -352,6 +352,9 @@ const Y_PRATELEIRA_100 := 575.0
 const Y_PRATELEIRA_80 := 815.0
 const Y_PRATELEIRA_50 := 1100.0
 const Y_PRATELEIRA_20 := 1400.0
+# tábuas das prateleiras na tela: (topo, base, até onde vai em x)
+const TABUAS_BAR := [Vector3(585.0, 620.0, 1024.0), Vector3(847.0, 888.0, 1024.0),
+	Vector3(1127.0, 1201.0, 818.0), Vector3(1398.0, 1448.0, 818.0)]
 
 const AREA_BARRIL_X_INICIO := 700.0
 const AREA_BARRIL_X_FIM := 900.0
@@ -2111,16 +2114,9 @@ func _criar_garrafa_em_posicao(pontos: int, x: float, y: float, pontos_base_visu
 
 	garrafas_ativas.append(alvo_instancia)
 
+	# a garrafa cai do alto na tábua e assenta (scripts/bar_garrafa_fx.gd)
 	var pos_final: Vector2 = Vector2(x, y + offset_y)
-	var pos_inicial: Vector2 = pos_final + Vector2(0.0, subir_de_baixo_px)
-
-	alvo_instancia.position = pos_inicial
-	alvo_instancia.modulate.a = 0.0
-
-	var tw := create_tween()
-	tw.set_parallel(true)
-	tw.tween_property(alvo_instancia, "position", pos_final, 0.34).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-	tw.tween_property(alvo_instancia, "modulate:a", 1.0, 0.22)
+	BarGarrafaFx.entrar(self, alvo_instancia, pos_final, escala)
 	var vida_individual: float = _obter_vida_individual_por_pontos(pontos_visual)
 	alvo_instancia.set("vida_individual", vida_individual)
 	alvo_instancia.set("saindo_individual", false)
@@ -2380,12 +2376,8 @@ func _fazer_garrafa_descer_e_sumir(alvo: Area2D) -> void:
 	garrafas_ativas.erase(alvo)
 	_liberar_slot_por_id(id_slot)
 
-	var pos_final: Vector2 = alvo.position + Vector2(0.0, subir_de_baixo_px)
-
-	var tw := create_tween()
-	tw.set_parallel(true)
-	tw.tween_property(alvo, "position", pos_final, 0.28).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
-	tw.tween_property(alvo, "modulate:a", 0.0, 0.22)
+	# tirada da prateleira: sobe um pouco e some
+	BarGarrafaFx.sair(alvo, 0.26)
 
 	await get_tree().create_timer(0.32).timeout
 
@@ -2593,6 +2585,8 @@ func _forcar_idle_garrafa(garrafa: Area2D) -> void:
 			anim.play("idle")
 		elif anim.sprite_frames.has_animation("default"):
 			anim.play("default")
+	# sombra na parede de trás e de contato na tábua (profundidade)
+	BarGarrafaFx.vestir(anim)
 
 
 func _obter_anim_garrafa(garrafa: Area2D) -> AnimatedSprite2D:
@@ -3056,32 +3050,29 @@ func _desenhar_profundidade_estantes() -> void:
 		)
 
 
+## Profundidade das prateleiras (desenhada uma vez): embaixo de cada tábua a
+## parede de trás fica na sombra dela (escuro junto da tábua, sumindo para
+## baixo) e logo acima da tábua, onde a parede encontra o tampo, um escuro
+## de canto. As tábuas de baixo param antes do barril.
 func _desenhar_sombra_estantes() -> void:
 	var largura_tela: float = get_viewport_rect().size.x
-	var y_inicio: float = CORTE_DESENHO_TOPO_Y
+	for t: Vector3 in TABUAS_BAR:
+		var x1: float = minf(t.z, largura_tela)
+		_sombra_vertical(t.y, t.y + 86.0, x1, 0.42)
+		_sombra_vertical(t.x, t.x - 30.0, x1, 0.20)
 
-	if Y_PRATELEIRA_100 + 34.0 >= y_inicio:
-		_camada_estantes.draw_rect(Rect2(80.0, Y_PRATELEIRA_100 + 34.0, 714.0, 8.0), Color(0.0, 0.0, 0.0, 0.045), true)
 
-	if Y_PRATELEIRA_80 + 36.0 >= y_inicio:
-		_camada_estantes.draw_rect(Rect2(64.0, Y_PRATELEIRA_80 + 36.0, 748.0, 8.0), Color(0.0, 0.0, 0.0, 0.042), true)
-
-	if Y_PRATELEIRA_50 + 38.0 >= y_inicio:
-		_camada_estantes.draw_rect(Rect2(48.0, Y_PRATELEIRA_50 + 38.0, 784.0, 8.0), Color(0.0, 0.0, 0.0, 0.040), true)
-
-	_camada_estantes.draw_rect(
-		Rect2(34.0, Y_PRATELEIRA_20 + 40.0, AREA_BARRIL_X_INICIO - 34.0, 8.0),
-		Color(0.0, 0.0, 0.0, 0.0),
-		true
-	)
-
-	if AREA_BARRIL_X_FIM < largura_tela:
-		_camada_estantes.draw_rect(
-			Rect2(AREA_BARRIL_X_FIM, Y_PRATELEIRA_20 + 40.0, largura_tela - AREA_BARRIL_X_FIM, 8.0),
-			Color(0.0, 0.0, 0.0, 0.0),
-			true
-		)
-
+## Faixa em degradê de y0 (escuro) até y1 (nada), de x = 0 até x1.
+func _sombra_vertical(y0: float, y1: float, x1: float, forca: float) -> void:
+	var escuro := Color(0.06, 0.03, 0.01, forca)
+	var nada := Color(0.06, 0.03, 0.01, 0.0)
+	var meio := lerpf(y0, y1, 0.35)
+	_camada_estantes.draw_polygon(
+		PackedVector2Array([Vector2(0, y0), Vector2(x1, y0), Vector2(x1, meio), Vector2(0, meio)]),
+		PackedColorArray([escuro, escuro, Color(escuro, forca * 0.45), Color(escuro, forca * 0.45)]))
+	_camada_estantes.draw_polygon(
+		PackedVector2Array([Vector2(0, meio), Vector2(x1, meio), Vector2(x1, y1), Vector2(0, y1)]),
+		PackedColorArray([Color(escuro, forca * 0.45), Color(escuro, forca * 0.45), nada, nada]))
 
 
 func _abrir_modal_nome_ranking_bar(pontos: int, precisao: int) -> void:

@@ -34,6 +34,8 @@ Menus
 Bar
   madeira_tiro.wav     bala na madeira: estalo, a tábua soando e farpas
   papel_tiro.wav       bala no cartaz: papel rasgando e a madeira atrás
+  garrafa_pousa.wav    garrafa chegando na prateleira: o fundo de vidro
+                       bate na tábua (toque surdo + "tim" curto do vidro)
   janela_quebra.wav    bala na vidraça da janela: o vidro fino estoura, a
                        moldura de madeira bate, cacos caindo na tábua de
                        baixo (vidro quicando na madeira) e os últimos
@@ -506,6 +508,18 @@ def papel_tiro():
     return sala(s, 0.45, 0.2, 5000)
 
 
+def garrafa_pousa():
+    s = vazio(0.35)
+    # a tábua: toque surdo e curto
+    colar(s, baque(0.03, 900, 90), 0.0, 1.0)
+    colar(s, modos(0.12, [230, 560], [1.0, 0.5], [55, 75]), 0.0, 0.5)
+    # o fundo da garrafa: vidro grosso, "tim" curto e um quiquezinho
+    colar(s, modos(0.25, [1850, 3420, 5100], [1.0, 0.45, 0.2], [26, 38, 55], 0.002), 0.002, 0.35)
+    colar(s, estalo(0.0015, 3500), 0.0, 0.5)
+    colar(s, modos(0.12, [1880, 3460], [1.0, 0.4], [45, 60]), 0.055, 0.12)
+    return sala(s, 0.3, 0.12, 5000)
+
+
 def janela_quebra():
     s = vazio(2.2)
     # o tiro no vidro fino: estalo bem seco e a vidraça soando (placa fina:
@@ -549,6 +563,7 @@ SONS = {
     "laser_parede": (laser_parede, 0.65), "arena_vapor": (arena_vapor, 0.5), "arena_faisca": (arena_faisca, 0.55),
     "arena_troca": (arena_troca, 0.7), "lanterna_sobe": (lanterna_sobe, 0.55), "lanterna_desce": (lanterna_desce, 0.55),
     "madeira_tiro": (madeira_tiro, 0.7), "papel_tiro": (papel_tiro, 0.6), "janela_quebra": (janela_quebra, 0.85),
+    "garrafa_pousa": (garrafa_pousa, 0.6),
     "tiro_sol": (tiro_sol, 0.8), "tiro_lua": (tiro_lua, 0.8), "tiro_mar": (tiro_mar, 0.85), "tiro_menu": (tiro_menu, 0.75),
 }
 
