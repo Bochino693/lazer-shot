@@ -186,18 +186,26 @@ const AGUIA_QUADROS := 11
 const CEU := Rect2(150, 196, 724, 236)
 const N_AGUIAS := 3
 # Pouso: com o cristal de uma pirâmide quebrado (a energia não circula mais
-# nela) às vezes uma águia desce e pousa na ponta apagada, grita uma vez e
-# fica lá até a energia voltar (aí levanta voo assustada).
+# nela) às vezes uma águia vem e pousa na ponta apagada, de frente para quem
+# joga, grita uma vez e fica lá se mexendo (vira a cabeça, olha para baixo,
+# abre as asas como o falcão dos hieróglifos) até a energia voltar, quando
+# levanta voo; outras vezes só dá umas voltas por cima da pirâmide; e às
+# vezes nada. Cada vez de um jeito (chegada direta, em espiral ou num
+# mergulho; o que faz pousada é sorteado).
 # Ponta de cada pirâmide na ordem de _pontas_acesas (esq, meio, dir), px da
-# imagem; o quadro pousado (egito_aguia_pousada.png, 128x128) tem os pés
-# PES_POUSADA px abaixo do meio.
+# imagem; o quadro pousado (egito_aguia_pousada.png, 160x128, de frente) tem
+# os pés PES_POUSADA px abaixo do meio.
 const POUSOS := [Vector2(229, 516), Vector2(508, 446), Vector2(775, 516)]
 const MODOS_POUSO := ["pousar", "descer", "pousada", "decolar"]
 const ESCALA_POUSADA := 0.30
-const PES_POUSADA := 53.0
-const CHANCE_POUSO := 0.7
+const PES_POUSADA := 54.0
+const CHANCE_POUSO := 0.5
+const CHANCE_RONDA := 0.3
 const TEMPO_DESCER := 1.3
 const TEMPO_DECOLAR := 1.4
+# quadros de egito_aguia_pousada.png
+enum Pose { PARADA, OLHA_ESQ, OLHA_DIR, GRITA, ASAS_MEIO, ASAS_ABERTAS, OLHA_BAIXO }
+const POSES_QUADROS := 7
 const N_ESTRELAS_CEU := 18
 
 var _fundo_sol: Sprite2D
@@ -625,8 +633,11 @@ func _vigiar_pousos() -> void:
 			continue
 		_pouso_apagada[i] = apagada
 		if apagada:
-			if randf() < CHANCE_POUSO:
+			var sorte := randf()
+			if sorte < CHANCE_POUSO:
 				_mandar_pousar(i)
+			elif sorte < CHANCE_POUSO + CHANCE_RONDA:
+				_mandar_rondar(i)
 		else:
 			for a in _aguias:
 				if a.get("pouso", -1) == i and a["modo"] in MODOS_POUSO and a["modo"] != "decolar":
@@ -656,10 +667,28 @@ func _mandar_pousar(i: int) -> void:
 	if melhor.is_empty():
 		return
 	melhor["pouso"] = i
+	# cada vez chega de um jeito
+	melhor["chegada"] = ["direta", "espiral", "mergulho"][randi() % 3]
+	melhor["giro_ang"] = ((melhor["pos"] as Vector2) - POUSOS[i]).angle()
+	melhor["giro_raio"] = 70.0
 	melhor["modo"] = "pousar"
 	melhor["t_modo"] = 12.0
 	melhor["vida"] = 1.0e6
 	melhor["bat"] = 1.0
+
+
+## Só passa por cima: umas voltas planando sobre a pirâmide apagada.
+func _mandar_rondar(i: int) -> void:
+	for a in _aguias:
+		if a["espera"] > 0.0 or a["modo"] in MODOS_POUSO:
+			continue
+		a["modo"] = "termica"
+		a["centro"] = POUSOS[i] + Vector2(randf_range(-20.0, 20.0), -randf_range(80.0, 100.0))
+		a["raio"] = randf_range(50.0, 80.0)
+		a["sentido"] = 1.0 if randf() < 0.5 else -1.0
+		a["t_modo"] = randf_range(8.0, 13.0)
+		a["vida"] = maxf(a["vida"], a["t"] + 16.0)
+		return
 
 
 func _decolar(a: Dictionary) -> void:
@@ -671,12 +700,10 @@ func _decolar(a: Dictionary) -> void:
 		a["pouso"] = -1
 		_entrar_modo(a)
 		return
-	s.texture = AGUIA
-	s.hframes = AGUIA_QUADROS
-	s.frame = 1
+	# abre as asas e sobe batendo forte (cada vez para um lado)
 	a["modo"] = "decolar"
 	a["t_pouso"] = 0.0
-	a["dir"] = -PI * 0.5 + randf_range(-0.8, 0.8)
+	a["dir"] = -PI * 0.5 + randf_range(-0.9, 0.9)
 	a["bat"] = 2.0
 	a["escala_voo"] = randf_range(0.20, 0.30)
 
@@ -688,29 +715,44 @@ func _animar_pouso(a: Dictionary, s: Sprite2D, delta: float) -> void:
 	var chega := smoothstep(0.0, 2.8, a["t"])
 	match a["modo"]:
 		"pousar":
-			# mergulha planando até um pouco acima da ponta (mais devagar perto)
+			# chega planando até um pouco acima da ponta: direto, dando voltas
+			# que fecham em espiral, ou de bem alto num mergulho
 			var alvo := pes + Vector2(0.0, -60.0)
+			var rapidez := 1.0
+			match a["chegada"]:
+				"espiral":
+					a["giro_raio"] = maxf(0.0, a["giro_raio"] - delta * 9.0)
+					a["giro_ang"] += delta * 1.1
+					alvo += Vector2.RIGHT.rotated(a["giro_ang"]) * a["giro_raio"] * Vector2(1.0, 0.45)
+				"mergulho":
+					if (a["pos"] as Vector2).y < alvo.y - 20.0:
+						rapidez = 1.7
 			var para: Vector2 = alvo - a["pos"]
 			var giro := clampf(angle_difference(a["dir"], para.angle()) * 2.6, -2.4, 2.4)
 			a["dir"] += giro * delta
 			a["inclin"] = lerpf(a["inclin"], giro * 0.3, 1.0 - exp(-delta * 2.5))
-			var v := clampf(para.length() * 1.1, 32.0, 120.0)
+			var v := clampf(para.length() * 1.1, 32.0, 120.0) * rapidez
 			a["pos"] += Vector2.RIGHT.rotated(a["dir"]) * v * delta
 			a["escala"] = lerpf(a["escala"], ESCALA_POUSADA, 1.0 - exp(-delta * 0.9))
-			_bater_asas(a, s, delta)
+			if a["chegada"] == "mergulho" and rapidez > 1.0:
+				a["bat"] = 0.0
+				s.frame = 0                       # asas firmes no mergulho
+			else:
+				_bater_asas(a, s, delta)
 			var esc: float = a["escala"] * (0.25 + 0.75 * chega)
 			s.position = a["pos"]
 			s.rotation = a["dir"] + PI * 0.5
 			s.scale = Vector2(esc * (1.0 - 0.35 * absf(a["inclin"])), esc)
 			s.skew = a["inclin"] * 0.45
-			if para.length() < 24.0 or a["t_modo"] <= 0.0:
+			var perto: bool = para.length() < 24.0 and (a["chegada"] != "espiral" or a["giro_raio"] < 12.0)
+			if perto or a["t_modo"] <= 0.0:
 				a["modo"] = "descer"
 				a["t_pouso"] = 0.0
 				a["de"] = a["pos"]
 				a["rot_de"] = s.rotation
 				a["esc_de"] = esc
 		"descer":
-			# freia batendo as asas e assenta na ponta, de frente
+			# freia batendo as asas, de frente, e assenta na ponta
 			a["t_pouso"] += delta
 			var k := clampf(a["t_pouso"] / TEMPO_DESCER, 0.0, 1.0)
 			var e := k * k * (3.0 - 2.0 * k)
@@ -723,47 +765,47 @@ func _animar_pouso(a: Dictionary, s: Sprite2D, delta: float) -> void:
 			s.scale = Vector2.ONE * lerpf(a["esc_de"], ESCALA_POUSADA, e)
 			if k >= 1.0:
 				s.texture = AGUIA_POUSADA
-				s.hframes = 4
-				s.frame = 3
+				s.hframes = POSES_QUADROS
 				s.rotation = 0.0
 				a["modo"] = "pousada"
 				a["t_pouso"] = 0.0
 				a["gritou"] = false
-				a["virar"] = randf_range(3.0, 5.0)
 				a["escala"] = ESCALA_POUSADA
+				a["pose"] = Pose.ASAS_MEIO
+				a["pose_t"] = randf_range(0.35, 0.6)     # as asas assentando
+				a["abriu"] = 0
 		"pousada":
 			a["t_pouso"] += delta
-			var tp: float = a["t_pouso"]
 			a["pos"] = sentada
-			if tp < 0.45:
-				s.frame = 3                       # asas assentando
-			elif not a["gritou"] and tp >= 0.9:
-				# o grito, uma vez só, de cabeça erguida
-				a["gritou"] = true
-				a["grito_ate"] = tp + 1.5
-				s.frame = 2
-				if is_visible_in_tree():
-					_grito_espera = maxf(_grito_espera, 6.0)
-					var noite_som := _noite > 0.5
-					Maquina.efeito(SOM_AGUIA_NOITE if noite_som else SOM_AGUIA, -7.0 - (2.0 if noite_som else 0.0), randf_range(0.95, 1.05))
-			elif a["gritou"] and tp < a["grito_ate"]:
-				s.frame = 2
-			else:
-				# parada; de vez em quando vira a cabeça
-				a["virar"] -= delta
-				if a["virar"] <= 0.0:
-					s.frame = 1 if s.frame == 0 else 0
-					a["virar"] = randf_range(1.2, 2.5) if s.frame == 1 else randf_range(2.5, 5.5)
-				elif s.frame != 1:
-					s.frame = 0
+			a["pose_t"] -= delta
+			if a["pose_t"] <= 0.0:
+				_proxima_pose(a)
+			s.frame = a["pose"]
+			# respira; ao arrepiar as penas incha um pouco
+			var tp: float = a["t_pouso"]
 			var resp := 1.0 + 0.012 * sin(tp * 2.3)
+			var largo := 1.0
+			if a.get("arrepio", 0.0) > 0.0:
+				a["arrepio"] = maxf(0.0, a["arrepio"] - delta)
+				largo += 0.07 * sin(a["arrepio"] / 0.6 * PI) * (1.0 + 0.3 * sin(tp * 40.0))
 			s.position = sentada + Vector2(0.0, PES_POUSADA * ESCALA_POUSADA * (1.0 - resp))
-			s.scale = Vector2(ESCALA_POUSADA, ESCALA_POUSADA * resp)
+			s.scale = Vector2(ESCALA_POUSADA * largo, ESCALA_POUSADA * resp)
 			s.skew = 0.0
 		"decolar":
-			# assustada com a energia voltando: bate forte e sobe
 			a["t_pouso"] += delta
-			var k2 := clampf(a["t_pouso"] / TEMPO_DECOLAR, 0.0, 1.0)
+			var tp2: float = a["t_pouso"]
+			if s.texture == AGUIA_POUSADA:
+				# primeiro abre as asas e se agacha; depois salta
+				s.frame = Pose.ASAS_MEIO
+				s.position = sentada + Vector2(0.0, 1.5 * sin(minf(tp2 / 0.25, 1.0) * PI))
+				if tp2 >= 0.25:
+					s.texture = AGUIA
+					s.hframes = AGUIA_QUADROS
+					s.frame = 1
+					a["t_pouso"] = 0.0
+				s.modulate = _cor_aguia(a, chega)
+				return
+			var k2 := clampf(tp2 / TEMPO_DECOLAR, 0.0, 1.0)
 			a["fase"] += delta * 4.8
 			s.frame = 1 + int(a["fase"] * 10.0) % 10
 			a["pos"] += Vector2.RIGHT.rotated(a["dir"]) * (35.0 + 95.0 * k2) * delta
@@ -777,6 +819,55 @@ func _animar_pouso(a: Dictionary, s: Sprite2D, delta: float) -> void:
 				a["modo"] = "plana"
 				_entrar_modo(a)
 	s.modulate = _cor_aguia(a, chega)
+
+
+## O que a águia pousada faz agora (sorteado, cada pouso diferente): logo
+## depois de assentar grita uma vez de cabeça erguida; depois fica parada,
+## vira a cabeça para um lado ou outro, olha para baixo, arrepia as penas ou
+## (no máximo duas vezes) abre as asas como o falcão dos hieróglifos.
+func _proxima_pose(a: Dictionary) -> void:
+	if not a["gritou"]:
+		if a["pose"] == Pose.ASAS_MEIO:
+			a["pose"] = Pose.PARADA
+			a["pose_t"] = randf_range(0.4, 0.9)
+			return
+		# uma de cada vez: se outra acabou de gritar, espera mais um pouco
+		if _grito_espera >= 4.6:
+			a["pose_t"] = 0.3
+			return
+		a["gritou"] = true
+		a["pose"] = Pose.GRITA
+		a["pose_t"] = 1.5
+		if is_visible_in_tree():
+			_grito_espera = maxf(_grito_espera, 6.0)
+			var noite_som := _noite > 0.5
+			Maquina.efeito(SOM_AGUIA_NOITE if noite_som else SOM_AGUIA, -7.0 - (2.0 if noite_som else 0.0), randf_range(0.95, 1.05))
+		return
+	if a["pose"] != Pose.PARADA:
+		# entre um movimento e outro, volta a ficar parada
+		a["pose"] = Pose.PARADA
+		a["pose_t"] = randf_range(1.0, 2.8)
+		return
+	var r := randf()
+	if r < 0.22:
+		a["pose"] = Pose.OLHA_ESQ
+		a["pose_t"] = randf_range(0.9, 2.2)
+	elif r < 0.44:
+		a["pose"] = Pose.OLHA_DIR
+		a["pose_t"] = randf_range(0.9, 2.2)
+	elif r < 0.62:
+		a["pose"] = Pose.OLHA_BAIXO
+		a["pose_t"] = randf_range(0.8, 1.6)
+	elif r < 0.80 and a["abriu"] < 2:
+		a["abriu"] += 1
+		a["pose"] = Pose.ASAS_ABERTAS
+		a["pose_t"] = randf_range(1.3, 2.2)
+	elif r < 0.92:
+		a["arrepio"] = 0.6
+		a["pose_t"] = 0.8
+	else:
+		a["pose"] = Pose.ASAS_MEIO
+		a["pose_t"] = 0.45
 
 
 func _sprite_2x(tex: Texture2D, canto: Vector2, shader: Shader) -> Sprite2D:
