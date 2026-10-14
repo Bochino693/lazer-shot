@@ -2018,14 +2018,15 @@ func _resolver_acerto(indice: int) -> void:
 			bonus_combo = combo_qtd * 5
 			pontuacao_total += bonus_combo
 
-		var cor_ok := Color(0.56, 1.0, 0.60, 1.0)
+		# acerto do sol em ouro, da lua em prata (como os pontos)
+		var cor_ok := Color(0.86, 0.92, 1.0, 1.0) if alvo.tipo == MODO_LUA else Color(1.0, 0.86, 0.36, 1.0)
 		if de_longe:
 			_set_status("DE LONGE! +%d" % (alvo.valor_correto + bonus_longe), Color(1.0, 0.86, 0.30, 1.0), 1.55)
 		elif bonus_combo > 0:
 			_set_status("%s %s   COMBO +%d" % [alvo.tipo.to_upper(), _texto_resultado(alvo.valor_correto), bonus_combo], cor_ok, 1.55)
 		else:
 			_set_status("%s %s" % [alvo.tipo.to_upper(), _texto_resultado(alvo.valor_correto)], cor_ok, 1.45)
-		_mostrar_pontos(alvo.tela, alvo.valor_correto + bonus_longe + bonus_combo, de_longe)
+		_mostrar_pontos(alvo.tela, alvo.valor_correto + bonus_longe + bonus_combo, de_longe, alvo.tipo)
 		_explodir_alvo_visual(alvo)
 		_carregar_cristal()
 		return
@@ -2073,7 +2074,7 @@ func _carregar_cristal() -> void:
 	for a in pegos:
 		var v: int = a.valor_correto
 		soma += v
-		_mostrar_pontos(a.tela, v, false)
+		_mostrar_pontos(a.tela, v, false, a.tipo)
 		_explodir_alvo_visual(a)
 	pontuacao_total += soma
 	_set_status("DESCARGA DO CRISTAL! +%d" % soma, Color(1.0, 0.86, 0.36, 1.0), 1.9)
@@ -2761,14 +2762,22 @@ func _remover_alvo(indice: int) -> void:
 
 	alvos_ativos.remove_at(indice)
 
-func _mostrar_pontos(pos_global: Vector2, pontos: int, de_longe: bool) -> void:
+## Pontos que saltam do brasão: os do sol em ouro, os da lua em prata
+## (perdidos em vermelho).
+func _mostrar_pontos(pos_global: Vector2, pontos: int, de_longe: bool, tipo: String = "") -> void:
 	if _pontos == null or pontos == 0:
 		return
-	var cor := Color(1.0, 0.86, 0.30) if pontos > 0 else Color(1.0, 0.35, 0.3)
-	if de_longe:
-		cor = Color(1.0, 0.95, 0.55)
+	var cor := Color(1.0, 0.35, 0.3)
+	var brilho := Color(0, 0, 0, 0)
+	if pontos > 0:
+		if tipo == MODO_LUA:
+			cor = Color(0.98, 1.0, 1.0) if de_longe else Color(0.86, 0.91, 0.98)
+			brilho = Color(1.0, 1.0, 1.0, 0.9)
+		else:
+			cor = Color(1.0, 0.95, 0.55) if de_longe else Color(1.0, 0.82, 0.26)
+			brilho = Color(1.0, 0.98, 0.78, 0.85)
 	_pontos.mostrar(get_viewport().get_canvas_transform() * pos_global, ("+%d" % pontos) if pontos > 0 else str(pontos), cor,
-		1.25 if de_longe else 1.0)
+		1.25 if de_longe else 1.0, brilho)
 
 
 ## Tiro na areia ou na pedra do fundo: furo de bala e a poeira que fica
