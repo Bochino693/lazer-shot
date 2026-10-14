@@ -242,12 +242,12 @@ func _rachar_ceramica(regiao: Rect2, folha: Vector2, xf: Transform2D, canto: Vec
 	var passos := 7
 	var trincas: Array[PackedVector2Array] = []
 	for i in n:
-		var a := a0 + TAU * (i + randf_range(-0.28, 0.28)) / n
+		var a := a0 + TAU * (i + randf_range(-0.2, 0.2)) / n
 		var linha := PackedVector2Array([tiro])
 		var desvio := 0.0
 		for k in range(1, passos + 1):
 			var d := longe * pow(float(k) / passos, 1.35)
-			desvio = clampf(desvio + randf_range(-0.16, 0.16), -0.3, 0.3)
+			desvio = clampf(desvio + randf_range(-0.12, 0.12), -0.18, 0.18)
 			linha.append(tiro + Vector2.from_angle(a + desvio) * d)
 		trincas.append(linha)
 	# anel torto (os cacos de dentro dele são os menores)
