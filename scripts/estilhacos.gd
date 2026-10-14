@@ -14,6 +14,10 @@ extends Node2D
 # líquido forma uma poça na prateleira, escorre pela beirada e pinga na
 # prateleira de baixo (ou no chão), onde respinga e deixa uma mancha.
 #
+# Como num filme: o tiro acende um clarão no vidro, o líquido estoura no ar
+# numa massa da cor da bebida que se desfaz em gotas, e os cacos que giram
+# contra a luz soltam faíscas (uma camada somada, poucos desenhos).
+#
 # Custo: todos os cacos de uma garrafa saem num desenho só (um triângulo
 # array com a folha de sprites da garrafa), as gotas/brilhos em outro e
 # lasquinhas + líquido num terceiro; tudo atualizado no lugar (sem criar nós).
@@ -38,6 +42,12 @@ const MAX_MANCHAS := 6
 const SEG_POCA := 14
 
 var _textura: Texture2D
+var _luz: Node2D                     # clarão, brilho da bebida e faíscas (somados)
+var _brilho_tex: Texture2D
+var _origem := Vector2.ZERO
+var _cor_bebida := Color(0, 0, 0, 0)
+var _massa: Array[Dictionary] = []   # o líquido estourando no ar
+var _faiscas := PackedVector3Array() # cacos pegando a luz agora (x, y, força)
 var _chao := 0.0
 var _tempo := 0.0
 var _duracao := 1.9
@@ -230,6 +240,26 @@ func _montar(sprite: Node2D, quadro: Texture2D, imagem: Image, ponto_tiro: Vecto
 	var origem := xf * (canto + tiro)
 	_criar_gotas(origem, cor_liquido, estilo, escala_tela)
 	_escala = escala_tela
+	_origem = origem
+	_cor_bebida = cor_liquido
+	_brilho_tex = FundoVivo.brilho_redondo()
+	var soma := CanvasItemMaterial.new()
+	soma.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
+	_luz = Node2D.new()
+	_luz.name = "Luz"
+	_luz.material = soma
+	_luz.draw.connect(_desenhar_luz)
+	add_child(_luz)
+	if cor_liquido.a > 0.01:
+		# a bebida sai inteira de uma vez: uma massa que se abre e cai
+		var corpo := (xf * (canto + limites.get_center()))
+		for i in 7:
+			var a := randf() * TAU
+			_massa.append({
+				"pos": corpo.lerp(origem, 0.4) + Vector2.from_angle(a) * randf_range(0.0, 18.0) * escala_tela,
+				"vel": Vector2.from_angle(a) * randf_range(60.0, 220.0) + Vector2(0, randf_range(-160.0, -20.0)),
+				"tam": randf_range(46.0, 80.0) * escala_tela, "vida": randf_range(0.45, 0.7),
+			})
 	_v_cor = _cor_do_vidro(imagem, regiao, cor_liquido)
 	_criar_lasquinhas(origem, randi_range(26, 34), escala_tela)
 	if cor_liquido.a > 0.01:
@@ -303,7 +333,7 @@ func _criar_gotas(origem: Vector2, cor_liquido: Color, estilo: int, escala_tela:
 	var tem_liquido := cor_liquido.a > 0.01
 	var qtd_gotas := 0
 	if tem_liquido:
-		qtd_gotas = 22 if estilo == ESTOURO else 16
+		qtd_gotas = 30 if estilo == ESTOURO else 22
 	for i in range(qtd_gotas):
 		var vel: Vector2
 		match estilo:
@@ -314,7 +344,7 @@ func _criar_gotas(origem: Vector2, cor_liquido: Color, estilo: int, escala_tela:
 				vel.y -= randf_range(40.0, 180.0)
 		var c := cor_liquido
 		c.a = randf_range(0.65, 0.9)
-		_nova_gota(origem + Vector2(randf_range(-6, 6), randf_range(-6, 6)), vel, c, randf_range(2.2, 4.8) * escala_tela, randf_range(0.7, 1.2))
+		_nova_gota(origem + Vector2(randf_range(-6, 6), randf_range(-6, 6)), vel, c, randf_range(3.5, 7.5) * escala_tela, randf_range(0.7, 1.2))
 	# Pó de vidro brilhando
 	for i in range(14):
 		var vel := Vector2.RIGHT.rotated(randf() * TAU) * randf_range(80.0, 380.0)
@@ -468,9 +498,15 @@ func _process(delta: float) -> void:
 		return
 	_atualizar(minf(delta, 1.0 / 30.0))
 	queue_redraw()
+	if _luz != null:
+		_luz.queue_redraw()
 
 
 func _atualizar(dt: float) -> void:
+	_faiscas.clear()
+	for m in _massa:
+		m["vel"] = m["vel"] * pow(0.3, dt) + Vector2(0, GRAVIDADE * 0.55) * dt
+		m["pos"] += m["vel"] * dt
 	for c in range(_c_pos.size()):
 		var solta: float = _c_solta[c]
 		var no_ar := _tempo >= solta
@@ -524,7 +560,8 @@ func _atualizar(dt: float) -> void:
 		var altura_vis := perspectiva
 		if pousado >= 0.0:
 			altura_vis *= lerpf(1.0, 0.45, clampf(pousado / 0.12, 0.0, 1.0))
-		var brilho := 1.0 + 0.85 * pow(absf(cos(tomb + 0.7)), 18.0)
+		var face := pow(absf(cos(tomb + 0.7)), 8.0)
+		var brilho := 1.0 + 0.9 * face
 		var sombra := 1.0 - 0.25 * clampf(-z, 0.0, 1.0)
 		var vida: float = _c_vida[c]
 		var alfa := 1.0
@@ -532,6 +569,8 @@ func _atualizar(dt: float) -> void:
 			alfa = clampf(1.0 - (pousado - 0.35) / 0.5, 0.0, 1.0)
 		alfa = minf(alfa, clampf((vida - _tempo) / 0.35, 0.0, 1.0))
 		var cor := Color(brilho * sombra, brilho * sombra, brilho * sombra, alfa)
+		if face > 0.55 and alfa > 0.3 and pousado < 0.0:
+			_faiscas.append(Vector3(pos.x, pos.y, face * alfa))
 		var giro := Transform2D(_c_ang[c], pos)
 		var ini: int = _c_inicio[c]
 		for k in range(_c_qtd[c]):
@@ -733,6 +772,14 @@ func _nova_mancha(pos: Vector2) -> void:
 
 
 func _draw() -> void:
+	# a massa de bebida no ar (atrás dos cacos), abrindo e caindo
+	for m in _massa:
+		var k: float = _tempo / m["vida"]
+		if k >= 1.0:
+			continue
+		var t: float = m["tam"] * (0.55 + 0.9 * k)
+		draw_texture_rect(_brilho_tex, Rect2(m["pos"] - Vector2(t, t) * 0.5, Vector2(t, t)), false,
+			Color(_cor_bebida, 0.62 * (1.0 - k) * minf(1.0, k * 12.0 + 0.4)))
 	var ci := get_canvas_item()
 	if not _indices.is_empty() and _textura != null:
 		RenderingServer.canvas_item_add_triangle_array(ci, _indices, _pontos, _cores, _uvs, PackedInt32Array(), PackedFloat32Array(), _textura.get_rid())
@@ -740,6 +787,24 @@ func _draw() -> void:
 		RenderingServer.canvas_item_add_triangle_array(ci, _g_indices, _g_pontos, _g_cores)
 	if not _l_indices.is_empty():
 		RenderingServer.canvas_item_add_triangle_array(ci, _l_indices, _l_pontos, _l_cores)
+
+
+## Camada somada: o clarão do tiro no vidro, a bebida acendendo junto e as
+## faíscas dos cacos que estão de frente para a luz.
+func _desenhar_luz() -> void:
+	if _tempo < 0.18:
+		var k := _tempo / 0.18
+		var t := (90.0 + 220.0 * k) * _escala
+		_luz.draw_texture_rect(_brilho_tex, Rect2(_origem - Vector2(t, t) * 0.5, Vector2(t, t)), false, Color(1.0, 0.95, 0.85, 0.9 * (1.0 - k)))
+		var t2 := (30.0 + 40.0 * k) * _escala
+		_luz.draw_texture_rect(_brilho_tex, Rect2(_origem - Vector2(t2, t2) * 0.5, Vector2(t2, t2)), false, Color(1, 1, 1, 1.0 - k))
+	if _cor_bebida.a > 0.01 and _tempo < 0.4:
+		var kb := _tempo / 0.4
+		var tb := 200.0 * _escala * (0.6 + kb)
+		_luz.draw_texture_rect(_brilho_tex, Rect2(_origem - Vector2(tb, tb) * 0.5, Vector2(tb, tb)), false, Color(_cor_bebida, 0.35 * (1.0 - kb)))
+	for f in _faiscas:
+		var tf := 30.0 * _escala * (0.6 + f.z)
+		_luz.draw_texture_rect(_brilho_tex, Rect2(Vector2(f.x, f.y) - Vector2(tf, tf) * 0.5, Vector2(tf, tf)), false, Color(1.0, 0.96, 0.85, 0.8 * f.z))
 
 
 static func _caixa_opaca(imagem: Image, regiao: Rect2) -> Rect2:
