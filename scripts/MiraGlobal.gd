@@ -72,7 +72,23 @@ const RITMO_LENTO_MS := 20.0
 const RITMO_FRACAO := 0.25
 const RITMO_ARQUIVO := "user://ritmo.cfg"
 const VERSAO_JOGO := preload("res://scripts/caixa_preta.gd").VERSAO
+## Calibrado para a TV Box (Mali-G31): estas telas são as mais pesadas para a
+## placa (fundo em camadas, luz do sol, planos em 3D) e já abrem em 30
+## cravados, sem os 2 s de tranco medindo. As outras tentam 60 e caem para
+## 30 sozinhas se não segurarem.
+const TELAS_30 := ["res://scenes/deserto.tscn", "res://scenes/mar.tscn"]
 var _ritmo_lento: Dictionary = {}   # cena -> true (abre direto em 30)
+# CALIBRAGEM (TV Box): se nem em 30 a tela segura (mais de um quarto dos
+# quadros de 3 s passando de 45 ms), ela fica LEVE: os enfeites que cada fase
+# marcou no grupo "efeito_opcional" (neve do mar, poeira, cardumes do fundo)
+# param e somem. Alvos, cenário, luz e efeitos de acerto continuam. A TV Box
+# lembra (user://ritmo.cfg, por versão) e a tela já abre leve da próxima vez.
+const LEVE_JANELA := 3.0
+const LEVE_LENTO_MS := 45.0
+var _telas_leves: Dictionary = {}   # cena -> true
+var _leve_t := 0.0
+var _leve_quadros := 0
+var _leve_lentos := 0
 var _ritmo_ativo := false
 var _ritmo_cena := 0
 var _ritmo_t := 0.0
@@ -128,15 +144,21 @@ func _ritmo() -> void:
 		# tela nova: abre em 30 se ela já não segurou 60 antes; senão tenta
 		# 60 e espera ela assentar antes de medir
 		_ritmo_cena = id
-		Engine.max_fps = 30 if cena != null and _ritmo_lento.has(cena.scene_file_path) else 0
+		_cravar(30 if cena != null and _ritmo_lento.has(cena.scene_file_path) else 0)
 		_ritmo_t = -1.5
 		_ritmo_quadros = 0
 		_ritmo_lentos = 0
 		_ritmo_ultimo = agora
+		_leve_t = -2.0
+		_leve_quadros = 0
+		_leve_lentos = 0
+		if cena != null and _telas_leves.has(cena.scene_file_path):
+			_deixar_leve.call_deferred(cena)
 		return
 	var quadro := (agora - _ritmo_ultimo) / 1000.0
 	_ritmo_ultimo = agora
 	if Engine.max_fps == 30:
+		_medir_leve(quadro, cena)
 		return
 	_ritmo_t += quadro / 1000.0
 	if _ritmo_t < 0.0 or TransicaoGlobal.em_transicao:
@@ -146,7 +168,7 @@ func _ritmo() -> void:
 		_ritmo_lentos += 1
 	if _ritmo_t >= RITMO_JANELA:
 		if _ritmo_quadros > 20 and float(_ritmo_lentos) / _ritmo_quadros > RITMO_FRACAO:
-			Engine.max_fps = 30
+			_cravar(30)
 			Tela.marca("ritmo: 30 quadros/s cravados em %s (%d de %d quadros passavam de %d ms)" % [cena.name, _ritmo_lentos, _ritmo_quadros, int(RITMO_LENTO_MS)])
 			if cena.scene_file_path != "":
 				_ritmo_lento[cena.scene_file_path] = true
@@ -156,18 +178,63 @@ func _ritmo() -> void:
 		_ritmo_lentos = 0
 
 
+## 30 ou livre (0 = o vsync manda). Em 30 a física também anda a 30 por
+## segundo (nenhuma tela depende dela a cada passo; a 60 eram dois passos
+## por quadro), e um quadro atrasado não vira uma fila de passos.
+func _cravar(fps: int) -> void:
+	Engine.max_fps = fps
+	Engine.physics_ticks_per_second = 30 if fps == 30 else 60
+	Engine.max_physics_steps_per_frame = 2 if fps == 30 else 4
+
+
+## Em 30: mede se a tela segura; se não, fica leve (uma vez por tela).
+func _medir_leve(quadro: float, cena: Node) -> void:
+	if cena == null or cena.scene_file_path == "" or _telas_leves.has(cena.scene_file_path):
+		return
+	_leve_t += quadro / 1000.0
+	if _leve_t < 0.0 or TransicaoGlobal.em_transicao:
+		return
+	_leve_quadros += 1
+	if quadro > LEVE_LENTO_MS:
+		_leve_lentos += 1
+	if _leve_t >= LEVE_JANELA:
+		if _leve_quadros > 20 and float(_leve_lentos) / _leve_quadros > RITMO_FRACAO:
+			Tela.marca("calibragem: %s leve (%d de %d quadros passavam de %d ms)" % [cena.name, _leve_lentos, _leve_quadros, int(LEVE_LENTO_MS)])
+			_telas_leves[cena.scene_file_path] = true
+			_ritmo_salvar()
+			_deixar_leve(cena)
+		_leve_t = 0.0
+		_leve_quadros = 0
+		_leve_lentos = 0
+
+
+## Para e esconde os enfeites opcionais da tela.
+func _deixar_leve(cena: Node) -> void:
+	if not is_instance_valid(cena):
+		return
+	for n in get_tree().get_nodes_in_group("efeito_opcional"):
+		if n is CanvasItem and cena.is_ancestor_of(n):
+			(n as CanvasItem).visible = false
+			n.process_mode = Node.PROCESS_MODE_DISABLED
+
+
 func _ritmo_carregar() -> void:
+	for c in TELAS_30:
+		_ritmo_lento[c] = true
 	var cfg := ConfigFile.new()
 	if cfg.load(RITMO_ARQUIVO) != OK or str(cfg.get_value("ritmo", "versao", "")) != VERSAO_JOGO:
 		return   # outra versão do jogo: mede de novo
 	for c in cfg.get_value("ritmo", "telas_30", []):
 		_ritmo_lento[str(c)] = true
+	for c in cfg.get_value("ritmo", "telas_leves", []):
+		_telas_leves[str(c)] = true
 
 
 func _ritmo_salvar() -> void:
 	var cfg := ConfigFile.new()
 	cfg.set_value("ritmo", "versao", VERSAO_JOGO)
 	cfg.set_value("ritmo", "telas_30", _ritmo_lento.keys())
+	cfg.set_value("ritmo", "telas_leves", _telas_leves.keys())
 	cfg.save(RITMO_ARQUIVO)
 
 

@@ -33,6 +33,7 @@ var _estilo: StyleBoxFlat
 var _estilo_mira: StyleBoxFlat
 var _sob := false
 var _t := 0.0
+var _conferir := 0
 
 
 static func instalar(fase: Node, cor: Color, visivel: Callable, camada: int = 150) -> FimPartida:
@@ -148,6 +149,11 @@ func _ajustar() -> void:
 
 
 func _process(delta: float) -> void:
+	# escondido (durante a partida) só confere a cada 4 quadros se já é hora
+	# de aparecer: na TV Box cada quadro de processador conta
+	_conferir += 1
+	if not visible and _conferir % 4 != 0:
+		return
 	var tg: Node = get_tree().root.get_node_or_null("TransicaoGlobal")
 	var v: bool = _visivel.is_valid() and bool(_visivel.call()) and not (tg != null and tg.em_transicao)
 	if visible != v:

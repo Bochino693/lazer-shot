@@ -109,6 +109,10 @@ func _remontar() -> void:
 
 
 func _process(delta: float) -> void:
+	# escondido (a partida começou) não faz nada: na TV Box o pisca do rodapé
+	# e o alvo redesenhando custavam processador a partida inteira
+	if not is_visible_in_tree():
+		return
 	_t += delta
 	if _rodape != null:
 		_rodape.modulate.a = 0.55 + 0.45 * absf(sin(_t * 3.2))

@@ -40,45 +40,52 @@ void vertex() {
 }
 
 void fragment() {
-	vec2 luv = (UV - regiao.xy) / regiao.zw;
-	// fora da caixa da máscara (a folga do recorte) não há runas
-	float dentro = step(0.0, luv.x) * step(luv.x, 1.0) * step(0.0, luv.y) * step(luv.y, 1.0);
-	vec4 m = texture(mascara, luv) * dentro;
+	// a pedra é um recorte: fora do contorno (boa parte da caixa) não faz
+	// conta nenhuma nem lê as outras texturas (na Mali-G31 cada leitura pesa)
 	float alfa = texture(TEXTURE, UV).a;
-	vec3 col = luz_do_mar(texture(fundo, uv_foto).rgb, uv_foto, onda_t, cau_t);
+	vec3 col = vec3(0.0);
+	if (alfa > 0.002) {
+		vec2 luv = (UV - regiao.xy) / regiao.zw;
+		// fora da caixa da máscara (a folga do recorte) não há runas
+		float dentro = step(0.0, luv.x) * step(luv.x, 1.0) * step(0.0, luv.y) * step(luv.y, 1.0);
+		vec4 m = texture(mascara, luv) * dentro;
+		col = luz_do_mar(texture(fundo, uv_foto).rgb, uv_foto, onda_t, cau_t);
 
-	float quebrado = 0.0;
-	for (int i = 0; i < n_danos; i++) {
-		vec4 d = danos[i];
-		vec2 q = (luv - d.xy) * vec2(1.0, 1.0 / aspecto);
-		float dq = length(q);
-		float r = dq / d.z;
-		if (r < 3.2) {
-			vec2 n = q / max(dq, 1e-5);
-			float luz = dot(n, vec2(-0.6, -0.8));
-			float poco = smoothstep(1.0, 0.5, r);
-			float parede = smoothstep(1.05, 0.65, r) - poco;
-			col *= 1.0 - poco * 0.74;
-			// buraco: a parede do lado da luz fica na sombra, a oposta acesa
-			col *= 1.0 - parede * clamp(0.35 + 0.5 * luz, 0.0, 1.0);
-			col += vec3(0.16, 0.20, 0.22) * parede * max(-luz, 0.0);
-			float aro = smoothstep(0.82, 1.0, r) * smoothstep(1.28, 1.0, r);
-			col += vec3(0.22, 0.27, 0.29) * aro * max(luz, 0.0);
-			float ang = atan(q.y, q.x);
-			float s = d.w * 17.0;
-			float rach = abs(sin(ang * 3.0 + s + sin(r * 4.0 + s) * 0.5)) * abs(sin(ang * 5.0 - s * 1.3 + r * 0.7));
-			float linha = (1.0 - smoothstep(0.0, 0.09, rach)) * smoothstep(3.2, 1.1, r) * step(0.95, r);
-			col *= 1.0 - 0.7 * linha;
-			quebrado = max(quebrado, smoothstep(1.05, 0.7, r));
+		float quebrado = 0.0;
+		for (int i = 0; i < n_danos; i++) {
+			vec4 d = danos[i];
+			vec2 q = (luv - d.xy) * vec2(1.0, 1.0 / aspecto);
+			float dq = length(q);
+			float r = dq / d.z;
+			if (r < 3.2) {
+				vec2 n = q / max(dq, 1e-5);
+				float luz = dot(n, vec2(-0.6, -0.8));
+				float poco = smoothstep(1.0, 0.5, r);
+				float parede = smoothstep(1.05, 0.65, r) - poco;
+				col *= 1.0 - poco * 0.74;
+				// buraco: a parede do lado da luz fica na sombra, a oposta acesa
+				col *= 1.0 - parede * clamp(0.35 + 0.5 * luz, 0.0, 1.0);
+				col += vec3(0.16, 0.20, 0.22) * parede * max(-luz, 0.0);
+				float aro = smoothstep(0.82, 1.0, r) * smoothstep(1.28, 1.0, r);
+				col += vec3(0.22, 0.27, 0.29) * aro * max(luz, 0.0);
+				float ang = atan(q.y, q.x);
+				float s = d.w * 17.0;
+				float rach = abs(sin(ang * 3.0 + s + sin(r * 4.0 + s) * 0.5)) * abs(sin(ang * 5.0 - s * 1.3 + r * 0.7));
+				float linha = (1.0 - smoothstep(0.0, 0.09, rach)) * smoothstep(3.2, 1.1, r) * step(0.95, r);
+				col *= 1.0 - 0.7 * linha;
+				quebrado = max(quebrado, smoothstep(1.05, 0.7, r));
+			}
+		}
+
+		if (m.r + m.a > 0.002) {
+			float p = fract(TIME / periodo + fase) * 1.4 - 0.2;
+			float dy = m.g - p;
+			float faixa = exp(-dy * dy * 140.0);
+			float rastro = dy < 0.0 ? exp(dy * 6.0) * 0.6 : 0.0;
+			float acende = (0.20 + faixa * 1.7 + rastro) * (1.0 - quebrado);
+			vec3 ciano = vec3(0.32, 0.95, 1.0);
+			col += ciano * (m.r * acende * 0.85 + m.a * acende * 0.28);
 		}
 	}
-
-	float p = fract(TIME / periodo + fase) * 1.4 - 0.2;
-	float dy = m.g - p;
-	float faixa = exp(-dy * dy * 140.0);
-	float rastro = dy < 0.0 ? exp(dy * 6.0) * 0.6 : 0.0;
-	float acende = (0.20 + faixa * 1.7 + rastro) * (1.0 - quebrado);
-	vec3 ciano = vec3(0.32, 0.95, 1.0);
-	col += ciano * (m.r * acende * 0.85 + m.a * acende * 0.28);
 	COLOR = vec4(col, alfa) * cor_no;
 }

@@ -267,6 +267,7 @@ func _criar_cardumes() -> void:
 			mm.set_instance_color(i, Color(randf(), randf(), clampf(c["longe"] + randf_range(-0.15, 0.15), 0.0, 1.0), 1.0))
 		var no := MultiMeshInstance2D.new()
 		no.name = "Cardume"
+		no.add_to_group("efeito_opcional")   # some se a TV Box não segurar (MiraGlobal)
 		no.multimesh = mm
 		no.texture = PEIXE
 		var mat := ShaderMaterial.new()
@@ -1031,6 +1032,7 @@ func _criar_agua_viva() -> void:
 	# partículas boiando na correnteza
 	var p := CPUParticles2D.new()
 	p.name = "Deriva"
+	p.add_to_group("efeito_opcional")   # some se a TV Box não segurar (MiraGlobal)
 	p.amount = 40
 	p.lifetime = 16.0
 	p.preprocess = 16.0

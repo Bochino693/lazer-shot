@@ -217,3 +217,46 @@ const LISTA := {
 		"res://sprites/fundo_init_mascara.png",
 	],
 }
+
+# Shaders de cada tela: montados na placa um por quadro, debaixo do
+# cartão de carregamento (scripts/aquecedor.gd).
+const SHADERS := {
+	"res://scenes/abertura_ls.tscn": [
+		"res://shaders/abertura_fundo.gdshader",
+		"res://shaders/abertura_logo.gdshader",
+	],
+	"res://scenes/arena.tscn": [
+		"res://shaders/fundo_vivo.gdshader",
+	],
+	"res://scenes/bar.tscn": [
+		"res://shaders/bar_sol.gdshader",
+	],
+	"res://scenes/cenarios.tscn": [
+		"res://shaders/fundo_vivo.gdshader",
+		"res://shaders/deserto_fundo.gdshader",
+	],
+	"res://scenes/deserto.tscn": [
+		"res://shaders/egito_astro.gdshader",
+		"res://shaders/deserto_fundo.gdshader",
+		"res://shaders/egito_alvo.gdshader",
+		"res://shaders/egito_plano.gdshader",
+		"res://shaders/egito_plano_simples.gdshader",
+		"res://shaders/egito_raios.gdshader",
+		"res://shaders/egito_cristal.gdshader",
+		"res://shaders/egito_feixe.gdshader",
+	],
+	"res://scenes/main.tscn": [
+		"res://shaders/fundo_vivo.gdshader",
+	],
+	"res://scenes/mar.tscn": [
+		"res://shaders/fundo_profundo.gdshader",
+		"res://shaders/mar_cascata.gdshader",
+		"res://shaders/mar_baleia.gdshader",
+		"res://shaders/mar_cardume.gdshader",
+		"res://shaders/mar_pedra.gdshader",
+		"res://shaders/mar_recorte.gdshader",
+	],
+	"res://scenes/ranking.tscn": [
+		"res://shaders/fundo_vivo.gdshader",
+	],
+}

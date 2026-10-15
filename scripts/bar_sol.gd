@@ -47,6 +47,7 @@ func _ready() -> void:
 
 	var poeira := CPUParticles2D.new()
 	poeira.name = "Poeira"
+	poeira.add_to_group("efeito_opcional")   # some se a TV Box não segurar (MiraGlobal)
 	poeira.position = -tam_fundo * 0.5
 	# Na frente das garrafas (poeira no ar), mas bem discreta.
 	poeira.z_as_relative = false

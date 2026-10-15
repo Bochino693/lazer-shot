@@ -49,6 +49,10 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
+	# escondida (a partida começou) não anima nem redesenha: na TV Box isso
+	# custava processador a partida inteira
+	if not is_visible_in_tree():
+		return
 	_t += delta
 	queue_redraw()
 

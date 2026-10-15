@@ -23,7 +23,7 @@ void vertex() {
 
 void fragment() {
 	vec3 rgb = COLOR.rgb * (1.0 + 0.06 * batida);
-	if (onda < 0.625 && energia > 0.05) {
+	if (COLOR.a > 0.002 && onda < 0.625 && energia > 0.05) {
 		float d = length((uv_img - centro) * vec2(1.0, 1.5));
 		float anel = smoothstep(0.045, 0.0, abs(d - onda)) * clamp(1.0 - onda * 1.6, 0.0, 1.0);
 		rgb += (cor_energia * anel * 0.10 + COLOR.rgb * anel * 0.18) * energia * forca;

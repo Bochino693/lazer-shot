@@ -63,10 +63,15 @@ vec3 luz_do_mar(vec3 col, vec2 uv, vec4 onda_t, vec4 cau_t) {
 	// raios de sol: cada facho é uma direção saindo do sol (a inclinação
 	// x/y); a textura traz os fachos nascendo, se juntando e sumindo, e o
 	// balanço lento mexe todos juntos
-	vec2 v = uv - sol;
-	float r = texture(raios, vec2(v.x / v.y * 0.42 + onda_t.x, onda_t.y)).r;
-	float raio = r * m.a * onda_t.w;
-	col = 1.0 - (1.0 - col) * (1.0 - vec3(0.80, 0.95, 1.0) * raio);
+	// (onde a máscara não tem raio não lê a textura deles: na Mali-G31 cada
+	// leitura pesa, e o resultado é o mesmo)
+	float r = 0.0;
+	if (m.a > 0.004) {
+		vec2 v = uv - sol;
+		r = texture(raios, vec2(v.x / v.y * 0.42 + onda_t.x, onda_t.y)).r;
+		float raio = r * m.a * onda_t.w;
+		col = 1.0 - (1.0 - col) * (1.0 - vec3(0.80, 0.95, 1.0) * raio);
+	}
 	if (m.g > 0.06) {
 		float c;
 		if (uv.y <= horizonte || m.b > 0.99) {

@@ -65,9 +65,10 @@ func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	if not Tela.contorna("abertura"):
 		Tela.risco("abertura")   # se o app morrer aqui, a caixa-preta sabe
-	# todos os shaders do jogo ficam prontos agora, debaixo do preto inicial
-	# (scripts/aquecedor.gd), e não na primeira vez que cada fase aparece
-	Aquecedor.tudo(self)
+	# Nada das fases é preparado aqui: na partida do app a placa da TV Box só
+	# monta os dois shaders da apresentação. Os de cada fase são montados na
+	# troca de tela, um por quadro, com o cartão de carregamento à vista
+	# (scripts/aquecedor.gd, scripts/TransiaoGlobal.gd).
 	_tela = get_viewport_rect().size
 	_montar()
 	_ajustar()
