@@ -58,6 +58,8 @@ var _ultimo_coice_ms := -100000
 var _iniciada := false
 var _sens := 1.0
 var _android := false
+var _arma_ligada := false
+var _sem_captura := false
 var _ultima_janela := Vector2(INF, INF)
 var _recapturar_em := 0.0
 
@@ -104,6 +106,26 @@ func _ready() -> void:
 	process_priority = -100   # atualiza antes das telas lerem
 	# Depois do Tela.gd (autoload anterior), que corrige o giro do evento.
 	get_tree().root.window_input.connect(_ao_evento)
+	# Na TV Box a captura da arma e o cursor transparente (chamadas ao
+	# Android que só este jogo faz) entram num passo vigiado da preparação,
+	# com a tela preta (scripts/aquecedor.gd, passo "arma").
+	if not _android:
+		iniciar_arma()
+
+
+## Liga a arma: seta transparente e ponteiro capturado. `seguro`: a TV Box
+## já caiu aqui antes (caixa-preta): sem captura nem seta própria, a mira
+## segue o ponteiro real escondido.
+func iniciar_arma(seguro: bool = false) -> void:
+	if _arma_ligada:
+		return
+	_arma_ligada = true
+	_sem_captura = seguro
+	if seguro:
+		capturada = false
+		Input.set_mouse_mode(Input.MOUSE_MODE_HIDDEN)
+		Tela.marca("arma sem captura (contorno)")
+		return
 	_cursor_invisivel()
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 
@@ -296,7 +318,7 @@ func _process(delta: float) -> void:
 		_ritmo()
 	_sens = clampf(float(get_tree().get_meta(META_SENS_MOUSE, 1.0)), 0.2, 3.0)
 
-	if _android and not capturada:
+	if _android and not capturada and _arma_ligada and not _sem_captura:
 		# pede a captura de novo até o Android aceitar
 		_recapturar_em -= delta
 		if _recapturar_em <= 0.0:
@@ -345,7 +367,7 @@ func _notification(what: int) -> void:
 	if what == NOTIFICATION_APPLICATION_FOCUS_IN or what == NOTIFICATION_WM_WINDOW_FOCUS_IN:
 		# ao voltar o foco o Android já soltou a captura: pede de novo
 		_recapturar_em = 0.0
-		if _android:
+		if _android and _arma_ligada and not _sem_captura:
 			_recapturar.call_deferred()
 
 

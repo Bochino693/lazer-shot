@@ -15,30 +15,31 @@ extends Node
 ## Na abertura seguinte, as últimas linhas da sessão anterior também saem no
 ## registro do Android (GERAR_APK_PRO_ULTRA.bat -Registro as puxa pelo adb).
 ## Na TV Box, uma cópia fica também na pasta do app que o gerenciador de
-## arquivos enxerga (Android/data/com.lazersport.lazershot/files/caixa_preta):
-## dá para passar para o pendrive sem cabo.
+## arquivos enxerga (Android/data/com.lazersport.lazershot/files/caixa_preta)
+## e, com um pendrive espetado, no próprio pendrive (a mesma pasta
+## Android/data/... dentro dele): é só levar o pendrive ao PC. A cópia
+## começa no passo "pasta" da preparação (scripts/aquecedor.gd).
 ##
 ## PROTEÇÃO PONTUAL (só na TV Box): o jogo avisa quando entra num trecho que
 ## depende do aparelho (Tela.risco("abertura"), Tela.risco("video")) e
 ## quando sai (Tela.risco("")). Se o app morrer DENTRO de um desses trechos,
-## nesta mesma versão DUAS VEZES, só aquele trecho é contornado nas próximas
-## aberturas (uma vez só pode ter sido a primeira abertura lenta, ou alguém
-## saindo do jogo no meio):
-##   "abertura"  a apresentação Lazer & Sport é pulada
-##   "video"     os vídeos tocam pelo player do Godot em vez do hardware
-## Os passos da preparação da placa de vídeo (scripts/aquecedor.gd) são
-## contornados já na PRIMEIRA queda (cada um dura uma fração de segundo,
-## com a tela preta; ninguém sai do jogo bem ali):
+## nesta mesma versão, só aquele trecho é contornado nas próximas aberturas.
+## O vídeo precisa de DUAS quedas (uma pode ter sido alguém saindo do jogo);
+## os outros, de uma:
+##   "video"            os vídeos tocam pelo player do Godot em vez do hardware
+##   "abertura"         a apresentação Lazer & Sport é pulada
 ##   "desenho:<jeito>"  aquele jeito de desenhar fica desligado no jogo todo
 ##   "shader:<nome>"    aquele shader vira um desenho simples
 ##   "som"              efeitos sonoros desligados
+##   "arma"             a mira segue o ponteiro sem capturá-lo
+##   "pasta"            sem cópia da caixa-preta fora do app
 ## (scripts/contorno_desenho.gd aplica). Todo o resto continua igual.
 ## Instalar uma versão nova zera tudo.
 ##
 ## Criada pela Tela (o primeiro autoload) no _init, antes de qualquer cena.
 ## Outros scripts marcam etapas com Tela.marca("texto").
 
-const VERSAO := "1.25.0"
+const VERSAO := "1.26.0"
 const PASTA := "user://caixa_preta"
 const SESSAO := PASTA + "/sessao.txt"
 const ANTERIOR := PASTA + "/anterior.txt"
@@ -137,7 +138,7 @@ var _t := 0.0
 var _vivo_t := 0.0
 var _pulso_t := 0.0
 var _cena_id := 0
-var _externa := ""     # pasta do app visível no gerenciador de arquivos ("" = sem)
+var _externas: Array[String] = []   # pastas visíveis fora do app (interna e pendrive)
 var _conferir := 0     # quadros que faltam para anotar o "ok" de marca_quadro
 var _conferir_txt := ""
 
@@ -161,11 +162,6 @@ func _init() -> void:
 
 
 func _ready() -> void:
-	_externa = _pasta_externa()
-	if _externa != "":
-		_copiar_fora(ANTERIOR, "anterior.txt")
-		_copiar_fora(QUEDA, "queda.txt")
-		_copiar_fora(SESSAO, "sessao.txt")
 	marca("vídeo: %s | %s | %s | tela %s | janela %s" % [RenderingServer.get_video_adapter_name(), RenderingServer.get_video_adapter_vendor(),
 		RenderingServer.get_video_adapter_api_version(), DisplayServer.screen_get_size(), DisplayServer.window_get_size()])
 	var primeira := get_tree().current_scene
@@ -261,29 +257,62 @@ func _process(delta: float) -> void:
 		_copiar_fora(SESSAO, "sessao.txt")
 
 
-## Pasta do app no armazenamento que o gerenciador de arquivos da TV Box
-## enxerga (sem permissão nenhuma). "" se não der.
-func _pasta_externa() -> String:
+## Passo "pasta" da preparação: acha as pastas do app que ficam visíveis
+## fora dele (sem permissão nenhuma) e copia a caixa-preta para elas.
+func abrir_pasta_externa() -> void:
+	if not _externas.is_empty():
+		return
+	for p in _pastas_externas():
+		var caminho := p.path_join("caixa_preta")
+		if DirAccess.make_dir_recursive_absolute(caminho) == OK or DirAccess.dir_exists_absolute(caminho):
+			_externas.append(caminho)
+			marca("cópia da caixa-preta em " + caminho)
+	_copiar_fora(ANTERIOR, "anterior.txt")
+	_copiar_fora(QUEDA, "queda.txt")
+	_copiar_fora(SESSAO, "sessao.txt")
+
+
+## Android/data/<app>/files na memória da TV Box e em cada pendrive/cartão.
+func _pastas_externas() -> Array[String]:
+	var r: Array[String] = []
 	if OS.get_name() != "Android" or not Engine.has_singleton("AndroidRuntime"):
-		return ""
+		return r
 	var rt = Engine.get_singleton("AndroidRuntime")
 	var ctx = rt.getApplicationContext() if rt != null else null
-	var dir = ctx.getExternalFilesDir(null) if ctx != null else null
-	if dir == null:
-		return ""
-	var caminho := str(dir.getAbsolutePath()).path_join("caixa_preta")
-	if DirAccess.make_dir_recursive_absolute(caminho) != OK and not DirAccess.dir_exists_absolute(caminho):
-		return ""
-	marca("cópia da caixa-preta em " + caminho)
-	return caminho
+	if ctx == null:
+		return r
+	var dir = ctx.getExternalFilesDir(null)
+	if dir != null:
+		r.append(str(dir.getAbsolutePath()))
+	# o Android cria a pasta do app em cada volume (pendrive) ao pedir a lista
+	var todas = ctx.getExternalFilesDirs(null)
+	if todas is Array:
+		for d in todas:
+			if d != null:
+				var c := str(d.getAbsolutePath())
+				if not (c in r):
+					r.append(c)
+	# e, se a lista não vier, procura os volumes montados em /storage
+	var pacote := "com.lazersport.lazershot"
+	var vols := DirAccess.open("/storage")
+	if vols != null:
+		for v in vols.get_directories():
+			if v == "emulated" or v == "self":
+				continue
+			var c := "/storage/%s/Android/data/%s/files" % [v, pacote]
+			if DirAccess.dir_exists_absolute(c) and not (c in r):
+				r.append(c)
+	return r
 
 
 func _copiar_fora(origem: String, nome: String) -> void:
-	if _externa == "" or not FileAccess.file_exists(origem):
+	if _externas.is_empty() or not FileAccess.file_exists(origem):
 		return
-	var f := FileAccess.open(_externa.path_join(nome), FileAccess.WRITE)
-	if f != null:
-		f.store_string(FileAccess.get_file_as_string(origem))
+	var texto := FileAccess.get_file_as_string(origem)
+	for pasta in _externas:
+		var f := FileAccess.open(pasta.path_join(nome), FileAccess.WRITE)
+		if f != null:
+			f.store_string(texto)
 
 
 func _estado() -> String:
@@ -320,7 +349,7 @@ func _guardar_sessao_anterior() -> void:
 	if r.size() == 2 and r[0] == VERSAO and r[1] != "" and not (r[1] in contornos):
 		# primeira queda neste trecho: só anota; na segunda, contorna (os
 		# passos da preparação da placa já na primeira)
-		var na_hora := r[1].begins_with("desenho:") or r[1].begins_with("shader:") or r[1] == "som"
+		var na_hora := r[1].begins_with("desenho:") or r[1].begins_with("shader:") or r[1] in ["som", "arma", "pasta", "abertura"]
 		var quase := FileAccess.get_file_as_string(QUASE).strip_edges() if FileAccess.file_exists(QUASE) else ""
 		if quase != risco_anterior and not na_hora:
 			var q := FileAccess.open(QUASE, FileAccess.WRITE)

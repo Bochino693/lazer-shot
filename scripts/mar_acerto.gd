@@ -24,6 +24,7 @@ extends Node2D
 ## Um nó só por acerto: os pedaços saem num desenho (triângulos com a folha
 ## do alvo), o resto em poucas chamadas; some sozinho em ~2-3 s.
 
+const Pincel := preload("res://scripts/pincel.gd")
 const BOLHA := preload("res://sprites/mar_bolha.png")
 const LODO := preload("res://sprites/mar_lodo.png")
 
@@ -118,6 +119,7 @@ func _montar(anim: AnimatedSprite2D, quadro: Texture2D, impacto: Vector2, tipo: 
 	soma.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
 	_luz = Node2D.new()
 	_luz.material = soma
+	_luz.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	_luz.draw.connect(_desenhar_luz)
 	add_child(_luz)
 
@@ -869,13 +871,13 @@ func _desenhar_luz() -> void:
 		var k: float = t / a["vida"]
 		var ease := 1.0 - (1.0 - k) * (1.0 - k)
 		var cor: Color = a["cor"]
+		# anel pelo pincel (retângulo de textura): na TV Box a luz somada só
+		# desenha retângulos (scripts/pincel.gd)
 		if a.get("achatado", false):
 			_luz.draw_set_transform(a["pos"], 0.0, Vector2(1.0, 0.3))
-			_luz.draw_arc(Vector2.ZERO, 12.0 * _k + a["raio"] * ease, 0.0, TAU, 48, Color(cor, cor.a * (1.0 - k)),
-				maxf(1.0, a["larg"] * (1.0 - k)), true)
+			Pincel.anel(_luz, Vector2.ZERO, 12.0 * _k + a["raio"] * ease, maxf(1.0, a["larg"] * (1.0 - k)), Color(cor, cor.a * (1.0 - k)))
 			_luz.draw_set_transform(Vector2.ZERO)
 			continue
-		_luz.draw_arc(a["pos"], 12.0 * _k + a["raio"] * ease, 0.0, TAU, 48, Color(cor, cor.a * (1.0 - k)),
-			maxf(1.0, a["larg"] * (1.0 - k)), true)
+		Pincel.anel(_luz, a["pos"], 12.0 * _k + a["raio"] * ease, maxf(1.0, a["larg"] * (1.0 - k)), Color(cor, cor.a * (1.0 - k)))
 
 

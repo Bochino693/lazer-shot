@@ -638,6 +638,7 @@ func aquecer(streams: Array) -> void:
 			continue
 		var p := _player_efeito(stream)
 		p.volume_db = -80.0
+		p.pitch_scale = 1.02   # o mesmo caminho dos tiros (tom variando)
 		p.play()
 		get_tree().create_timer(0.1).timeout.connect(p.stop)
 

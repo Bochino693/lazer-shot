@@ -39,17 +39,29 @@ O jogo não mostra nada técnico na tela. Por trás, ele tem duas proteções:
   ele é contornado nas próximas aberturas desta versão: a apresentação é
   pulada, ou os vídeos passam a tocar pelo player do Godot. Todo o resto do
   jogo continua igual. Instalar uma versão nova zera tudo.
-- **Preparação vigiada da placa** (desde a 1.25.0): ao abrir, com a tela
-  preta, cada jeito de desenhar, cada shader e os sons são preparados um
-  por vez. Se o app morrer num desses passos, da abertura seguinte em diante
-  o jogo segue **sem aquele recurso** (luz somada vira mistura comum,
-  partículas somem, o shader vira imagem simples, ou os efeitos sonoros
-  calam) em vez de cair de novo. A caixa-preta diz qual foi
-  (`contornos.txt` e as linhas `preparado ...` de `sessao.txt`).
+- **Preparação vigiada** (desde a 1.25.0): ao abrir, com a tela preta,
+  o jogo prepara um item por vez: cada jeito de desenhar, as letras, a
+  captura da arma, a pasta da caixa-preta, os sons e os shaders. Embaixo
+  aparece uma fileira de traços, um por item, sem texto: aceso = pronto,
+  vermelho = esse item derrubou o app antes. Se o app morrer num item, da
+  abertura seguinte em diante o jogo segue **sem ele** em vez de cair de
+  novo. A apresentação também é pulada já na primeira queda dentro dela.
+  Sem o item, o jogo fica assim:
+  - luz somada: vira mistura comum;
+  - partículas: somem;
+  - shader: vira imagem simples;
+  - sons: os efeitos calam;
+  - captura da arma: a mira segue o ponteiro sem capturá-lo.
 
-Para ver o que aconteceu, sem cabo: no gerenciador de arquivos da TV Box,
-abra `Android/data/com.lazersport.lazershot/files/caixa_preta` e copie
-`queda.txt`, `anterior.txt` e `sessao.txt` para o pendrive.
+  A caixa-preta diz qual foi: `contornos.txt` e as linhas `preparado ...`
+  de `sessao.txt`. Se a TV Box cair, **tire uma foto da fileira de traços**.
+
+Para ver o que aconteceu, sem cabo: deixe o **pendrive espetado na TV Box**,
+abra o jogo (mesmo que ele caia) e abra de novo. Desde a 1.26.0 o jogo copia
+a caixa-preta sozinho para o pendrive. No PC, ela fica na pasta
+`Android\data\com.lazersport.lazershot\files\caixa_preta` do pendrive:
+`queda.txt`, `anterior.txt` e `sessao.txt`. A mesma pasta também fica na
+memória da TV Box (gerenciador de arquivos > `Android/data/...`).
 
 Com adb (TV Box com a depuração ligada, no cabo ou com
 `adb connect IP-DA-TVBOX`):
@@ -62,7 +74,7 @@ Ele abre o jogo, espera 40 s e salva `build/android/LOGCAT-TVBOX.txt` e a
 pasta `build/android/caixa_preta`. Com `-Instalar`, o mesmo acontece logo
 depois de instalar o APK novo.
 
-A versão do APK aparece em Configurações > Apps da TV Box (1.25.0, código 27).
+A versão do APK aparece em Configurações > Apps da TV Box (1.26.0, código 28).
 
 ## Tela em pé na TV Box
 
@@ -1493,6 +1505,57 @@ Cada um desses momentos ganha um `ok` quando os quadros seguintes saem.
 Numa queda, a última linha de `queda.txt` diz o instante exato.
 
 APK 1.25.0 (código 27).
+
+## Rodada 26: efeitos de luz pelo pincel, preparação à vista e sons comprimidos
+
+O que a 1.25.0 fez na TV Box: a tela ficou preta (preparação) e o app voltou
+para a tela inicial da TV Box.
+
+**O que roda nessa TV Box e o que não roda:**
+- O Dragon Bowling Pro Ultra usa o mesmo motor (Godot 4.6.1, mesmo
+  renderizador) e roda nela. Então o motor funciona nessa placa.
+- O Craque de Botão (Godot 3.6) roda com uma apresentação mais pesada.
+- O menu e o Mar parado do Lazer Shot rodaram (1.23.0).
+- Comparando o que o Lazer Shot desenha nos pontos onde caiu com o que
+  esses jogos e telas desenham:
+  - linhas e curvas com luz somada aparecem nos três pontos de queda: na
+    mira da apresentação, no passo dela na preparação da 1.25.0 e nos anéis
+    do acerto no Mar;
+  - não aparecem em nenhum lugar que rodou.
+
+  O boliche usa luz somada só num polígono, e funciona.
+
+**Luz dos efeitos pelo pincel** (`scripts/pincel.gd`):
+- Na apresentação, a mira, os feixes do laser, os furos em brasa, os
+  clarões e a onda de choque passaram a ser retângulos de uma textura só.
+  É o mesmo jeito que a mira, os tiros e os rastros de todas as fases já
+  usavam.
+- No acerto do Mar e do Egito e nos anúncios de combo, os anéis, arcos e
+  estrelas também.
+- Visual igual (conferido em captura de tela na apresentação e no Mar),
+  menos desenhos por quadro, e
+  nenhuma linha ou curva com luz somada sobra no jogo. Só os raios em
+  triângulo (Egito, Arena, combo) continuam, como no boliche.
+
+**Preparação à vista e mais vigiada** (`scripts/aquecedor.gd`,
+`scripts/abertura_ls.gd`):
+- Uma fileira de traços na tela preta mostra cada item da preparação.
+- Entraram dois itens que só o Lazer Shot pede ao Android, agora cada um no
+  seu instante: a captura da arma e a pasta da caixa-preta.
+- Se um item de luz somada derrubar o app, todos os itens de luz somada
+  ficam desligados de uma vez, para não cair uma vez por item.
+- A apresentação é pulada já na primeira queda dentro dela.
+
+**Caixa-preta no pendrive** (`scripts/caixa_preta.gd`): o jogo pede ao
+Android as pastas do app em cada volume (pendrive, cartão) e copia a
+caixa-preta para todas.
+
+**Sons de efeito comprimidos:** os 47 efeitos (WAV) passaram de PCM para
+QOA, o formato comprimido do Godot. Na memória, os efeitos caíram de 7,5 MB
+para 2 MB, com a qualidade praticamente igual. Dois deles já eram QOA e
+tocavam na TV Box. As músicas já eram MP3 comprimido.
+
+APK 1.26.0 (código 28).
 
 ## Para testar no PC como se fosse a TV Box
 

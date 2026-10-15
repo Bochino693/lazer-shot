@@ -130,6 +130,13 @@ func risco_atual() -> String:
 	return _caixa.risco_atual() if _caixa != null else ""
 
 
+## A pasta da caixa-preta que o gerenciador de arquivos enxerga (e o
+## pendrive, se houver): passo "pasta" da preparação (scripts/aquecedor.gd).
+func abrir_pasta_externa() -> void:
+	if _caixa != null:
+		_caixa.abrir_pasta_externa()
+
+
 ## Marca e confere: se os dois quadros seguintes chegarem a ser desenhados,
 ## a caixa-preta anota "ok" (diz se uma queda foi no instante do evento).
 func marca_quadro(txt: String) -> void:
