@@ -87,6 +87,7 @@ var PROFUNDIDADE: Texture2D = load("res://sprites/egito_profundidade.png")
 const SHADER_FUNDO := preload("res://shaders/deserto_fundo.gdshader")
 const SHADER_ALVO := preload("res://shaders/egito_alvo.gdshader")
 const SHADER_PLANO := preload("res://shaders/egito_plano.gdshader")
+const SHADER_PLANO_SIMPLES := preload("res://shaders/egito_plano_simples.gdshader")
 const SHADER_RAIOS := preload("res://shaders/egito_raios.gdshader")
 const SHADER_CRISTAL := preload("res://shaders/egito_cristal.gdshader")
 
@@ -183,6 +184,11 @@ const CEU_SEM_CANTO := Vector2(512 - 232, 300 - 210)   # canto de egito_ceu_*.pn
 # distância Z anda CAMERA_PASSO * (1 - 1/Z) (Z = 1 é o plano dos brasões).
 # O mapa vai de Z = 10 (preto: céu, pirâmides) a Z = 0,7 (branco: chão perto).
 const CAMERA_PASSO := 30.0
+# A cena anda inteira com a mira (Rodada 21): o céu, as pirâmides, as colunas,
+# as estátuas, o cristal e o chão juntos, como uma peça só. Antes cada camada
+# andava no ritmo da sua distância e, entre elas, aparecia o que estava atrás
+# (reconstruído). CAMERA_FATOR: quanto do passo da câmera a cena anda.
+const CAMERA_FATOR := 0.55
 const CAMERA_SUAVE := 2.6
 const Z_LONGE := 10.0
 const Z_PERTO := 0.7
@@ -279,6 +285,7 @@ var _halos: Array[Sprite2D] = []
 # planos 3D (recortes da imagem): {no, canto, z}
 var _planos: Array[Dictionary] = []
 var _mat_planos: ShaderMaterial
+var _mat_simples: Array[ShaderMaterial] = []   # colunas e estátuas (sol, lua)
 var _plano_cristal: Sprite2D
 var _plano_obeliscos: Array = [null, null]
 var _feixes: EgitoFeixes
@@ -475,6 +482,8 @@ func _aplicar_poente() -> void:
 		mf.set_shader_parameter("ceu_sem_forca", smoothstep(0.0, 70.0, d))
 		mf.set_shader_parameter("crepusculo", _crepusculo)
 	_mat_planos.set_shader_parameter("crepusculo", _crepusculo)
+	for m4 in _mat_simples:
+		m4.set_shader_parameter("crepusculo", _crepusculo)
 
 
 ## Durante a troca o sol e a lua passam atrás das pirâmides (o shader corta
@@ -1103,8 +1112,10 @@ func _montar_camera() -> void:
 		_prof.decompress()
 	for fundo: Sprite2D in [_fundo_sol, _fundo_lua]:
 		var mf := fundo.material as ShaderMaterial
-		mf.set_shader_parameter("inv_z_longe", 1.0 / Z_LONGE)
-		mf.set_shader_parameter("inv_z_perto", 1.0 / Z_PERTO)
+		# a imagem inteira anda igual (1/Z fixo no shader: o mesmo passo para
+		# o céu e para o chão)
+		mf.set_shader_parameter("inv_z_longe", 1.0 - CAMERA_FATOR)
+		mf.set_shader_parameter("inv_z_perto", 1.0 - CAMERA_FATOR)
 		mf.set_shader_parameter("horizonte_uv", HORIZONTE / IMG.y)
 		mf.set_shader_parameter("chao1_uv", CHAO_1 / IMG.y)
 	material_alvo = ShaderMaterial.new()
@@ -1112,6 +1123,7 @@ func _montar_camera() -> void:
 	material_alvo.set_shader_parameter("profundidade", PROFUNDIDADE)
 	material_alvo.set_shader_parameter("inv_z_longe", 1.0 / Z_LONGE)
 	material_alvo.set_shader_parameter("inv_z_perto", 1.0 / Z_PERTO)
+	material_alvo.set_shader_parameter("fator_camera", CAMERA_FATOR)
 
 	var ceu: Array[Node] = [_raios_sol, _raios_lua, _disco_sol, _disco_lua]
 	for h in _halos:
@@ -1162,15 +1174,16 @@ func _animar_camera(delta: float) -> void:
 	# na vertical anda menos (o céu de cima fica sob o placar)
 	camera = _olhar * CAMERA_PASSO * Vector2(1.0, 0.7)
 	var esc := scale.x
-	_camada_ceu.position = camera * (1.0 - 1.0 / Z_LONGE) / esc
-	_camada_perto.position = camera * (1.0 - 1.0 / Z_CRISTAL) / esc
-	_camada_obeliscos.position = camera * (1.0 - 1.0 / Z_OBELISCO) / esc
+	var anda := camera * CAMERA_FATOR / esc
+	_camada_ceu.position = anda
+	_camada_perto.position = anda
+	_camada_obeliscos.position = anda
 	for pl in _planos:
-		var pos: Vector2 = pl["canto"] + camera * (1.0 - 1.0 / float(pl["z"])) / esc
+		var pos: Vector2 = pl["canto"] + anda
 		(pl["no"] as Node2D).position = pos
 		if pl["lua"] != null:
 			(pl["lua"] as Node2D).position = pos
-	_feixes.camera_local = camera / esc
+	_feixes.camera_local = anda
 	_poeira_perto.position = Vector2(-60.0, 300.0) + camera * (1.0 - 1.0 / 0.45) / esc
 	for fundo: Sprite2D in [_fundo_sol, _fundo_lua]:
 		if fundo.visible:
@@ -1190,8 +1203,8 @@ func chao_1() -> float:
 
 
 ## Quanto uma coisa à distância z anda na tela agora (px).
-func paralaxe(z: float) -> Vector2:
-	return camera * (1.0 - 1.0 / maxf(z, 0.05))
+func paralaxe(_z: float) -> Vector2:
+	return camera * CAMERA_FATOR
 
 
 ## 1/Z do fundo no ponto p da imagem (px da imagem).
@@ -1208,9 +1221,7 @@ func _inv_z_local(p: Vector2) -> float:
 ## O ponto da imagem que aparece agora no ponto p da tela (desfaz a câmera).
 func ponto_da_imagem(p_global: Vector2) -> Vector2:
 	var p: Vector2 = get_global_transform().affine_inverse() * p_global
-	var esc := maxf(scale.x, 0.001)
-	var inv := _inv_z_local(p)
-	return p - camera * (1.0 - _inv_z_local(p - camera * (1.0 - inv) / esc)) / esc
+	return p - camera * CAMERA_FATOR / maxf(scale.x, 0.001)
 
 
 ## 1/Z do que aparece no ponto p da tela (para saber se um brasão está atrás).
@@ -1220,8 +1231,8 @@ func inv_z_na_tela(p_global: Vector2) -> float:
 
 ## Quanto um ponto do chão (px da imagem) anda agora, em px da imagem
 ## (furos de bala e poeira grudados no chão).
-func deslocamento_no_chao(p: Vector2) -> Vector2:
-	return camera * (1.0 - _inv_z_local(p)) / maxf(scale.x, 0.001)
+func deslocamento_no_chao(_p: Vector2) -> Vector2:
+	return camera * CAMERA_FATOR / maxf(scale.x, 0.001)
 
 
 # ───────────────────────────────────────────── animação
@@ -1278,6 +1289,10 @@ func _process(delta: float) -> void:
 			mf.set_shader_parameter("fase_nuvens", _fase_nuvens)
 	_mat_planos.set_shader_parameter("grave", som.x)
 	_mat_planos.set_shader_parameter("batida", som.y)
+	_mat_planos.set_shader_parameter("onda", _onda)
+	for m3 in _mat_simples:
+		m3.set_shader_parameter("batida", som.y)
+		m3.set_shader_parameter("onda", _onda)
 	_feixes.grave = som.x
 	_feixes.batida = som.y
 	_feixes.carga = carga
@@ -1643,6 +1658,13 @@ func _criar_planos() -> void:
 	_mat_planos.shader = SHADER_PLANO
 	_mat_planos.set_shader_parameter("folha_lua", PLANOS_LUA)
 	_mat_planos.set_shader_parameter("brilho", PLANOS_BRILHO)
+	# colunas e estátuas recebem a mesma luz que passa no fundo (onda do
+	# cristal, pulso da música, crepúsculo): plano e fundo, uma peça só
+	for cor in [Color(1.0, 0.74, 0.34), Color(1.0, 0.28, 0.30)]:
+		var m := ShaderMaterial.new()
+		m.shader = SHADER_PLANO_SIMPLES
+		m.set_shader_parameter("cor_energia", Vector3(cor.r, cor.g, cor.b))
+		_mat_simples.append(m)
 	for d: Dictionary in EgitoPlanos.PLANOS:
 		var nome := str(d["nome"])
 		# só o cristal e os obeliscos brilham e apagam (shader); colunas e
@@ -1651,11 +1673,14 @@ func _criar_planos() -> void:
 		var com_luz := nome in PLANOS_COM_LUZ
 		var s := _sprite_plano(d, PLANOS_SOL)
 		s.name = "Plano_" + nome
-		s.material = _mat_planos if com_luz else null
+		s.material = _mat_planos if com_luz else _mat_simples[0]
+		s.set_instance_shader_parameter("canto", d["canto"])
 		var lua: Sprite2D = null
 		if not com_luz:
 			lua = _sprite_plano(d, PLANOS_LUA)
 			lua.name = "Plano_" + nome + "_lua"
+			lua.material = _mat_simples[1]
+			lua.set_instance_shader_parameter("canto", d["canto"])
 			lua.visible = false
 		var lado := 0 if nome.ends_with("_esq") else (1 if nome.ends_with("_dir") else -1)
 		_planos.append({"no": s, "lua": lua, "canto": d["canto"], "z": float(d["z"]), "lado": lado})
@@ -2007,6 +2032,9 @@ func _atualizar_tiros_fundo(delta: float) -> void:
 		mf.set_shader_parameter("energia", _energia)
 		mf.set_shader_parameter("luz_lados", lados)
 		mf.set_shader_parameter("pontas_acesas", _pontas_acesas)
+	_mat_planos.set_shader_parameter("energia", _energia)
+	for m5 in _mat_simples:
+		m5.set_shader_parameter("energia", _energia)
 	for pl in _planos:
 		if pl["lua"] != null:
 			continue

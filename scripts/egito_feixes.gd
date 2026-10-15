@@ -28,7 +28,7 @@ const FEIXES := [
 const PONTAS := [Vector2(209, 792), Vector2(813, 792)]
 const PONTA_CRISTAL := Vector2(506, 640)
 
-var camera_local := Vector2.ZERO   # câmera em px da imagem (DesertoVivo)
+var camera_local := Vector2.ZERO   # quanto a cena andou, em px da imagem (DesertoVivo)
 var noite := 0.0
 var grave := 0.0
 var batida := 0.0
@@ -71,8 +71,9 @@ func _init() -> void:
 	add_child(_raios)
 
 
-func _par(z: float) -> Vector2:
-	return camera_local * (1.0 - 1.0 / z)
+## A cena anda inteira (Rodada 21): os feixes andam junto com ela.
+func _par(_z: float) -> Vector2:
+	return camera_local
 
 
 func _cor() -> Color:

@@ -14,6 +14,8 @@ uniform vec2 olhar = vec2(0.0);                 // quanto a câmera andou (px de
 uniform float inv_z_longe = 0.1;
 uniform float inv_z_perto = 1.4285714;
 uniform vec3 cor_nevoa = vec3(0.96, 0.74, 0.46);
+// >= 0: a cena anda inteira, esse tanto do passo da câmera (Rodada 21)
+uniform float fator_camera = -1.0;
 instance uniform float inv_z = 1.0;
 instance uniform float nevoa = 0.0;
 
@@ -29,8 +31,13 @@ float fundo_inv_z(vec2 p) {
 
 void fragment() {
 	// o pixel do fundo que aparece aqui veio de um pouco antes (a câmera andou)
-	float zb = fundo_inv_z(mundo);
-	zb = fundo_inv_z(mundo - olhar * (1.0 - zb));
+	float zb;
+	if (fator_camera >= 0.0) {
+		zb = fundo_inv_z(mundo - olhar * fator_camera);
+	} else {
+		zb = fundo_inv_z(mundo);
+		zb = fundo_inv_z(mundo - olhar * (1.0 - zb));
+	}
 	float esconde = smoothstep(inv_z + 0.012, inv_z + 0.045, zb);
 	COLOR.rgb = mix(COLOR.rgb, cor_nevoa, nevoa);
 	COLOR.a *= 1.0 - esconde;
