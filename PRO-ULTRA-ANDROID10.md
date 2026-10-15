@@ -55,7 +55,7 @@ Ele abre o jogo, espera 40 s e salva `build/android/LOGCAT-TVBOX.txt` e a
 pasta `build/android/caixa_preta`. Com `-Instalar`, o mesmo acontece logo
 depois de instalar o APK novo.
 
-A versão do APK aparece em Configurações > Apps da TV Box (1.17.0, código 19).
+A versão do APK aparece em Configurações > Apps da TV Box (1.23.0, código 25).
 
 ## Tela em pé na TV Box
 
@@ -1309,6 +1309,60 @@ cardume dourado. Errou por um pixel fora do desenho, é erro.
   (só toca se o vídeo pelo hardware falhar) com metade do tamanho.
 
 APK 1.22.0 (código 24).
+
+## Rodada 23: abrir na TV Box, carregamento inteligente e cada tela calibrada
+
+**Por que a 1.22.0 não abria.** A última versão que rodou na TV Box foi a da
+Rodada 13. Desde a Rodada 12, logo na partida do app (debaixo do preto da
+apresentação), o jogo montava na placa **todos** os shaders das quatro fases
+no mesmo quadro. Na Rodada 13 eram 11 shaders pequenos e já "nem sempre
+abria". Até a 1.22.0 eles viraram 16, alguns bem maiores (o fundo do Egito,
+o mar com a luz do sol, os planos 3D). Na Mali-G31 isso segura a placa por
+vários segundos antes do primeiro quadro. Com a arma mexendo (ela é um mouse
+mandando movimento sem parar), o Android dá o app como travado e o fecha,
+antes até da apresentação.
+
+**Carregamento inteligente** (`scripts/aquecedor.gd`,
+`scripts/TransiaoGlobal.gd`, `tools/gerar_precarga.py`).
+- A apresentação só monta os dois shaders dela. Nada das fases é preparado
+  na partida do app.
+- Cada tela tem a lista dos shaders que usa (`Precarga.SHADERS`, gerada pelo
+  `tools/gerar_precarga.py` lendo os scripts da tela). Na troca de tela,
+  depois dos arquivos, eles são montados **um por quadro**, ainda com o
+  cartão de carregamento na tela; a barra conta as duas etapas (arquivos e
+  shaders). A placa nunca fica segura por muito tempo.
+- Um shader já montado não é montado de novo enquanto existir (voltar a uma
+  fase é direto).
+- A caixa-preta grava cada shader montado (`shader: ...`) e o tempo de cada
+  tela. Se algum dia um shader derrubar o app, `queda.txt` diz qual.
+
+**Cada tela calibrada para a TV Box** (`scripts/MiraGlobal.gd`).
+- **Ritmo:** Egito e Mar já abrem em 30 quadros por segundo cravados (as
+  duas mais pesadas para a placa). Bar, Arena e menus tentam 60 e caem para
+  30 sozinhos se não segurarem. Em 30, a física também anda a 30 por segundo
+  (eram dois passos por quadro) e um quadro atrasado não vira fila de passos.
+- **Calibragem automática:** se mesmo em 30 uma tela não segura (mais de um
+  quarto dos quadros de 3 s passando de 45 ms), ela fica **leve**: os
+  enfeites marcados como opcionais param e somem (neve e cardumes do fundo
+  do Mar, poeira e faíscas do Egito, poeira do sol do Bar). Alvos, cenário,
+  luz, mecânicas e efeitos de acerto continuam iguais. A TV Box lembra
+  (`user://ritmo.cfg`, por versão) e a tela já abre leve da próxima vez.
+
+**Processador** (medido no PC, `--headless`, média por quadro jogando):
+- O COMO JOGAR e a moldura decorada dele continuavam animando e redesenhando
+  escondidos a partida inteira (40% do processador do Mar, 60% do Bar).
+  Agora param quando somem (`como_jogar.gd`, `moldura_tema.gd`).
+- O placar lê e aplica os dados a cada 2 quadros (no do meio só se algo
+  estiver animando); o fim de partida escondido confere a cada 4 quadros.
+- Resultado: Egito 6,8 → 3,9 ms (pior quadro 21 → 7 ms), Bar 6,9 → 4,8,
+  Arena 2,5 → 2,0, menu 3,8 → 2,7.
+
+**Placa de vídeo.** Os shaders dos recortes (pedras do Mar, planos do Egito)
+não fazem conta nem leem as outras texturas fora do desenho (boa parte da
+caixa de cada recorte); a luz do sol do Mar só lê a textura dos raios onde
+há raio. A imagem é a mesma.
+
+APK 1.23.0 (código 25).
 
 ## Para testar no PC como se fosse a TV Box
 

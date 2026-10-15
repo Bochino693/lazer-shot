@@ -1018,6 +1018,7 @@ func _criar_particulas() -> void:
 	# faíscas de energia subindo do diamante
 	var f := CPUParticles2D.new()
 	f.name = "FaiscasEnergia"
+	f.add_to_group("efeito_opcional")   # some se a TV Box não segurar (MiraGlobal)
 	f.amount = 34
 	f.lifetime = 2.8
 	f.preprocess = 2.8
@@ -1040,6 +1041,7 @@ func _criar_particulas() -> void:
 	# poeira de areia atravessando devagar
 	var p := CPUParticles2D.new()
 	p.name = "Poeira"
+	p.add_to_group("efeito_opcional")   # some se a TV Box não segurar (MiraGlobal)
 	p.amount = 22
 	p.lifetime = 11.0
 	p.preprocess = 11.0
@@ -1736,6 +1738,7 @@ func _criar_poeira_perto() -> void:
 	rampa.colors = PackedColorArray([Color(1, 1, 1, 0), Color(1, 1, 1, 0.55), Color(1, 1, 1, 0.3), Color(1, 1, 1, 0)])
 	var p := CPUParticles2D.new()
 	p.name = "PoeiraPerto"
+	p.add_to_group("efeito_opcional")   # some se a TV Box não segurar (MiraGlobal)
 	p.amount = 9
 	p.lifetime = 9.0
 	p.preprocess = 9.0

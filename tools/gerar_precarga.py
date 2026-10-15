@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 """Gera scripts/precarga.gd: para cada tela (scenes/*.tscn), a lista dos
-arquivos que os scripts dela carregam com load() durante o _ready.
+arquivos que os scripts dela carregam com load() durante o _ready e a lista
+dos shaders que ela usa.
 
 A TransicaoGlobal pede esses arquivos numa thread junto com a cena; quando a
-cena monta, os load() já acham tudo pronto e a tela não congela.
+cena monta, os load() já acham tudo pronto e a tela não congela. Os shaders
+são montados na placa um por quadro, ainda com o cartão de carregamento na
+tela (scripts/aquecedor.gd).
 
 Rodar de novo sempre que um script passar a carregar arquivos novos:
     python3 tools/gerar_precarga.py
@@ -29,6 +32,9 @@ FUNDO_ITEM = re.compile(r'^\t"(\w+)": \["(res://[^"]+)", "(res://[^"]+)"', re.M)
 # O anunciador de combos carrega as vozes da tela pedida:
 # ComboAnuncio.criar(self, "mar") -> songs/voz/mar_*.ogg
 ANUNCIO = re.compile(r'ComboAnuncio\.criar\(\s*\w+\s*,\s*"(\w+)"\s*\)')
+SHADER = re.compile(r'"(res://shaders/[^"]+\.gdshader)"')
+# O do vídeo pelo hardware (samplerExternalOES) só monta com o vídeo de verdade.
+SHADER_FORA = {"res://shaders/video_oes.gdshader"}
 
 
 def arquivo(res):
@@ -95,6 +101,20 @@ def literais_fundo_vivo(texto, fundos):
     return saida
 
 
+def shaders_fundo_vivo(texto, fundos):
+    """Shaders dos fundos que este script pede ao FundoVivo: o do deserto
+    tem o seu, os outros usam o fundo_vivo."""
+    if "FundoVivo.new(" not in texto:
+        return []
+    saida = []
+    for chave in fundos:
+        if '"%s"' % chave in texto:
+            sh = "res://shaders/deserto_fundo.gdshader" if chave == "deserto" else "res://shaders/fundo_vivo.gdshader"
+            if sh not in saida:
+                saida.append(sh)
+    return saida
+
+
 def vozes_anuncio(texto):
     saida = []
     for tela in ANUNCIO.findall(texto):
@@ -110,17 +130,26 @@ def main():
     fundos = fundos_vivos()
     pasta = os.path.join(RAIZ, "scenes")
     lista = {}
+    shaders = {}
     for nome in sorted(os.listdir(pasta)):
         if not nome.endswith(".tscn"):
             continue
         cena = "res://scenes/" + nome
         with open(os.path.join(pasta, nome), encoding="utf-8") as f:
-            scripts = SCRIPT.findall(f.read())
+            texto_cena = f.read()
+        scripts = SCRIPT.findall(texto_cena)
         achados = []
+        usados = []
         for s in scripts_usados(scripts, mapa):
             caminho = arquivo(s)
             with open(caminho, encoding="utf-8") as f:
                 texto = f.read()
+            # o FundoVivo só monta os shaders dos fundos pedidos (abaixo);
+            # quem só usa FundoVivo.brilho_redondo() não monta nenhum
+            if s != FUNDO_VIVO:
+                for sh in SHADER.findall(texto) + shaders_fundo_vivo(texto, fundos):
+                    if sh not in usados and sh not in SHADER_FORA and os.path.exists(arquivo(sh)):
+                        usados.append(sh)
             if s == FUNDO_VIVO:
                 continue   # os fundos entram pelas chaves pedidas (abaixo)
             ja_vem = set(PRELOAD.findall(texto))
@@ -136,6 +165,27 @@ def main():
                 achados.append(res)
         if achados:
             lista[cena] = achados
+        # shaders das peças (entities/*.tscn) que a tela monta
+        pecas = [r for r in achados if r.endswith(".tscn")]
+        for peca in pecas:
+            with open(arquivo(peca), encoding="utf-8") as f:
+                texto_peca = f.read()
+            for s in scripts_usados(SCRIPT.findall(texto_peca), mapa):
+                if s == FUNDO_VIVO:
+                    continue
+                with open(arquivo(s), encoding="utf-8") as f:
+                    texto_s = f.read()
+                    for sh in SHADER.findall(texto_s) + shaders_fundo_vivo(texto_s, fundos):
+                        if sh not in usados and sh not in SHADER_FORA and os.path.exists(arquivo(sh)):
+                            usados.append(sh)
+            for sh in SHADER.findall(texto_peca):
+                if sh not in usados and sh not in SHADER_FORA:
+                    usados.append(sh)
+        for sh in SHADER.findall(texto_cena):
+            if sh not in usados and sh not in SHADER_FORA:
+                usados.append(sh)
+        if usados:
+            shaders[cena] = usados
 
     linhas = [
         "extends RefCounted",
@@ -152,6 +202,18 @@ def main():
             linhas.append('\t\t"%s",' % res)
         linhas.append("\t],")
     linhas.append("}")
+    linhas += [
+        "",
+        "# Shaders de cada tela: montados na placa um por quadro, debaixo do",
+        "# cartão de carregamento (scripts/aquecedor.gd).",
+        "const SHADERS := {",
+    ]
+    for cena, itens in shaders.items():
+        linhas.append('\t"%s": [' % cena)
+        for res in itens:
+            linhas.append('\t\t"%s",' % res)
+        linhas.append("\t],")
+    linhas.append("}")
     saida = os.path.join(RAIZ, "scripts", "precarga.gd")
     with open(saida, "w", encoding="utf-8", newline="\n") as f:
         f.write("\n".join(linhas) + "\n")
@@ -159,6 +221,9 @@ def main():
     print("precarga.gd: %d telas, %d arquivos" % (len(lista), total))
     for cena, itens in lista.items():
         print("  %-28s %d" % (cena, len(itens)))
+    print("shaders:")
+    for cena, itens in shaders.items():
+        print("  %-28s %s" % (cena, ", ".join(os.path.basename(i) for i in itens)))
     return 0
 
 

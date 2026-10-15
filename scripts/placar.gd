@@ -39,6 +39,7 @@ var _t := 0.0
 var _pulso_pontos := 0.0
 var _pontos_antes := 0
 var _vez := 0
+var _anima := false
 
 
 ## Liga o placar na fase. hud_antigo: o Control do HUD velho (o placar segue a
@@ -166,10 +167,15 @@ func _process(delta: float) -> void:
 		_raiz.visible = visivel
 	if not visivel:
 		return
+	# os dados da fase são lidos e aplicados a cada 2 quadros; no quadro do
+	# meio só se algo estiver animando (pontos pulando, tempo acabando,
+	# munição piscando). Na TV Box o placar inteiro todo quadro pesava.
 	_vez += 1
 	if _vez % 2 == 0:
 		_ler()
-	_aplicar(false)
+		_aplicar(false)
+	elif _anima:
+		_aplicar(false)
 
 
 func _ler() -> void:
@@ -272,6 +278,8 @@ func _aplicar(forcar: bool) -> void:
 	var ec: Color = _dados.get("extra_cor", Color.WHITE)
 	if _mudou("extra_cor", ec):
 		Leve.color(_valores[4], "font_color", ec)
+	# algo animando: o quadro do meio também atualiza (ver _process)
+	_anima = _pulso_pontos != 0.0 or (seg <= 10 and tempo > 0.0) or estado != "ok"
 
 
 func _desenhar_barra() -> void:

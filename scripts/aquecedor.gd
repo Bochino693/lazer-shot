@@ -10,66 +10,80 @@ extends Node2D
 ## aparece num tamanho a fonte é desenhada. Se isso acontece no meio do jogo,
 ## é uma travada. Aqui acontece antes, debaixo de uma tela opaca:
 ##
-##   Aquecedor.tudo(no)         na partida do app (debaixo do preto da
-##                              apresentação): todos os shaders do jogo nos
-##                              jeitos em que são desenhados (retângulo,
-##                              polígono, partículas) e a mistura somada
-##   Aquecedor.cena(cena, no)   em cada troca de tela (debaixo do cartão de
-##                              carregamento): as imagens, os materiais, as
-##                              partículas e os textos da tela nova, inclusive
-##                              o que ainda está escondido (instruções,
-##                              contagem, fim de jogo)
+##   Aquecedor.shaders(lista, no)   numa troca de tela, ANTES de a tela nova
+##                              entrar (com o cartão de carregamento à vista):
+##                              os shaders dela, UM POR QUADRO, nos jeitos em
+##                              que são desenhados (retângulo, polígono e, nos
+##                              cardumes, instâncias). A lista de cada tela vem
+##                              de scripts/precarga.gd (tools/gerar_precarga.py)
+##   Aquecedor.cena(cena, no)   logo depois que ela entra (ainda no preto):
+##                              as imagens, os materiais, as partículas e os
+##                              textos da tela nova, inclusive o que ainda está
+##                              escondido (instruções, contagem, fim de jogo)
 ##
-## Os itens ficam 3 quadros e somem. Com o cache de shaders do Godot, da
-## segunda vez em diante a placa só lê o programa já pronto.
+## UM POR QUADRO, e nunca na partida do app: na Mali-G31 da TV Box, montar
+## todos os shaders do jogo no mesmo quadro segurava a placa por vários
+## segundos logo ao abrir; com a arma mexendo, o Android dava o app como
+## travado e fechava antes até da apresentação (Rodada 23). A apresentação
+## só usa os dois shaders dela, pequenos.
+##
+## Os itens ficam poucos quadros e somem. Um shader montado fica pronto
+## enquanto o recurso dele existir (os pré-carregados pelos scripts ficam a
+## sessão inteira); com o cache de shaders do Godot, da segunda vez em diante
+## a placa só lê o programa já pronto.
 
 const Pincel := preload("res://scripts/pincel.gd")
 const QUADROS := 3
-## Todos os shaders do jogo (o do vídeo pelo hardware fica de fora: só monta
-## com o vídeo de verdade).
-const SHADERS := [
-	preload("res://shaders/abertura_fundo.gdshader"),
-	preload("res://shaders/abertura_logo.gdshader"),
-	preload("res://shaders/bar_sol.gdshader"),
-	preload("res://shaders/deserto_fundo.gdshader"),
-	preload("res://shaders/egito_alvo.gdshader"),
-	preload("res://shaders/egito_cristal.gdshader"),
-	preload("res://shaders/egito_feixe.gdshader"),
-	preload("res://shaders/egito_plano.gdshader"),
-	preload("res://shaders/egito_raios.gdshader"),
-	preload("res://shaders/fundo_profundo.gdshader"),
-	preload("res://shaders/fundo_vivo.gdshader"),
-	preload("res://shaders/mar_baleia.gdshader"),
-	preload("res://shaders/mar_cardume.gdshader"),
-	preload("res://shaders/mar_cascata.gdshader"),
-	preload("res://shaders/mar_pedra.gdshader"),
-	preload("res://shaders/mar_recorte.gdshader"),
-]
+## Shaders desenhados por instâncias (MultiMesh): outro programa na placa.
+const INSTANCIADOS := ["res://shaders/mar_cardume.gdshader"]
 ## Números e sinais que aparecem depois (placar, contagem, pontos).
 const SINAIS := " 0123456789:+-%/!?.,x×"
 
+## Fim da fila de shaders.
+signal terminou
+
+## Shaders já montados nesta sessão: caminho -> WeakRef do recurso. Se o
+## recurso ainda é o mesmo, o programa dele continua na placa.
+static var _montados: Dictionary = {}
+
 var _texturas: Array[Texture2D] = []
 var _quadros := QUADROS
+# fila de shaders (Aquecedor.shaders)
+var _fila: Array[String] = []
+var _total := -1          # -1: não é fila
+var _feitos := 0
+var _acabou := false
 static var _branca: Texture2D = null
 
 
-## Na partida do app: todos os shaders e materiais, sem textos.
-static func tudo(onde: Node) -> Aquecedor:
+## Quantos shaders da lista ainda não estão prontos na placa.
+static func faltam(caminhos: Array) -> int:
+	var n := 0
+	for c in caminhos:
+		if not _pronto(c):
+			n += 1
+	return n
+
+
+## Numa troca de tela, antes de a tela nova entrar: monta os shaders dela,
+## um por quadro. Espere `terminou` (ou consulte acabou()/progresso()).
+static func shaders(caminhos: Array, onde: Node) -> Aquecedor:
 	var a := Aquecedor.new()
-	a.name = "Aquecedor"
-	for sh in SHADERS:
-		var m := ShaderMaterial.new()
-		m.shader = sh
-		a._material(m)
-	var soma := CanvasItemMaterial.new()
-	soma.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
-	a._material(soma)
-	a._material(null)
-	a._particulas(soma, Pincel.TEXTURA)
-	a._particulas(null, Pincel.TEXTURA)
-	a._texturas.append(Pincel.TEXTURA)
+	a.name = "AquecedorShaders"
+	for c in caminhos:
+		if not _pronto(c) and ResourceLoader.exists(c):
+			a._fila.append(c)
+	a._total = a._fila.size()
 	a._pendurar(onde)
 	return a
+
+
+static func _pronto(caminho: String) -> bool:
+	var ref: WeakRef = _montados.get(caminho)
+	if ref == null or ref.get_ref() == null:
+		return false
+	# o mesmo recurso que está carregado agora (senão é outro programa)
+	return ResourceLoader.has_cached(caminho) and ResourceLoader.get_cached_ref(caminho) == ref.get_ref()
 
 
 ## Numa troca de tela: o que a cena nova usa, inclusive o escondido.
@@ -90,9 +104,49 @@ func _pendurar(onde: Node) -> void:
 
 
 func _process(_delta: float) -> void:
+	if _total >= 0:
+		_proximo_shader()
+		return
 	_quadros -= 1
 	if _quadros <= 0:
 		queue_free()
+
+
+## 0..1 da fila de shaders.
+func progresso() -> float:
+	if _total <= 0:
+		return 1.0
+	return clampf(float(_feitos) / float(_total), 0.0, 1.0)
+
+
+func acabou() -> bool:
+	return _acabou
+
+
+## Um shader por quadro: o do quadro anterior já foi desenhado (montado na
+## placa), sai, e entra o próximo.
+func _proximo_shader() -> void:
+	if _acabou:
+		return
+	for c in get_children():
+		c.queue_free()
+	if _fila.is_empty():
+		_acabou = true
+		terminou.emit()
+		queue_free()
+		return
+	var caminho: String = _fila.pop_front()
+	_feitos += 1
+	var sh := load(caminho) as Shader
+	if sh == null:
+		return
+	var m := ShaderMaterial.new()
+	m.shader = sh
+	_material(m)
+	if caminho in INSTANCIADOS:
+		_instancias(m)
+	_montados[caminho] = weakref(sh)
+	Tela.marca("shader: " + caminho.get_file())
 
 
 func _draw() -> void:
@@ -156,6 +210,24 @@ func _material(m: Material) -> void:
 	p.polygon = PackedVector2Array([Vector2(0, 0), Vector2(4, 0), Vector2(0, 4)])
 	p.material = m
 	add_child(p)
+
+
+## Desenho por instâncias (MultiMesh), como os cardumes do Mar.
+func _instancias(m: Material) -> void:
+	var quad := QuadMesh.new()
+	quad.size = Vector2(4, 4)
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_2D
+	mm.use_colors = true   # como os cardumes (scripts/mar_vida.gd)
+	mm.mesh = quad
+	mm.instance_count = 1
+	mm.set_instance_transform_2d(0, Transform2D(0.0, Vector2(2, 2)))
+	mm.set_instance_color(0, Color(1, 1, 1, 0.02))
+	var no := MultiMeshInstance2D.new()
+	no.multimesh = mm
+	no.texture = _textura_branca()
+	no.material = m
+	add_child(no)
 
 
 ## Partículas desenham por instâncias: outro programa na placa.

@@ -6,7 +6,9 @@ extends CanvasLayer
 ## 2. a próxima cena E os arquivos que ela lê no _ready (scripts/precarga.gd)
 ##    são carregados em threads enquanto a tela está preta. Nas fases aparece
 ##    um cartão com a capa, o nome, uma dica e a barra de progresso real; nas
-##    outras telas, um anel girando se demorar;
+##    outras telas, um anel girando se demorar. Depois os shaders dela são
+##    montados na placa, um por quadro (scripts/aquecedor.gd), ainda com o
+##    cartão: a barra conta os dois;
 ## 3. troca a cena, espera ela montar e desenhar os primeiros quadros
 ##    escondida e PARADA (é aí que o Godot prepara shaders e texturas); o
 ##    cartão fica imóvel nesses quadros pesados (nada gira, nada corre), então
@@ -27,6 +29,8 @@ const TEMPO_ENTRADA := 0.30
 const QUADROS_ESCONDIDOS := 3
 const ESPERA_ANTES_DO_ANEL := 0.30
 const TEMPO_MINIMO_CARTAO := 0.85
+## Parte da barra do cartão que é a leitura dos arquivos (o resto: shaders).
+const PESO_ARQUIVOS := 0.8
 const FONTE_TITULO := "res://fonts/Exo2-ExtraBold.ttf"
 
 ## Cartão de carregamento de cada fase.
@@ -160,15 +164,33 @@ func trocar_cena(caminho: String, tempo_saida: float = TEMPO_SAIDA, tempo_entrad
 	if com_cartao:
 		_mostrar_cartao(fase)
 
+	# Shaders da tela nova que ainda não estão na placa: montados depois dos
+	# arquivos, UM POR QUADRO, com o cartão à vista (scripts/aquecedor.gd). A
+	# barra conta as duas etapas.
+	var lista_shaders: Array = Precarga.SHADERS.get(caminho, [])
+	var peso_carga := 1.0 if Aquecedor.faltam(lista_shaders) == 0 else PESO_ARQUIVOS
+
 	var cena: PackedScene = null
 	var inicio := Time.get_ticks_msec()
 	while true:
-		_alvo = _progresso(caminho if pediu else "", extras)
-		if _alvo >= 1.0:
+		var carga := _progresso(caminho if pediu else "", extras)
+		_alvo = carga * peso_carga
+		if carga >= 1.0:
 			break
 		await get_tree().process_frame
 		if not com_cartao and (Time.get_ticks_msec() - inicio) > ESPERA_ANTES_DO_ANEL * 1000.0 and not _anel.visible:
 			_mostrar_anel(true)
+
+	if peso_carga < 1.0:
+		var t_shaders := Time.get_ticks_msec()
+		var aq := Aquecedor.shaders(lista_shaders, self)
+		while is_instance_valid(aq) and not aq.acabou():
+			_alvo = peso_carga + (1.0 - peso_carga) * aq.progresso()
+			await get_tree().process_frame
+			if not com_cartao and (Time.get_ticks_msec() - inicio) > ESPERA_ANTES_DO_ANEL * 1000.0 and not _anel.visible:
+				_mostrar_anel(true)
+		_alvo = 1.0
+		Tela.marca("shaders de %s prontos em %d ms" % [caminho.get_file(), Time.get_ticks_msec() - t_shaders])
 
 	if com_cartao:
 		# a barra chega ao fim e o cartão fica um mínimo para ser lido

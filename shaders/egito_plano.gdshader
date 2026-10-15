@@ -44,36 +44,40 @@ void fragment() {
 	} else {
 		base = mix(texture(TEXTURE, UV), texture(folha_lua, UV), noite);
 	}
-	vec2 gm = texture(brilho, UV).rg;
-	float g = gm.r;
 	vec3 col = base.rgb;
-	vec3 cor = mix(cor_dia, cor_noite, noite);
-	if (gm.g > 0.004) {
-		vec3 sem_noite = min(vec3(min(col.r, max(col.g, col.b) * 1.12), col.g, col.b) * 0.78, vec3(0.17, 0.18, 0.24));
-		vec3 sem = mix(col * 0.80, sem_noite, noite);
-		col = mix(col, sem, apagado * gm.g);
-		col += col * gm.g * (1.0 - apagado) * (0.10 * batida + 0.07 * grave);
-	}
-	if (g > 0.004) {
-		float t = TIME;
-		float lum = dot(col, vec3(0.3, 0.59, 0.11));
-		float faixa = 0.5 + 0.5 * sin(UV.y * 260.0 + t * 3.2);
-		faixa *= faixa;
-		float cintila = 0.5 + 0.5 * sin(t * 7.3 + UV.x * 400.0);
-		float luz = g * (0.10 + 0.42 * faixa + 0.14 * cintila + 0.45 * batida + 0.2 * grave) * (1.0 - apagado);
-		col += col * luz + cor * luz * 0.18;
-		// quebrado: o cristal vira vidro escuro, sem luz
-		vec3 morto = vec3(lum * 0.42, lum * 0.40, lum * 0.46);
-		col = mix(col, morto, apagado * clamp(g * 1.6, 0.0, 1.0));
-	}
-	col *= 1.0 + 0.06 * batida;
-	if (onda < 0.625 && energia > 0.05) {
-		float d = length((uv_img - centro) * vec2(1.0, 1.5));
-		float anel = smoothstep(0.045, 0.0, abs(d - onda)) * clamp(1.0 - onda * 1.6, 0.0, 1.0);
-		col += (cor * anel * 0.10 + col * anel * 0.18) * energia;
-	}
-	if (crepusculo > 0.001) {
-		col = mix(col, col * vec3(0.92, 0.62, 0.52), crepusculo * 0.8);
+	// fora do recorte (boa parte da caixa do plano) não lê o brilho nem faz
+	// conta nenhuma (na Mali-G31 cada leitura de textura pesa)
+	if (base.a > 0.002) {
+		vec2 gm = texture(brilho, UV).rg;
+		float g = gm.r;
+		vec3 cor = mix(cor_dia, cor_noite, noite);
+		if (gm.g > 0.004) {
+			vec3 sem_noite = min(vec3(min(col.r, max(col.g, col.b) * 1.12), col.g, col.b) * 0.78, vec3(0.17, 0.18, 0.24));
+			vec3 sem = mix(col * 0.80, sem_noite, noite);
+			col = mix(col, sem, apagado * gm.g);
+			col += col * gm.g * (1.0 - apagado) * (0.10 * batida + 0.07 * grave);
+		}
+		if (g > 0.004) {
+			float t = TIME;
+			float lum = dot(col, vec3(0.3, 0.59, 0.11));
+			float faixa = 0.5 + 0.5 * sin(UV.y * 260.0 + t * 3.2);
+			faixa *= faixa;
+			float cintila = 0.5 + 0.5 * sin(t * 7.3 + UV.x * 400.0);
+			float luz = g * (0.10 + 0.42 * faixa + 0.14 * cintila + 0.45 * batida + 0.2 * grave) * (1.0 - apagado);
+			col += col * luz + cor * luz * 0.18;
+			// quebrado: o cristal vira vidro escuro, sem luz
+			vec3 morto = vec3(lum * 0.42, lum * 0.40, lum * 0.46);
+			col = mix(col, morto, apagado * clamp(g * 1.6, 0.0, 1.0));
+		}
+		col *= 1.0 + 0.06 * batida;
+		if (onda < 0.625 && energia > 0.05) {
+			float d = length((uv_img - centro) * vec2(1.0, 1.5));
+			float anel = smoothstep(0.045, 0.0, abs(d - onda)) * clamp(1.0 - onda * 1.6, 0.0, 1.0);
+			col += (cor * anel * 0.10 + col * anel * 0.18) * energia;
+		}
+		if (crepusculo > 0.001) {
+			col = mix(col, col * vec3(0.92, 0.62, 0.52), crepusculo * 0.8);
+		}
 	}
 	COLOR = vec4(col, base.a) * cor_no;
 }
