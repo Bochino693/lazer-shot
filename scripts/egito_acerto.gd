@@ -10,6 +10,8 @@ extends Node2D
 ## Acertar o artefato errado (fora da vez) deixa o anel vermelho.
 ## Um nó só por acerto, desenho em poucas chamadas; some sozinho.
 
+const Pincel := preload("res://scripts/pincel.gd")
+
 var _brilho: Texture2D = null
 
 # no máximo 4 efeitos ao mesmo tempo (rajada não pesa na TV Box); a contagem é
@@ -63,6 +65,7 @@ func _montar(alvo: Node2D, anim: AnimatedSprite2D, tipo: String, certo: bool) ->
 	soma.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
 	_luz = Node2D.new()
 	_luz.material = soma
+	_luz.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	_luz.draw.connect(_desenhar_luz)
 	add_child(_luz)
 
@@ -249,15 +252,16 @@ func _desenhar_luz() -> void:
 		var k: float = t / a["vida"]
 		var ease := 1.0 - (1.0 - k) * (1.0 - k)
 		var cor: Color = a["cor"]
-		_luz.draw_arc(_centro, 14.0 * _k + a["raio"] * ease, 0.0, TAU, 56, Color(cor, cor.a * (1.0 - k)),
-			maxf(1.0, a["larg"] * (1.0 - k)), true)
+		# anéis, arcos e estrelas pelo pincel: na TV Box a luz somada só
+		# desenha retângulos de textura (scripts/pincel.gd)
+		Pincel.anel(_luz, _centro, 14.0 * _k + a["raio"] * ease, maxf(1.0, a["larg"] * (1.0 - k)), Color(cor, cor.a * (1.0 - k)))
 	# arcos de luar
 	for a in _arcos:
 		var k: float = a["t"] / a["vida"]
 		if k >= 1.0:
 			continue
 		var r: float = lerpf(a["r0"], a["r1"], 1.0 - (1.0 - k) * (1.0 - k))
-		_luz.draw_arc(_centro, r, a["ang"], a["ang"] + 1.3, 20, Color(0.85, 0.93, 1.0, 0.8 * (1.0 - k)), 5.0 * _k * (1.0 - k) + 1.0, true)
+		Pincel.arco(_luz, _centro, r, a["ang"], a["ang"] + 1.3, Color(0.85, 0.93, 1.0, 0.8 * (1.0 - k)), 5.0 * _k * (1.0 - k) + 1.0)
 	# faíscas / estrelas
 	for f in _faiscas:
 		var k: float = f["t"] / f["vida"]
@@ -270,7 +274,7 @@ func _desenhar_luz() -> void:
 		_luz.draw_texture_rect(_brilho, Rect2(f["pos"] - Vector2(s, s) * 0.5, Vector2(s, s)), false, cor)
 		if f["estrela"]:
 			var b := s * 1.2
-			_luz.draw_line(f["pos"] - Vector2(b, 0), f["pos"] + Vector2(b, 0), cor, 1.4 * _k, true)
-			_luz.draw_line(f["pos"] - Vector2(0, b), f["pos"] + Vector2(0, b), cor, 1.4 * _k, true)
+			Pincel.linha(_luz, f["pos"] - Vector2(b, 0), f["pos"] + Vector2(b, 0), cor, 1.4 * _k)
+			Pincel.linha(_luz, f["pos"] - Vector2(0, b), f["pos"] + Vector2(0, b), cor, 1.4 * _k)
 
 

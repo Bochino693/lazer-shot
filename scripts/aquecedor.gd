@@ -52,16 +52,21 @@ static var _montados: Dictionary = {}
 ## um programa próprio na placa, para o material comum e outro para a luz
 ## somada (CanvasItemMaterial BLEND_MODE_ADD, usada por todos os efeitos de
 ## acerto e pela apresentação). Retângulo comum já está na tela desde o
-## primeiro quadro. Uma vez por sessão, antes de qualquer efeito.
+## primeiro quadro. Linha com luz somada não existe mais no jogo: todos os
+## efeitos de luz desenham pelo pincel (retângulos de textura). Uma vez por
+## sessão, antes de qualquer efeito. Depois, as duas coisas do Android que
+## só este jogo usa: a captura da arma (mira) e a pasta da caixa-preta
+## (inclusive no pendrive).
 const PASSOS_BASE := [
 	"desenho:soma_retangulo",
 	"desenho:comum_linha",
 	"desenho:comum_poligono",
-	"desenho:soma_linha",
 	"desenho:soma_poligono",
 	"desenho:comum_instancias",
 	"desenho:soma_instancias",
 	"desenho:texto",
+	"arma",
+	"pasta",
 ]
 const FONTES := [
 	"res://fonts/Exo2-ExtraBold.ttf",
@@ -79,6 +84,8 @@ var _total := -1          # -1: não é fila
 var _feitos := 0
 var _acabou := false
 var _sons: Array = []
+var _lista: Array[String] = []     # todos os passos, na ordem (para a barra)
+var _estado: Dictionary = {}       # passo -> "ok" | "pulado" | "agora"
 var _risco_antes := ""
 var _trecho := ""          # o último trecho vigiado que este aquecedor abriu
 var _passo := ""
@@ -111,6 +118,7 @@ static func shaders(caminhos: Array, onde: Node, sons: Array = []) -> Aquecedor:
 		if not _pronto(c) and ResourceLoader.exists(c):
 			a._fila.append(c)
 	a._total = a._fila.size()
+	a._lista = a._fila.duplicate()
 	a._risco_antes = Tela.risco_atual()
 	a._pendurar(onde)
 	return a
@@ -173,6 +181,28 @@ func acabou() -> bool:
 	return _acabou
 
 
+## Para a barra de preparação: [[passo, estado], ...] na ordem. Estado:
+## "" (falta), "agora", "ok" ou "pulado" (derrubou o app antes: desligado).
+func passos() -> Array:
+	var r := []
+	for p in _lista:
+		r.append([p, _estado.get(p, "")])
+	return r
+
+
+## O passo já derrubou o app nesta versão? A luz somada vale em grupo: se um
+## jeito de desenhar com ela caiu, todos ficam desligados (o contorno troca a
+## luz somada por mistura comum no jogo todo).
+static func _contornado(passo: String) -> bool:
+	if Tela.contorna(passo):
+		return true
+	if passo.begins_with("desenho:soma_"):
+		for p in PASSOS_BASE:
+			if p.begins_with("desenho:soma_") and Tela.contorna(p):
+				return true
+	return false
+
+
 ## Um passo por quadro: o do quadro anterior já foi desenhado (montado na
 ## placa), sai, e entra o próximo.
 func _proximo_passo() -> void:
@@ -185,7 +215,9 @@ func _proximo_passo() -> void:
 		var passo: String = _fila.pop_front()
 		_feitos += 1
 		if _comecar_passo(passo):
+			_estado[passo] = "agora"
 			return
+		_estado[passo] = "pulado" if _estado.get(passo, "") == "pulado" else "ok"
 	_acabou = true
 	_devolver_risco()
 	terminou.emit()
@@ -195,19 +227,24 @@ func _proximo_passo() -> void:
 ## Monta o passo; false se não há nada para desenhar (pula para o próximo
 ## no mesmo quadro).
 func _comecar_passo(passo: String) -> bool:
-	if passo.begins_with("desenho:"):
-		if passo == PASSOS_BASE[PASSOS_BASE.size() - 1]:
-			_base_feita = true
-		if Tela.contorna(passo):
+	if passo == PASSOS_BASE[PASSOS_BASE.size() - 1]:
+		_base_feita = true
+	if passo in PASSOS_BASE or passo == "som":
+		if _contornado(passo):
+			_estado[passo] = "pulado"
+			if passo == "arma":
+				MiraGlobal.iniciar_arma(true)   # mira sem captura
 			return false
 		_abrir_passo(passo)
-		_desenho(passo.trim_prefix("desenho:"))
-		return true
-	if passo == "som":
-		if Tela.contorna("som"):
-			return false
-		_abrir_passo("som")
-		Maquina.aquecer(_sons)
+		match passo:
+			"som":
+				Maquina.aquecer(_sons)
+			"arma":
+				MiraGlobal.iniciar_arma()
+			"pasta":
+				Tela.abrir_pasta_externa()
+			_:
+				_desenho(passo.trim_prefix("desenho:"))
 		return true
 	var sh := load(passo) as Shader
 	if sh == null:
@@ -215,6 +252,7 @@ func _comecar_passo(passo: String) -> bool:
 	_montados[passo] = weakref(sh)
 	var trecho := "shader:" + passo.get_file().get_basename()
 	if Tela.contorna(trecho):
+		_estado[passo] = "pulado"
 		return false   # este shader fica desligado (scripts/contorno_desenho.gd)
 	_abrir_passo(trecho)
 	var m := ShaderMaterial.new()
@@ -240,6 +278,9 @@ func _devolver_risco() -> void:
 
 
 func _fechar_passo() -> void:
+	for p in _estado.keys():
+		if _estado[p] == "agora":
+			_estado[p] = "ok"
 	if _passo == "":
 		return
 	Tela.marca("preparado %s (%d ms)" % [_passo, Time.get_ticks_msec() - _passo_ms])

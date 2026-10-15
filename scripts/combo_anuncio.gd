@@ -14,6 +14,7 @@ extends CanvasLayer
 ## partículas; parado, nada roda.
 
 # [acertos seguidos, texto, fala]
+const Pincel := preload("res://scripts/pincel.gd")
 const NIVEIS := [
 	[2, "DOUBLE HIT", "double"],
 	[3, "TRIPLE HIT", "triple"],
@@ -107,6 +108,7 @@ func _ready() -> void:
 
 	_raios = Node2D.new()
 	_raios.material = soma
+	_raios.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	_raios.draw.connect(_desenhar_raios)
 	_raiz.add_child(_raios)
 
@@ -401,8 +403,10 @@ func _desenhar_raios() -> void:
 				if ki <= 0.0:
 					continue
 				var r := (120.0 + 520.0 * (1.0 - pow(1.0 - ki, 2.0))) * _forca
+				# anel pelo pincel: na TV Box a luz somada só desenha
+				# retângulos de textura (scripts/pincel.gd)
 				_raios.draw_set_transform(Vector2.ZERO, 0.0, Vector2(1.0, 0.32))
-				_raios.draw_arc(Vector2.ZERO, r, 0.0, TAU, 64, Color(_cores[2], 0.5 * (1.0 - ki)), 7.0 - 4.0 * ki, true)
+				Pincel.anel(_raios, Vector2.ZERO, r, 7.0 - 4.0 * ki, Color(_cores[2], 0.5 * (1.0 - ki)))
 			_raios.draw_set_transform(Vector2.ZERO)
 		"saloon":
 			# estouro de pólvora: estrela de pontas curtas e grossas
@@ -420,7 +424,7 @@ func _desenhar_raios() -> void:
 			for y in [-82.0, 82.0]:
 				for camada in [[16.0, 0.25], [6.0, 0.6], [2.0, 1.0]]:
 					var cor := Color(_cores[2] if camada[1] < 1.0 else Color(0.9, 1.0, 1.0), a * 1.6 * float(camada[1]))
-					_raios.draw_line(Vector2(-meia, y), Vector2(meia, y), cor, float(camada[0]))
+					Pincel.linha(_raios, Vector2(-meia, y), Vector2(meia, y), cor, float(camada[0]))
 		_:
 			# sol: raios de luz girando
 			var r := (160.0 + 520.0 * abre) * _forca

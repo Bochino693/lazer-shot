@@ -17,6 +17,7 @@ extends Control
 ## TV Box a apresentação caía no primeiro tiro, quando a placa montava a luz
 ## somada e as faíscas no meio da animação.
 
+const Pincel := preload("res://scripts/pincel.gd")
 const LOGO := preload("res://sprites/logo_lazer_sport.png")
 const SHADER_FUNDO := preload("res://shaders/abertura_fundo.gdshader")
 const SHADER_LOGO := preload("res://shaders/abertura_logo.gdshader")
@@ -66,6 +67,7 @@ var _games_t := -1.0
 var _apresenta_t := -1.0
 var _roteiro: Array = []           # [tempo, Callable], em ordem
 var _aquecedor: Aquecedor = null   # preparando a placa: a apresentação espera
+var _barra: Control                # andamento da preparação (só traços)
 static var _marcou := false        # caixa-preta: cada passo, só na 1ª vez
 
 
@@ -114,6 +116,36 @@ func _comecar() -> void:
 		Tela.risco("abertura")   # se o app morrer aqui, a caixa-preta sabe
 	var tw := create_tween()
 	tw.tween_property(_escuro, "color:a", 0.0, 0.6)
+	tw.parallel().tween_property(_barra, "modulate:a", 0.0, 0.3)
+	tw.tween_callback(_barra.queue_free)
+
+
+## Andamento da preparação, embaixo, na tela preta: um traço por passo.
+## Aceso = pronto; vermelho = esse passo derrubou o app antes e agora fica
+## desligado. Sem texto: se a TV Box parar aqui, uma foto mostra onde.
+func _desenhar_barra() -> void:
+	if _aquecedor == null or not is_instance_valid(_aquecedor):
+		return
+	var lista := _aquecedor.passos()
+	var n := lista.size()
+	if n == 0:
+		return
+	var larg := 26.0
+	var vao := 10.0
+	var total := n * larg + (n - 1) * vao
+	var x := (_tela.x - total) * 0.5
+	var y := _tela.y * 0.86
+	for item in lista:
+		var cor := Color(1, 1, 1, 0.12)
+		match item[1]:
+			"ok":
+				cor = Color(1, 1, 1, 0.75)
+			"agora":
+				cor = Color(1, 1, 1, 0.35 + 0.25 * sin(Time.get_ticks_msec() * 0.012))
+			"pulado":
+				cor = Color(1.0, 0.18, 0.2, 0.9)
+		_barra.draw_rect(Rect2(x, y, larg, 6.0), cor)
+		x += larg + vao
 
 
 func _montar() -> void:
@@ -181,6 +213,7 @@ func _montar() -> void:
 	soma.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
 	_luz = Node2D.new()
 	_luz.material = soma
+	_luz.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	_luz.draw.connect(_desenhar_luz)
 	add_child(_luz)
 
@@ -222,6 +255,10 @@ func _montar() -> void:
 	_escuro.color = Color(0, 0, 0, 1)
 	_escuro.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_escuro)
+	_barra = Control.new()
+	_barra.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_barra.draw.connect(_desenhar_barra)
+	add_child(_barra)
 
 
 func _particulas(n: int, vida: float, tex: Texture2D, mat: Material, rampa: Gradient) -> CPUParticles2D:
@@ -241,7 +278,7 @@ func _particulas(n: int, vida: float, tex: Texture2D, mat: Material, rampa: Grad
 
 func _ajustar() -> void:
 	_tela = get_viewport_rect().size
-	for r: Control in [_fundo, _clarao, _escuro]:
+	for r: Control in [_fundo, _clarao, _escuro, _barra]:
 		r.position = Vector2.ZERO
 		r.size = _tela
 	var larg := _tela.x * 0.80
@@ -337,6 +374,7 @@ func _input(event: InputEvent) -> void:
 # ───────────────────────────────────────────── quadro a quadro
 func _process(delta: float) -> void:
 	if _aquecedor != null:
+		_barra.queue_redraw()
 		return   # a placa ainda está sendo preparada (tela preta)
 	# um quadro pode demorar: o roteiro não pula
 	delta = minf(delta, 0.05)
@@ -452,22 +490,25 @@ func _desenhar_placa(pl: Dictionary) -> void:
 	_marcas.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 
+## A luz (mistura somada) só com o pincel: retângulos de uma textura só
+## (scripts/pincel.gd), o jeito de desenhar que a TV Box já usa no jogo
+## inteiro. Linhas e curvas com luz somada coincidiam com as quedas na TV Box.
 func _desenhar_luz() -> void:
 	# furos em brasa esfriando
 	for f in _furos:
 		var quente := clampf(1.0 - f["t"] / 1.6, 0.0, 1.0)
 		if quente > 0.0:
-			_luz.draw_arc(f["pos"], 11.0, 0.0, TAU, 24, Color(1.0, 0.45, 0.08, quente), 4.0, true)
-			_luz.draw_circle(f["pos"], 18.0, Color(1.0, 0.25, 0.05, quente * 0.25))
+			Pincel.anel(_luz, f["pos"], 11.0, 4.0, Color(1.0, 0.45, 0.08, quente))
+			Pincel.circulo(_luz, f["pos"], 18.0, Color(1.0, 0.25, 0.05, quente * 0.25))
 	# feixes do laser
 	for d in _disparos:
 		var a: float = 1.0 - d["t"] / d["vida"]
 		var w := 2.2 if d["forte"] else 1.0
 		var de: Vector2 = d["de"]
 		var para: Vector2 = d["para"]
-		_luz.draw_line(de, para, Color(VERMELHO, 0.18 * a), 30.0 * w, true)
-		_luz.draw_line(de, para, Color(VERMELHO, 0.40 * a), 13.0 * w, true)
-		_luz.draw_line(de, para, Color(1.0, 0.85, 0.85, 0.95 * a), 4.0 * w, true)
+		Pincel.linha(_luz, de, para, Color(VERMELHO, 0.18 * a), 30.0 * w)
+		Pincel.linha(_luz, de, para, Color(VERMELHO, 0.40 * a), 13.0 * w)
+		Pincel.linha(_luz, de, para, Color(1.0, 0.85, 0.85, 0.95 * a), 4.0 * w)
 	# clarões dos impactos
 	for i in _impactos:
 		var k: float = i["t"] / i["vida"]
@@ -475,25 +516,25 @@ func _desenhar_luz() -> void:
 		var a := (1.0 - k)
 		for j in 4:
 			var rr := r * (1.0 - j * 0.22)
-			_luz.draw_circle(i["pos"], rr, Color(1.0, 0.55 + 0.1 * j, 0.35 + 0.15 * j, 0.16 * a))
+			Pincel.circulo(_luz, i["pos"], rr, Color(1.0, 0.55 + 0.1 * j, 0.35 + 0.15 * j, 0.16 * a))
 	# onda de choque do tiro final
 	if _onda_t >= 0.0:
 		var k := _onda_t / 0.8
 		var r := 40.0 + k * _tela.y * 0.75
-		_luz.draw_arc(_alvo, r, 0.0, TAU, 96, Color(1.0, 0.75, 0.75, 0.8 * (1.0 - k)), 3.0 + 22.0 * (1.0 - k), true)
-		_luz.draw_arc(_alvo, r * 0.82, 0.0, TAU, 96, Color(VERMELHO, 0.5 * (1.0 - k)), 2.0 + 10.0 * (1.0 - k), true)
+		Pincel.anel(_luz, _alvo, r, 3.0 + 22.0 * (1.0 - k), Color(1.0, 0.75, 0.75, 0.8 * (1.0 - k)))
+		Pincel.anel(_luz, _alvo, r * 0.82, 2.0 + 10.0 * (1.0 - k), Color(VERMELHO, 0.5 * (1.0 - k)))
 	# mira
 	if _mira_vis > 0.0:
 		var c := Vector2(sin(_t * 13.0) * 2.5, cos(_t * 11.0) * 2.0) * (1.0 - _carga) + _mira
 		var r := 50.0 - 18.0 * _carga
 		var cor := Color(VERMELHO, _mira_vis)
-		_luz.draw_arc(c, r, 0.0, TAU, 48, Color(VERMELHO, 0.22 * _mira_vis), 14.0, true)
-		_luz.draw_arc(c, r, 0.0, TAU, 48, cor, 4.0, true)
+		Pincel.anel(_luz, c, r, 14.0, Color(VERMELHO, 0.22 * _mira_vis))
+		Pincel.anel(_luz, c, r, 4.0, cor)
 		var giro := _t * 5.0 * _carga
 		for k in 4:
 			var dir := Vector2.RIGHT.rotated(giro + k * PI * 0.5)
-			_luz.draw_line(c + dir * r * 0.55, c + dir * r * 1.4, cor, 4.0, true)
-		_luz.draw_circle(c, 4.0, Color(1, 0.9, 0.9, _mira_vis))
+			Pincel.linha(_luz, c + dir * r * 0.55, c + dir * r * 1.4, cor, 4.0)
+		Pincel.circulo(_luz, c, 4.0, Color(1, 0.9, 0.9, _mira_vis))
 		if _carga > 0.0:
-			_luz.draw_arc(c, r + 16.0, -PI * 0.5, -PI * 0.5 + TAU * _carga, 48, Color(1.0, 0.6, 0.6, _mira_vis), 5.0, true)
-			_luz.draw_circle(c, r * 0.5 * _carga, Color(VERMELHO, 0.25 * _carga))
+			Pincel.arco(_luz, c, r + 16.0, -PI * 0.5, -PI * 0.5 + TAU * _carga, Color(1.0, 0.6, 0.6, _mira_vis), 5.0)
+			Pincel.circulo(_luz, c, r * 0.5 * _carga, Color(VERMELHO, 0.25 * _carga))
