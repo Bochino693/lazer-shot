@@ -13,7 +13,6 @@ extends Node2D
 
 const PEIXE := preload("res://sprites/mar_peixe_dourado.png")
 const N := 9
-const RAIO_TIRO := 42.0        # em px de tela, por peixe (com a escala)
 
 signal saiu
 
@@ -116,14 +115,18 @@ func _process(delta: float) -> void:
 func acertar(pos: Vector2) -> int:
 	if not vivo:
 		return 0
-	var raio := RAIO_TIRO * _esc / 0.5
+	# só vale no desenho do peixe (o pixel dele, na pose de agora)
+	var tam := PEIXE.get_size()
 	var melhor: Dictionary = {}
 	var dist := INF
 	for p in _peixes:
 		if p["pego"] >= 0.0:
 			continue
+		var q := _forma_peixe(p).affine_inverse() * pos + tam * 0.5
+		if not MascaraAcerto.no_pixel(PEIXE, q):
+			continue
 		var d := _pos_peixe(p).distance_to(pos)
-		if d <= raio * float(p["esc"]) and d < dist:
+		if d < dist:
 			dist = d
 			melhor = p
 	if melhor.is_empty():
@@ -168,12 +171,7 @@ func _draw() -> void:
 			var af := a if pego < 0.0 else a * clampf(1.0 - (pego - 0.25) / 0.5, 0.0, 1.0)
 			if af <= 0.0:
 				continue
-			var c := _pos_peixe(p)
-			var e: float = _esc * float(p["esc"])
-			# rabo batendo: o peixe estica e encolhe um pouquinho de lado
-			var bate := 1.0 + 0.06 * sin(_t * 14.0 + p["fase"])
-			var giro: float = sin(_t * 1.7 + p["fase"]) * 0.10 + (p["giro"] * pego if pego >= 0.0 else 0.0)
-			var xf := Transform2D(giro * _dir, Vector2(e * bate * _dir, e), 0.0, c)
+			var xf := _forma_peixe(p)
 			var ini := pontos.size()
 			for v in [Vector2(-0.5, -0.5), Vector2(0.5, -0.5), Vector2(0.5, 0.5), Vector2(-0.5, 0.5)]:
 				pontos.append(xf * (v * tam))
@@ -213,3 +211,14 @@ func _desenhar_luz() -> void:
 			var e := 3.0
 			_luz.draw_texture_rect(_brilho, Rect2(pos - Vector2(b, e * 0.5), Vector2(b * 2.0, e)), false, cor)
 			_luz.draw_texture_rect(_brilho, Rect2(pos - Vector2(e * 0.5, b), Vector2(e, b * 2.0)), false, cor)
+
+
+## Onde e como o peixe está agora (posição, tamanho, rabo batendo, giro):
+## a mesma conta no desenho e no tiro.
+func _forma_peixe(p: Dictionary) -> Transform2D:
+	var pego: float = p["pego"]
+	var e: float = _esc * float(p["esc"])
+	# rabo batendo: o peixe estica e encolhe um pouquinho de lado
+	var bate := 1.0 + 0.06 * sin(_t * 14.0 + p["fase"])
+	var giro: float = sin(_t * 1.7 + p["fase"]) * 0.10 + (p["giro"] * pego if pego >= 0.0 else 0.0)
+	return Transform2D(giro * _dir, Vector2(e * bate * _dir, e), 0.0, _pos_peixe(p))

@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/egito_brasao_lua.png-3650ea691d0fb94168900bb5
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

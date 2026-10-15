@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/egito_lua_esclera.png-e0d15438d2b6a9a3b1d9610
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

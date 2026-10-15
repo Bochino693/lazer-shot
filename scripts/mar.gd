@@ -470,7 +470,6 @@ const PROFUNDO_ZMAX := 2.6      # mais longe que um alvo chega (de lá já vem g
 const ESCALA_MIN_LONGE := 0.42  # o menor tamanho de um alvo na tela (nada miúdo)
 const PROFUNDO_VIDRO := 0.42    # bem perto do vidro, onde ele some
 const PROFUNDO_BONUS := 0.40    # acertar ainda longe (mais que isso) vale o dobro
-const PROFUNDO_RAIO_MIN := 30.0 # px: de longe o alvo é pequeno; um mínimo justo para a mira
 const CHAO_TELA := 0.86         # o chão do mar no plano Z = 1 (fração da altura da tela)
 const COR_NEVOA_ALVO := Color(0.52, 0.80, 0.95)
 var _profundo: Node2D = null
@@ -4826,23 +4825,14 @@ func _obter_animated_do_alvo(alvo: Node) -> AnimatedSprite2D:
 
 
 func _obter_tamanho_visual_do_alvo(alvo: Area2D) -> Dictionary:
-	var sprite: Sprite2D = _obter_sprite_do_alvo(alvo)
-	if sprite != null and sprite.texture != null:
-		return {
-			"tipo": "sprite",
-			"node": sprite,
-			"size": sprite.texture.get_size()
-		}
-
+	# o desenho do alvo é a animação (o "Brilho" atrás da água-viva é só luz)
 	var anim: AnimatedSprite2D = _obter_animated_do_alvo(alvo)
 	if anim != null and anim.sprite_frames != null:
 		var anim_nome: String = anim.animation
-
 		if anim_nome == "":
 			var nomes: PackedStringArray = anim.sprite_frames.get_animation_names()
 			if nomes.size() > 0:
 				anim_nome = String(nomes[0])
-
 		if anim_nome != "":
 			var frame_index: int = clamp(anim.frame, 0, max(0, anim.sprite_frames.get_frame_count(anim_nome) - 1))
 			var frame_tex: Texture2D = anim.sprite_frames.get_frame_texture(anim_nome, frame_index)
@@ -4853,81 +4843,25 @@ func _obter_tamanho_visual_do_alvo(alvo: Area2D) -> Dictionary:
 					"size": frame_tex.get_size()
 				}
 
+	var sprite: Sprite2D = _obter_sprite_do_alvo(alvo)
+	if sprite != null and sprite.texture != null and sprite.name != "Brilho":
+		return {
+			"tipo": "sprite",
+			"node": sprite,
+			"size": sprite.texture.get_size()
+		}
+
 	return {}
 
 
+## O tiro vale só no desenho do alvo: o pixel do quadro da animação que está
+## na tela agora (nada de caixa, de círculo em volta ou de "perto", nem de
+## longe; scripts/mascara_acerto.gd).
 func _ponto_esta_sobre_sprite_do_alvo(alvo: Area2D, pos_global: Vector2) -> bool:
-	# de longe o alvo é pequeno: um mínimo justo em volta dele (a bomba não
-	# ganha esse mínimo: ela só pune)
-	if alvo.has_meta("profundo") and String(alvo.get_meta("tipo_alvo", "")) != "bomba":
-		if alvo.global_position.distance_to(pos_global) <= PROFUNDO_RAIO_MIN:
-			return true
 	var visual: Dictionary = _obter_tamanho_visual_do_alvo(alvo)
 	if visual.is_empty():
 		return false
-
-	var tipo_visual: String = String(visual.get("tipo", ""))
-	var node_visual: Node = visual.get("node", null)
-	var tex_size: Vector2 = visual.get("size", Vector2.ZERO)
-
-	if node_visual == null or tex_size.x <= 0.0 or tex_size.y <= 0.0:
-		return false
-
-	var ponto_local: Vector2
-	if tipo_visual == "sprite":
-		ponto_local = (node_visual as Sprite2D).to_local(pos_global)
-	else:
-		ponto_local = (node_visual as AnimatedSprite2D).to_local(pos_global)
-
-	var half_size: Vector2 = tex_size * 0.5
-	var tipo_alvo: String = String(alvo.get_meta("tipo_alvo", ""))
-
-	var ajuste_x: float = 1.0
-	var ajuste_y: float = 1.0
-	var offset_y: float = 0.0
-
-	match tipo_alvo:
-		"aguaviva":
-			ajuste_x = 0.56
-			ajuste_y = 0.64
-			offset_y = 2.0
-		"vaso":
-			ajuste_x = 0.72
-			ajuste_y = 0.88
-			offset_y = 6.0
-		"bau":
-			ajuste_x = 0.84
-			ajuste_y = 0.78
-			offset_y = 8.0
-		"bomba":
-			ajuste_x = 0.86
-			ajuste_y = 0.86
-			offset_y = 0.0
-		_:
-			ajuste_x = 0.82
-			ajuste_y = 0.82
-
-	var y_local: float = ponto_local.y - offset_y
-
-	if tipo_alvo == "aguaviva":
-		# corpo da água-viva = oval justo (reconhece só o desenho, não a região em volta)
-		var rx: float = half_size.x * ajuste_x
-		var ry: float = half_size.y * ajuste_y
-		if rx <= 0.0 or ry <= 0.0:
-			return false
-		var nx: float = ponto_local.x / rx
-		var ny: float = y_local / ry
-		return (nx * nx + ny * ny) <= 1.0
-
-	var limite_x: float = half_size.x * ajuste_x
-	var limite_y: float = half_size.y * ajuste_y
-
-	if ponto_local.x < -limite_x or ponto_local.x > limite_x:
-		return false
-	if y_local < -limite_y or y_local > limite_y:
-		return false
-
-	return true
+	return MascaraAcerto.no_desenho(visual["node"] as Node2D, pos_global)
 
 
 func _registrar_fx_moedas(pos: Vector2) -> void:
@@ -6171,3 +6105,15 @@ func _aquecer_fase() -> void:
 		return
 	AvisoTiro.preparar(self)
 	Maquina.aquecer([SOM_OURO_CARDUME])
+	# máscaras de acerto das folhas dos alvos (o primeiro tiro não espera)
+	var folhas: Array = [MarCardumeDourado.PEIXE]
+	for m in [aguaviva_modelo, vaso_modelo, bau_modelo, bomba_modelo]:
+		var a := _obter_animated_do_alvo(m)
+		if a == null or a.sprite_frames == null:
+			continue
+		for nome in a.sprite_frames.get_animation_names():
+			if a.sprite_frames.get_frame_count(nome) > 0:
+				var t := a.sprite_frames.get_frame_texture(nome, 0)
+				if t is AtlasTexture and not (t as AtlasTexture).atlas in folhas:
+					folhas.append((t as AtlasTexture).atlas)
+	MascaraAcerto.preparar(folhas)
