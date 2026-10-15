@@ -4207,32 +4207,36 @@ func _mover_aguaviva_2d(t: float, alvo: Area2D) -> void:
 	alvo.position = ini.lerp(fim, _nado_aguaviva(alvo, t))
 
 
-## Vaso, baú ou bomba que caiu até o chão do mar: espatifa (sem ponto e sem
-## castigo: só a chance perdida). A bomba explode lá mesmo.
+## Vaso ou baú que caiu até o chão do mar: espatifa (sem ponto e sem
+## castigo: só a chance perdida). A bomba NÃO explode no chão: só sai de cena
+## (some em 0,25 s) e o objeto é apagado, sem efeito, som nem tremida.
 func _bater_no_chao(alvo: Area2D) -> void:
 	if not is_instance_valid(alvo) or bool(alvo.get_meta("atingido", false)):
 		return
 	alvo.set_meta("atingido", true)
 	_parar_movimento_do_alvo(alvo)
 	var tipo: String = String(alvo.get_meta("tipo_alvo", ""))
+	if tipo == "bomba":
+		alvos_ativos.erase(alvo)
+		alvo.set_deferred("monitoring", false)
+		alvo.set_deferred("monitorable", false)
+		alvo.input_pickable = false
+		var tw := alvo.create_tween()   # do próprio alvo: some junto com ele
+		tw.tween_property(alvo, "modulate:a", 0.0, 0.25)
+		tw.finished.connect(alvo.queue_free)
+		return
 	var k: float = _perto_do_alvo(alvo)
 	var esc: float = float(alvo.get_meta("escala_base", 1.0))
 	var chao: Vector2 = alvo.global_position + Vector2(0.0, _meia_altura(alvo, esc))
 	var volume := linear_to_db(clampf(k, 0.25, 1.0))
 	match tipo:
-		"bomba":
-			MarExplosao.criar(self, chao, k, true, _texturas_fx(), alvo.z_index + 2)
-			if som_bomba_xploit_stream != null:
-				_tocar_som(som_bomba_xploit_stream, -6.0 + volume, randf_range(0.9, 1.0), 0.0)
-			if k > 0.6:
-				_tremida_rapida(4.0 * k, 3, 0.03)
 		"vaso":
 			MarAcerto.criar(self, alvo, chao, tipo, chao.y)
 			_tocar_som(som_vaso_hit_stream, -6.0 + volume, randf_range(0.92, 1.05), inicio_vaso_hit_seg)
 		"bau":
 			MarAcerto.criar(self, alvo, chao, tipo, chao.y)
 			_tocar_som(som_bau_hit_stream, -5.0 + volume, randf_range(0.92, 1.0), inicio_bau_hit_seg)
-	if _furos != null and tipo != "bomba":
+	if _furos != null:
 		_furos.poeira(_furos.to_local(chao), k)
 	alvo.visible = false
 	_remover_alvo(alvo)

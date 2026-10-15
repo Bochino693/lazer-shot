@@ -21,7 +21,9 @@ extends Node
 ## PROTEÇÃO PONTUAL (só na TV Box): o jogo avisa quando entra num trecho que
 ## depende do aparelho (Tela.risco("abertura"), Tela.risco("video")) e
 ## quando sai (Tela.risco("")). Se o app morrer DENTRO de um desses trechos,
-## nesta mesma versão, só aquele trecho é contornado nas próximas aberturas:
+## nesta mesma versão DUAS VEZES, só aquele trecho é contornado nas próximas
+## aberturas (uma vez só pode ter sido a primeira abertura lenta, ou alguém
+## saindo do jogo no meio):
 ##   "abertura"  a apresentação Lazer & Sport é pulada
 ##   "video"     os vídeos tocam pelo player do Godot em vez do hardware
 ## Todo o resto continua igual. Instalar uma versão nova zera tudo.
@@ -29,12 +31,13 @@ extends Node
 ## Criada pela Tela (o primeiro autoload) no _init, antes de qualquer cena.
 ## Outros scripts marcam etapas com Tela.marca("texto").
 
-const VERSAO := "1.23.0"
+const VERSAO := "1.24.0"
 const PASTA := "user://caixa_preta"
 const SESSAO := PASTA + "/sessao.txt"
 const ANTERIOR := PASTA + "/anterior.txt"
 const VIVO := PASTA + "/vivo.txt"
 const SEGURANCA := PASTA + "/contornos.txt"   # "versão|trecho|trecho..."
+const QUASE := PASTA + "/quase.txt"           # "versão|trecho" da 1ª queda num trecho
 const RISCO := PASTA + "/risco.txt"           # "versão|trecho" enquanto está nele
 const QUEDA := PASTA + "/queda.txt"
 const QUEDA_ATE := 600.0       # s: parou sozinha antes disso = provável queda
@@ -290,6 +293,14 @@ func _guardar_sessao_anterior() -> void:
 	# morreu dentro de um trecho arriscado desta mesma versão: contorna só ele
 	var r := risco_anterior.split("|")
 	if r.size() == 2 and r[0] == VERSAO and r[1] != "" and not (r[1] in contornos):
+		# primeira queda neste trecho: só anota; na segunda, contorna
+		var quase := FileAccess.get_file_as_string(QUASE).strip_edges() if FileAccess.file_exists(QUASE) else ""
+		if quase != risco_anterior:
+			var q := FileAccess.open(QUASE, FileAccess.WRITE)
+			if q != null:
+				q.store_string(risco_anterior)
+			return
+		DirAccess.remove_absolute(QUASE)
 		contornos.append(r[1])
 		var f := FileAccess.open(SEGURANCA, FileAccess.WRITE)
 		if f != null:
