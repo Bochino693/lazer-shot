@@ -45,6 +45,11 @@ signal terminou
 ## Shaders já montados nesta sessão: caminho -> WeakRef do recurso. Se o
 ## recurso ainda é o mesmo, o programa dele continua na placa.
 static var _montados: Dictionary = {}
+## Os jeitos de desenhar do material comum e da luz somada (retângulo,
+## polígono, linha e partículas), que todos os efeitos de acerto usam: uma vez
+## por sessão, na primeira troca de tela (não no primeiro tiro).
+static var _base_feita := false
+const BASE := "__base__"
 
 var _texturas: Array[Texture2D] = []
 var _quadros := QUADROS
@@ -58,7 +63,7 @@ static var _branca: Texture2D = null
 
 ## Quantos shaders da lista ainda não estão prontos na placa.
 static func faltam(caminhos: Array) -> int:
-	var n := 0
+	var n := 0 if _base_feita else 1
 	for c in caminhos:
 		if not _pronto(c):
 			n += 1
@@ -70,6 +75,8 @@ static func faltam(caminhos: Array) -> int:
 static func shaders(caminhos: Array, onde: Node) -> Aquecedor:
 	var a := Aquecedor.new()
 	a.name = "AquecedorShaders"
+	if not _base_feita:
+		a._fila.append(BASE)
 	for c in caminhos:
 		if not _pronto(c) and ResourceLoader.exists(c):
 			a._fila.append(c)
@@ -137,6 +144,9 @@ func _proximo_shader() -> void:
 		return
 	var caminho: String = _fila.pop_front()
 	_feitos += 1
+	if caminho == BASE:
+		_base()
+		return
 	var sh := load(caminho) as Shader
 	if sh == null:
 		return
@@ -210,6 +220,24 @@ func _material(m: Material) -> void:
 	p.polygon = PackedVector2Array([Vector2(0, 0), Vector2(4, 0), Vector2(0, 4)])
 	p.material = m
 	add_child(p)
+
+
+## Material comum e luz somada em todos os jeitos de desenhar.
+func _base() -> void:
+	_base_feita = true
+	var soma := CanvasItemMaterial.new()
+	soma.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
+	for m: Material in [null, soma]:
+		_material(m)
+		_particulas(m, Pincel.TEXTURA)
+		var linhas := Node2D.new()
+		linhas.material = m
+		linhas.draw.connect(func() -> void:
+			linhas.draw_line(Vector2.ZERO, Vector2(4, 4), Color(1, 1, 1, 0.02), 1.0)
+			linhas.draw_polyline(PackedVector2Array([Vector2.ZERO, Vector2(4, 0), Vector2(4, 4)]), Color(1, 1, 1, 0.02), 2.0)
+			linhas.draw_texture_rect_region(Pincel.TEXTURA, Rect2(0, 0, 4, 4), Rect2(0, 0, 8, 8), Color(1, 1, 1, 0.02)))
+		add_child(linhas)
+	Tela.marca("shader: base (material comum e luz somada)")
 
 
 ## Desenho por instâncias (MultiMesh), como os cardumes do Mar.

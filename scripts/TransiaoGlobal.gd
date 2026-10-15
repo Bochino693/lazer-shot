@@ -284,7 +284,10 @@ func _limpar_letras() -> void:
 	for p: String in FONTES:
 		if ResourceLoader.has_cached(p):
 			var f := ResourceLoader.load(p) as FontFile
-			if f != null:
+			# letras vetoriais (MSDF, Rodada 24): um desenho de cada letra serve
+			# para todos os tamanhos e já vem pronto no APK; não cresce e não
+			# pode ser jogado fora (seria desenhado de novo na TV Box)
+			if f != null and not f.multichannel_signed_distance_field:
 				for i in f.get_cache_count():
 					f.clear_size_cache(i)
 	# o que está à vista com letras (selo de créditos, avisos) é redesenhado

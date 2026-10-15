@@ -21,7 +21,12 @@ signal comecou   # primeiro quadro na tela
 signal falhou    # sem hardware e sem plano B: a tela fica com o fundo de baixo
 
 const SHADER_OES := "res://shaders/video_oes.gdshader"
-const ESPERA_MAX := 3.0          # segundos sem quadro -> plano B
+const ESPERA_MAX := 3.0          # segundos sem quadro (já preparado) -> plano B
+## Cópia do vídeo para a memória interna + preparo do decodificador. Na TV Box,
+## na 1ª vez de cada vídeo (ou vídeo novo numa versão nova), a cópia leva
+## vários segundos: isso NÃO é falha e não pode jogar o vídeo no player do
+## Godot (que pesa no processador). Só desiste se passar disto.
+const PREPARO_MAX := 25.0
 const CORTE_MAX := 0.03          # tela cheia: corta no máximo 3% de cada lado
 const PASTA_COPIA := "user://videos/"
 
@@ -260,6 +265,7 @@ func _process(delta: float) -> void:
 		elif r != null:
 			_mp = r
 			_pronto = true
+			_espera = 0.0   # os 3 s sem quadro contam a partir daqui
 		else:
 			_erro = "MediaPlayer"
 	if _erro != "":
@@ -275,7 +281,12 @@ func _process(delta: float) -> void:
 			return
 	if not _mostrando:
 		_espera += delta
-		if _pronto and int(_st.getTimestamp()) != 0:
+		if not _pronto:
+			# ainda copiando / preparando (thread): espera sem desistir
+			if _espera > PREPARO_MAX:
+				_falhar("preparo passou de %.0f s" % PREPARO_MAX)
+			return
+		if int(_st.getTimestamp()) != 0:
 			Tela.marca("vídeo hardware: tocando " + mp4.get_file())
 			Tela.risco("")
 			_mostrar(_rect)

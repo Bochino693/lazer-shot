@@ -55,7 +55,7 @@ Ele abre o jogo, espera 40 s e salva `build/android/LOGCAT-TVBOX.txt` e a
 pasta `build/android/caixa_preta`. Com `-Instalar`, o mesmo acontece logo
 depois de instalar o APK novo.
 
-A versão do APK aparece em Configurações > Apps da TV Box (1.23.0, código 25).
+A versão do APK aparece em Configurações > Apps da TV Box (1.24.0, código 26).
 
 ## Tela em pé na TV Box
 
@@ -1363,6 +1363,45 @@ caixa de cada recorte); a luz do sol do Mar só lê a textura dos raios onde
 há raio. A imagem é a mesma.
 
 APK 1.23.0 (código 25).
+
+## Rodada 24: letras prontas no APK, vídeo sem desistir cedo e abertura protegida
+
+O que a 1.23.0 fez na TV Box: abriu (a partida do app ficou leve), mas a
+apresentação não apareceu, o menu demorou e, no Mar, o jogo fechou no
+primeiro acerto num vaso. No PC, com o pacote do próprio APK em OpenGL ES,
+acertar vaso, água-viva e baú não fecha nem dá erro: a queda é do aparelho.
+
+**Letras vetoriais, prontas dentro do APK** (`fonts/*.ttf.import`).
+- Cada tamanho de letra com contorno virava imagens novas na placa, criadas
+  na hora em que o texto aparecia, pelo processador. Os números que pulam e
+  os anúncios mudam de tamanho na animação: no Mar eram **140 tamanhos, 54
+  imagens, 48 MB** só de letras, e o primeiro acerto ("ACERTO! +80", os
+  pontos, o anúncio) criava várias de uma vez, no meio do jogo.
+- Agora as quatro fontes são MSDF (letra vetorial): um desenho de cada letra
+  serve para todos os tamanhos e contornos, e os 180 caracteres do jogo já
+  vêm desenhados no APK. **18 MB fixos**, nada é desenhado na TV Box e nada
+  cresce. No Mar as texturas caíram de 86 para 58 MB. A troca de tela não
+  joga mais esse desenho fora (`TransiaoGlobal._limpar_letras`).
+- Contorno até 32% do tamanho da letra (o mais grosso do jogo) sai inteiro.
+
+**Vídeo do menu** (`scripts/video_nativo.gd`). Na primeira vez de cada
+vídeo (e em toda versão com vídeos novos) ele é copiado de dentro do APK
+para a memória interna; isso levava mais que os 3 s de espera e o vídeo
+caía no player do Godot (pesado no processador da TV Box): o menu ficava
+lento. Agora os 3 s só contam depois de copiado e preparado (a cópia tem até
+25 s).
+
+**Apresentação protegida** (`scripts/caixa_preta.gd`). O contorno pulava a
+apresentação para sempre (na mesma versão) depois de uma única queda dentro
+dela, e uma primeira abertura lenta ou alguém saindo no meio já contavam.
+Agora só pula se cair **duas vezes** ali.
+
+**Primeiro tiro** (`scripts/aquecedor.gd`). Na primeira troca de tela o
+material comum e a luz somada (que todos os efeitos de acerto usam) são
+montados em todos os jeitos de desenhar (retângulo, polígono, linha,
+partículas), debaixo do preto: o primeiro acerto não monta nada na placa.
+
+APK 1.24.0 (código 26).
 
 ## Para testar no PC como se fosse a TV Box
 
