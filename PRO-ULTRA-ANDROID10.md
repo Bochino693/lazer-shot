@@ -1281,6 +1281,35 @@ arena. Nada de risco nascendo no meio da tela.
 
 APK 1.21.0 (código 23).
 
+## Rodada 22: acerto só no desenho (Mar) e tudo mais leve para a TV Box
+
+**Mar: o tiro só vale no desenho do alvo.** Antes o acerto era uma caixa ou
+um oval em volta do alvo, com um raio mínimo para os de longe, e a água-viva
+usava o tamanho do brilho que fica atrás dela (bem maior que ela). Agora vale
+só o pixel do desenho que está na tela, no quadro da animação daquele
+instante: água-viva (sino e tentáculos), vaso, baú, bomba e cada peixe do
+cardume dourado. Errou por um pixel fora do desenho, é erro.
+- As máscaras saem das próprias folhas de sprites, uma vez
+  (`tools/gerar_mascaras_acerto.gd` → `sprites/acerto/*.res`, de 1 a 37 KB
+  cada), e são carregadas ao abrir a fase (`scripts/mascara_acerto.gd`): no
+  tiro é só ler um pixel, sem custo para a TV Box.
+
+**Mais leve:**
+- **Músicas** de 256 para 128 kbit/s (o Godot guarda o MP3 inteiro na memória
+  enquanto toca): metade da memória e do tamanho, sem diferença na caixa de
+  som da TV.
+- **Texturas** grandes que estavam sem compressão passaram para ETC2 (a
+  Mali-G31 lê direto; ocupa 1/4 da memória de vídeo e fica igual na tela):
+  lanternas da Arena; olhos, pálpebras e brasões do sol e da lua e as águias
+  do Egito. O mapa de brilho dos planos do Egito ficou na metade da
+  resolução (é só a luz). As garrafas do Bar continuam sem perda: os cacos
+  pegam a cor da própria folha.
+- **Prévias do menu** regravadas com o robô jogando a versão atual (tiro em
+  primeira pessoa, Mar sem remendo, anúncios novos); o plano B em `.ogv`
+  (só toca se o vídeo pelo hardware falhar) com metade do tamanho.
+
+APK 1.22.0 (código 24).
+
 ## Para testar no PC como se fosse a TV Box
 
 ```

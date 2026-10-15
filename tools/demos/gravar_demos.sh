@@ -7,7 +7,7 @@
 # A pasta precisa ser uma cópia do projeto já importada (com .godot). A janela
 # é forçada para 1080x1920 só nessa cópia (override.cfg), e as prévias saem
 # como as antigas: mp4 h264 576x1024 30 q/s com AAC; ogv 432x768 24 q/s
-# (2,4 Mbit/s: cada uma fica perto de 8 MB).
+# (1,3 Mbit/s: plano B, perto de 4,5 MB cada).
 # Precisa de godot 4.6, xvfb-run e ffmpeg (libx264, libtheora, libvorbis).
 set -e
 P=${1:-.}
@@ -30,7 +30,7 @@ for par in "deserto teaser_desert" "mar teaser_mar" "bar teaser_bar" "arena teas
     -c:v libx264 -profile:v main -level 4.0 -pix_fmt yuv420p -preset slow -b:v 2600k -maxrate 3200k -bufsize 6000k -r 30 \
     -af "$FA" -c:a aac -b:a 128k -ar 48000 -ac 2 -movflags +faststart "$SAIDA/$NOME.mp4"
   ffmpeg -v error -y -ss "$INI" -t "$SEG" -i "$TMP/$CENA.avi" -vf "scale=432:768:flags=lanczos,$FV" \
-    -c:v libtheora -b:v 2400k -r 24 -af "$FA" -c:a libvorbis -q:a 4 -ar 48000 -ac 2 "$SAIDA/$NOME.ogv"
+    -c:v libtheora -b:v 1300k -r 24 -af "$FA" -c:a libvorbis -q:a 4 -ar 48000 -ac 2 "$SAIDA/$NOME.ogv"
   rm -f "$TMP/$CENA.avi"
   echo "$NOME pronto"
 done
