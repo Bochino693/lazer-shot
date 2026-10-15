@@ -1601,8 +1601,9 @@ textura só, o mesmo jeito que a mira e os tiros já usam em todas as telas.
 - na TV Box, sem luz somada (mistura comum).
 
 A placa monta 3 programas para ela: o comum e os dois shaders da
-apresentação. Antes eram 6 ou mais. O visual é o mesmo (fotos conferidas no
-PC).
+apresentação. Antes eram 6 ou mais. O visual é praticamente o mesmo (fotos
+conferidas no PC, com e sem a luz somada); na TV Box os brilhos ficam só um
+pouco menos estourados.
 
 **Troca de tela na TV Box:** a cena nova é carregada numa thread só, como no
 Dragon Bowling. Há menos disputa nos 4 núcleos e menos memória ocupada ao
