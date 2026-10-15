@@ -1383,6 +1383,18 @@ acertar vaso, água-viva e baú não fecha nem dá erro: a queda é do aparelho.
   cresce. No Mar as texturas caíram de 86 para 58 MB. A troca de tela não
   joga mais esse desenho fora (`TransiaoGlobal._limpar_letras`).
 - Contorno até 32% do tamanho da letra (o mais grosso do jogo) sai inteiro.
+- O Godot guarda cada imagem de letra também na memória comum. Medido no
+  pacote do próprio APK (OpenGL ES no PC, mesmo teste nas duas versões):
+
+  | | 1.23.0 | 1.24.0 |
+  |---|---|---|
+  | Mar, 1ª entrada: memória do processo | 693 MB | 478 MB |
+  | Mar: memória do Godot | 198 MB | 69 MB |
+  | Mar: texturas | 151 MB | 60 MB |
+  | Depois das quatro fases: processo | 914 MB | 621 MB |
+
+  Numa TV Box de 2 GB (o Android já usa mais de 1 GB), um pico de memória
+  no primeiro acerto é a causa mais provável de o jogo ter fechado no vaso.
 
 **Vídeo do menu** (`scripts/video_nativo.gd`). Na primeira vez de cada
 vídeo (e em toda versão com vídeos novos) ele é copiado de dentro do APK
