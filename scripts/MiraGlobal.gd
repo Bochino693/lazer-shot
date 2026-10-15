@@ -54,6 +54,7 @@ const RECUO_MAX := 110.0        # px
 const RECUO_VOLTA := 4.5        # 1/s: a arma voltando para a mira
 var _seguidos := 0
 var _ultimo_coice_ms := -100000
+var _cena_do_tiro := 0
 
 var _iniciada := false
 var _sens := 1.0
@@ -324,6 +325,13 @@ func mira() -> Vector2:
 ## A tela chama a cada tiro dado (bala gasta): a arma dá o tranco. `forca`
 ## muda com a arma da tela (pistola do bar mais forte, laser da arena leve).
 func coice(forca: float = 1.0) -> void:
+	var cena := get_tree().current_scene
+	var id := cena.get_instance_id() if cena != null else 0
+	if id != _cena_do_tiro:
+		# caixa-preta: o primeiro tiro de cada tela e se os quadros seguintes
+		# saíram (scripts/caixa_preta.gd)
+		_cena_do_tiro = id
+		Tela.marca_quadro("primeiro tiro em " + (str(cena.name) if cena != null else "?"))
 	var agora := Time.get_ticks_msec()
 	var dt := (agora - _ultimo_coice_ms) / 1000.0
 	_ultimo_coice_ms = agora

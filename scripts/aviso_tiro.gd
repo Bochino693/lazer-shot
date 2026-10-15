@@ -25,6 +25,7 @@ var _lista: Array[Dictionary] = []
 var _instrucao := {}
 var _pontos: PontosVoando
 var _aquecer := 0
+static var _fase_do_acerto := 0
 
 
 static func _no(fase: Node) -> AvisoTiro:
@@ -63,6 +64,11 @@ static func pontos(fase: Node, pos_tela: Vector2, texto: String, cor: Color, bri
 	var no := _no(fase)
 	if no == null:
 		return
+	if fase.get_instance_id() != _fase_do_acerto:
+		# caixa-preta: o primeiro acerto de cada partida e se os quadros
+		# seguintes saíram (scripts/caixa_preta.gd)
+		_fase_do_acerto = fase.get_instance_id()
+		Tela.marca_quadro("primeiro acerto em %s (%s)" % [fase.name, texto.strip_edges()])
 	no._criar_pontos()
 	no._pontos.mostrar(pos_tela, texto, cor, 1.0, brilho)
 

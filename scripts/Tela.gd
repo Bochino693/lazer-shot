@@ -26,6 +26,7 @@ extends Node
 
 const BASE := Vector2(1024, 1536)
 const CaixaPreta := preload("res://scripts/caixa_preta.gd")
+const ContornoDesenho := preload("res://scripts/contorno_desenho.gd")
 
 var giro := 0
 var mira_direta := true
@@ -48,6 +49,12 @@ func _ready() -> void:
 	var janela := get_tree().root
 	_aplicar()
 	add_child(_caixa)
+	# a TV Box já caiu preparando algum jeito de desenhar: o jogo segue sem ele
+	if ContornoDesenho.precisa(_caixa.contornos):
+		var contorno := ContornoDesenho.new()
+		contorno.name = "ContornoDesenho"
+		add_child(contorno)
+		contorno.configurar(_caixa.contornos)
 	janela.size_changed.connect(_aplicar)
 	janela.window_input.connect(_corrigir_evento)
 
@@ -115,6 +122,18 @@ func contorna(trecho: String) -> bool:
 func risco(trecho: String) -> void:
 	if _caixa != null:
 		_caixa.risco(trecho)
+
+
+## O trecho arriscado em que o jogo está agora ("" = nenhum).
+func risco_atual() -> String:
+	return _caixa.risco_atual() if _caixa != null else ""
+
+
+## Marca e confere: se os dois quadros seguintes chegarem a ser desenhados,
+## a caixa-preta anota "ok" (diz se uma queda foi no instante do evento).
+func marca_quadro(txt: String) -> void:
+	if _caixa != null:
+		_caixa.marca_quadro(txt)
 
 
 ## Tamanho da tela do jogo (em pé), o mesmo que get_viewport_rect().size.

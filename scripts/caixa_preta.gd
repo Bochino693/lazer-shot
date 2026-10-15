@@ -26,12 +26,19 @@ extends Node
 ## saindo do jogo no meio):
 ##   "abertura"  a apresentação Lazer & Sport é pulada
 ##   "video"     os vídeos tocam pelo player do Godot em vez do hardware
-## Todo o resto continua igual. Instalar uma versão nova zera tudo.
+## Os passos da preparação da placa de vídeo (scripts/aquecedor.gd) são
+## contornados já na PRIMEIRA queda (cada um dura uma fração de segundo,
+## com a tela preta; ninguém sai do jogo bem ali):
+##   "desenho:<jeito>"  aquele jeito de desenhar fica desligado no jogo todo
+##   "shader:<nome>"    aquele shader vira um desenho simples
+##   "som"              efeitos sonoros desligados
+## (scripts/contorno_desenho.gd aplica). Todo o resto continua igual.
+## Instalar uma versão nova zera tudo.
 ##
 ## Criada pela Tela (o primeiro autoload) no _init, antes de qualquer cena.
 ## Outros scripts marcam etapas com Tela.marca("texto").
 
-const VERSAO := "1.24.0"
+const VERSAO := "1.25.0"
 const PASTA := "user://caixa_preta"
 const SESSAO := PASTA + "/sessao.txt"
 const ANTERIOR := PASTA + "/anterior.txt"
@@ -131,6 +138,8 @@ var _vivo_t := 0.0
 var _pulso_t := 0.0
 var _cena_id := 0
 var _externa := ""     # pasta do app visível no gerenciador de arquivos ("" = sem)
+var _conferir := 0     # quadros que faltam para anotar o "ok" de marca_quadro
+var _conferir_txt := ""
 
 
 func _init() -> void:
@@ -179,6 +188,10 @@ func contorna(trecho: String) -> bool:
 	return trecho in contornos
 
 
+func risco_atual() -> String:
+	return _risco
+
+
 ## Entrando ("abertura", "video") ou saindo ("") de um trecho arriscado.
 func risco(trecho: String) -> void:
 	if trecho == _risco:
@@ -214,8 +227,20 @@ func marca(txt: String) -> void:
 	_gravador.escrever(txt)
 
 
+## Marca agora e anota "ok" quando os dois quadros seguintes já tiverem sido
+## desenhados: numa queda, diz se foi no próprio instante (tiro, acerto).
+func marca_quadro(txt: String) -> void:
+	marca(txt)
+	_conferir = 3
+	_conferir_txt = txt
+
+
 func _process(delta: float) -> void:
 	_t += delta
+	if _conferir > 0:
+		_conferir -= 1
+		if _conferir == 0:
+			marca("  ok, desenhado depois de: " + _conferir_txt)
 	var cena := get_tree().current_scene
 	var id := cena.get_instance_id() if cena != null else 0
 	if id != _cena_id:
@@ -293,14 +318,17 @@ func _guardar_sessao_anterior() -> void:
 	# morreu dentro de um trecho arriscado desta mesma versão: contorna só ele
 	var r := risco_anterior.split("|")
 	if r.size() == 2 and r[0] == VERSAO and r[1] != "" and not (r[1] in contornos):
-		# primeira queda neste trecho: só anota; na segunda, contorna
+		# primeira queda neste trecho: só anota; na segunda, contorna (os
+		# passos da preparação da placa já na primeira)
+		var na_hora := r[1].begins_with("desenho:") or r[1].begins_with("shader:") or r[1] == "som"
 		var quase := FileAccess.get_file_as_string(QUASE).strip_edges() if FileAccess.file_exists(QUASE) else ""
-		if quase != risco_anterior:
+		if quase != risco_anterior and not na_hora:
 			var q := FileAccess.open(QUASE, FileAccess.WRITE)
 			if q != null:
 				q.store_string(risco_anterior)
 			return
-		DirAccess.remove_absolute(QUASE)
+		if quase == risco_anterior:
+			DirAccess.remove_absolute(QUASE)
 		contornos.append(r[1])
 		var f := FileAccess.open(SEGURANCA, FileAccess.WRITE)
 		if f != null:
