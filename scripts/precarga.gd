@@ -37,6 +37,7 @@ const LISTA := {
 		"res://sprites/hd/arena_fixa.res",
 		"res://songs/led_estoura.wav",
 		"res://fonts/Exo2-Bold.ttf",
+		"res://sprites/mar_bolha.png",
 	],
 	"res://scenes/bar.tscn": [
 		"res://fonts/Exo2-Bold.ttf",
@@ -65,6 +66,7 @@ const LISTA := {
 		"res://songs/voz/bar_quadra.ogg",
 		"res://songs/voz/bar_super.ogg",
 		"res://songs/voz/bar_triple.ogg",
+		"res://sprites/mar_bolha.png",
 		"res://sprites/bar_raios_sol.png",
 	],
 	"res://scenes/cenarios.tscn": [
@@ -112,6 +114,7 @@ const LISTA := {
 		"res://songs/voz/deserto_quadra.ogg",
 		"res://songs/voz/deserto_super.ogg",
 		"res://songs/voz/deserto_triple.ogg",
+		"res://sprites/mar_bolha.png",
 		"res://sprites/hd/egito_fundo_sol.res",
 		"res://sprites/hd/egito_fundo_lua.res",
 		"res://sprites/hd/egito_planos_sol.res",

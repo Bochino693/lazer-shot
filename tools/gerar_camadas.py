@@ -30,6 +30,11 @@ Mar:
       as pedras recortadas (textura própria, com a máscara de cada uma)
 
     python3 tools/gerar_camadas.py
+
+Depois (Rodada 21, cenário inteiro sem remendo aparecendo):
+    python3 tools/gerar_fundo_inteiro.py   (Egito: pintura original sob os planos)
+    python3 tools/gerar_mar_inteiro.py     (Mar: pintura inteira, contorno liso
+                                            das pedras e névoa onde era o navio)
 """
 import os
 import sys

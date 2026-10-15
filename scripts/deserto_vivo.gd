@@ -87,6 +87,7 @@ var PROFUNDIDADE: Texture2D = load("res://sprites/egito_profundidade.png")
 const SHADER_FUNDO := preload("res://shaders/deserto_fundo.gdshader")
 const SHADER_ALVO := preload("res://shaders/egito_alvo.gdshader")
 const SHADER_PLANO := preload("res://shaders/egito_plano.gdshader")
+const SHADER_PLANO_SIMPLES := preload("res://shaders/egito_plano_simples.gdshader")
 const SHADER_RAIOS := preload("res://shaders/egito_raios.gdshader")
 const SHADER_CRISTAL := preload("res://shaders/egito_cristal.gdshader")
 
@@ -183,6 +184,11 @@ const CEU_SEM_CANTO := Vector2(512 - 232, 300 - 210)   # canto de egito_ceu_*.pn
 # distância Z anda CAMERA_PASSO * (1 - 1/Z) (Z = 1 é o plano dos brasões).
 # O mapa vai de Z = 10 (preto: céu, pirâmides) a Z = 0,7 (branco: chão perto).
 const CAMERA_PASSO := 30.0
+# A cena anda inteira com a mira (Rodada 21): o céu, as pirâmides, as colunas,
+# as estátuas, o cristal e o chão juntos, como uma peça só. Antes cada camada
+# andava no ritmo da sua distância e, entre elas, aparecia o que estava atrás
+# (reconstruído). CAMERA_FATOR: quanto do passo da câmera a cena anda.
+const CAMERA_FATOR := 0.55
 const CAMERA_SUAVE := 2.6
 const Z_LONGE := 10.0
 const Z_PERTO := 0.7
@@ -279,6 +285,7 @@ var _halos: Array[Sprite2D] = []
 # planos 3D (recortes da imagem): {no, canto, z}
 var _planos: Array[Dictionary] = []
 var _mat_planos: ShaderMaterial
+var _mat_simples: Array[ShaderMaterial] = []   # colunas e estátuas (sol, lua)
 var _plano_cristal: Sprite2D
 var _plano_obeliscos: Array = [null, null]
 var _feixes: EgitoFeixes
@@ -320,6 +327,13 @@ var _faiscas_ouro: Array = []
 var _poeiras: Array = []
 var _claroes: Array = []
 var _toque_ouro := Vector3(0, 0, -1)
+# Lascas, pó e clarões de cada tiro ficam na distância do ponto atingido: na
+# frente da coisa (ou do chão) onde a bala bateu e atrás do que está mais
+# perto. Desenhados atrás de tudo, só apareciam fora do contorno da coluna e
+# mostravam o recorte. Uma camada logo acima de cada distância de plano
+# (z_index -> [normal, soma]); 0 = a de baixo (_fx_n / _fx_s).
+var _fx_camadas: Dictionary = {}
+var _z_planos: Array[int] = []
 
 
 func _init() -> void:
@@ -475,6 +489,8 @@ func _aplicar_poente() -> void:
 		mf.set_shader_parameter("ceu_sem_forca", smoothstep(0.0, 70.0, d))
 		mf.set_shader_parameter("crepusculo", _crepusculo)
 	_mat_planos.set_shader_parameter("crepusculo", _crepusculo)
+	for m4 in _mat_simples:
+		m4.set_shader_parameter("crepusculo", _crepusculo)
 
 
 ## Durante a troca o sol e a lua passam atrás das pirâmides (o shader corta
@@ -1103,8 +1119,10 @@ func _montar_camera() -> void:
 		_prof.decompress()
 	for fundo: Sprite2D in [_fundo_sol, _fundo_lua]:
 		var mf := fundo.material as ShaderMaterial
-		mf.set_shader_parameter("inv_z_longe", 1.0 / Z_LONGE)
-		mf.set_shader_parameter("inv_z_perto", 1.0 / Z_PERTO)
+		# a imagem inteira anda igual (1/Z fixo no shader: o mesmo passo para
+		# o céu e para o chão)
+		mf.set_shader_parameter("inv_z_longe", 1.0 - CAMERA_FATOR)
+		mf.set_shader_parameter("inv_z_perto", 1.0 - CAMERA_FATOR)
 		mf.set_shader_parameter("horizonte_uv", HORIZONTE / IMG.y)
 		mf.set_shader_parameter("chao1_uv", CHAO_1 / IMG.y)
 	material_alvo = ShaderMaterial.new()
@@ -1112,6 +1130,7 @@ func _montar_camera() -> void:
 	material_alvo.set_shader_parameter("profundidade", PROFUNDIDADE)
 	material_alvo.set_shader_parameter("inv_z_longe", 1.0 / Z_LONGE)
 	material_alvo.set_shader_parameter("inv_z_perto", 1.0 / Z_PERTO)
+	material_alvo.set_shader_parameter("fator_camera", CAMERA_FATOR)
 
 	var ceu: Array[Node] = [_raios_sol, _raios_lua, _disco_sol, _disco_lua]
 	for h in _halos:
@@ -1162,15 +1181,21 @@ func _animar_camera(delta: float) -> void:
 	# na vertical anda menos (o céu de cima fica sob o placar)
 	camera = _olhar * CAMERA_PASSO * Vector2(1.0, 0.7)
 	var esc := scale.x
-	_camada_ceu.position = camera * (1.0 - 1.0 / Z_LONGE) / esc
-	_camada_perto.position = camera * (1.0 - 1.0 / Z_CRISTAL) / esc
-	_camada_obeliscos.position = camera * (1.0 - 1.0 / Z_OBELISCO) / esc
+	var anda := camera * CAMERA_FATOR / esc
+	_camada_ceu.position = anda
+	_camada_perto.position = anda
+	_camada_obeliscos.position = anda
+	_fx_n.position = anda
+	_fx_s.position = anda
+	for par: Array in _fx_camadas.values():
+		(par[0] as Node2D).position = anda
+		(par[1] as Node2D).position = anda
 	for pl in _planos:
-		var pos: Vector2 = pl["canto"] + camera * (1.0 - 1.0 / float(pl["z"])) / esc
+		var pos: Vector2 = pl["canto"] + anda
 		(pl["no"] as Node2D).position = pos
 		if pl["lua"] != null:
 			(pl["lua"] as Node2D).position = pos
-	_feixes.camera_local = camera / esc
+	_feixes.camera_local = anda
 	_poeira_perto.position = Vector2(-60.0, 300.0) + camera * (1.0 - 1.0 / 0.45) / esc
 	for fundo: Sprite2D in [_fundo_sol, _fundo_lua]:
 		if fundo.visible:
@@ -1190,8 +1215,8 @@ func chao_1() -> float:
 
 
 ## Quanto uma coisa à distância z anda na tela agora (px).
-func paralaxe(z: float) -> Vector2:
-	return camera * (1.0 - 1.0 / maxf(z, 0.05))
+func paralaxe(_z: float) -> Vector2:
+	return camera * CAMERA_FATOR
 
 
 ## 1/Z do fundo no ponto p da imagem (px da imagem).
@@ -1208,9 +1233,7 @@ func _inv_z_local(p: Vector2) -> float:
 ## O ponto da imagem que aparece agora no ponto p da tela (desfaz a câmera).
 func ponto_da_imagem(p_global: Vector2) -> Vector2:
 	var p: Vector2 = get_global_transform().affine_inverse() * p_global
-	var esc := maxf(scale.x, 0.001)
-	var inv := _inv_z_local(p)
-	return p - camera * (1.0 - _inv_z_local(p - camera * (1.0 - inv) / esc)) / esc
+	return p - camera * CAMERA_FATOR / maxf(scale.x, 0.001)
 
 
 ## 1/Z do que aparece no ponto p da tela (para saber se um brasão está atrás).
@@ -1220,8 +1243,8 @@ func inv_z_na_tela(p_global: Vector2) -> float:
 
 ## Quanto um ponto do chão (px da imagem) anda agora, em px da imagem
 ## (furos de bala e poeira grudados no chão).
-func deslocamento_no_chao(p: Vector2) -> Vector2:
-	return camera * (1.0 - _inv_z_local(p)) / maxf(scale.x, 0.001)
+func deslocamento_no_chao(_p: Vector2) -> Vector2:
+	return camera * CAMERA_FATOR / maxf(scale.x, 0.001)
 
 
 # ───────────────────────────────────────────── animação
@@ -1278,6 +1301,10 @@ func _process(delta: float) -> void:
 			mf.set_shader_parameter("fase_nuvens", _fase_nuvens)
 	_mat_planos.set_shader_parameter("grave", som.x)
 	_mat_planos.set_shader_parameter("batida", som.y)
+	_mat_planos.set_shader_parameter("onda", _onda)
+	for m3 in _mat_simples:
+		m3.set_shader_parameter("batida", som.y)
+		m3.set_shader_parameter("onda", _onda)
 	_feixes.grave = som.x
 	_feixes.batida = som.y
 	_feixes.carga = carga
@@ -1643,6 +1670,13 @@ func _criar_planos() -> void:
 	_mat_planos.shader = SHADER_PLANO
 	_mat_planos.set_shader_parameter("folha_lua", PLANOS_LUA)
 	_mat_planos.set_shader_parameter("brilho", PLANOS_BRILHO)
+	# colunas e estátuas recebem a mesma luz que passa no fundo (onda do
+	# cristal, pulso da música, crepúsculo): plano e fundo, uma peça só
+	for cor in [Color(1.0, 0.74, 0.34), Color(1.0, 0.28, 0.30)]:
+		var m := ShaderMaterial.new()
+		m.shader = SHADER_PLANO_SIMPLES
+		m.set_shader_parameter("cor_energia", Vector3(cor.r, cor.g, cor.b))
+		_mat_simples.append(m)
 	for d: Dictionary in EgitoPlanos.PLANOS:
 		var nome := str(d["nome"])
 		# só o cristal e os obeliscos brilham e apagam (shader); colunas e
@@ -1651,13 +1685,18 @@ func _criar_planos() -> void:
 		var com_luz := nome in PLANOS_COM_LUZ
 		var s := _sprite_plano(d, PLANOS_SOL)
 		s.name = "Plano_" + nome
-		s.material = _mat_planos if com_luz else null
+		s.material = _mat_planos if com_luz else _mat_simples[0]
+		s.set_instance_shader_parameter("canto", d["canto"])
 		var lua: Sprite2D = null
 		if not com_luz:
 			lua = _sprite_plano(d, PLANOS_LUA)
 			lua.name = "Plano_" + nome + "_lua"
+			lua.material = _mat_simples[1]
+			lua.set_instance_shader_parameter("canto", d["canto"])
 			lua.visible = false
 		var lado := 0 if nome.ends_with("_esq") else (1 if nome.ends_with("_dir") else -1)
+		if not s.z_index in _z_planos:
+			_z_planos.append(s.z_index)
 		_planos.append({"no": s, "lua": lua, "canto": d["canto"], "z": float(d["z"]), "lado": lado})
 		match nome:
 			"cristal":
@@ -1763,7 +1802,7 @@ func _ferir_ponta(i: int, p: Vector2) -> void:
 		if linha.size() > 1:
 			(pt["trincas"] as Array).append(linha)
 	_soltar_cacos(p, 6, cor, 200.0)
-	_claroes.append({"pos": p, "t": 0.0, "vida": 0.3, "raio": 50.0, "cor": cor})
+	_clarao({"pos": p, "t": 0.0, "vida": 0.3, "raio": 50.0, "cor": cor})
 	if pt["danos"] >= TIROS_PONTA:
 		pt["quebrado"] = true
 		quebrou_agora = "ponta"
@@ -1771,8 +1810,8 @@ func _ferir_ponta(i: int, p: Vector2) -> void:
 		var centro: Vector2 = PONTAS_OBELISCO[i]
 		for k2 in 16:
 			_soltar_cacos(centro + Vector2(randf_range(-10, 10), randf_range(-30, 30)), 1, cor if k2 % 2 else Color(0.4, 0.4, 0.5), 380.0)
-		_claroes.append({"pos": centro, "t": 0.0, "vida": 0.5, "raio": 160.0, "cor": cor})
-		_claroes.append({"pos": centro, "t": 0.0, "vida": 0.6, "raio": 80.0, "cor": Color.WHITE})
+		_clarao({"pos": centro, "t": 0.0, "vida": 0.5, "raio": 160.0, "cor": cor})
+		_clarao({"pos": centro, "t": 0.0, "vida": 0.6, "raio": 80.0, "cor": Color.WHITE})
 		_reagir("surpreso", 0.6)
 		Maquina.efeito(SOM_QUEBRA, -6.0, 1.25)
 	else:
@@ -1838,7 +1877,7 @@ func disparar_descarga(alvos_global: Array) -> void:
 		locais.append(inv * g)
 	_feixes.descarga(locais)
 	var cor := Color(1.0, 0.85, 0.5).lerp(Color(1.0, 0.35, 0.45), _noite)
-	_claroes.append({"pos": Vector2(508, 700), "t": 0.0, "vida": 0.5, "raio": 380.0, "cor": cor})
+	_clarao({"pos": Vector2(508, 700), "t": 0.0, "vida": 0.5, "raio": 380.0, "cor": cor})
 	_onda = 0.0
 	carga = 0.0
 	_reagir("radiante", 1.4)
@@ -1865,19 +1904,28 @@ func _criar_cristal_vivo() -> void:
 		s.centered = false
 		_morto.add_child(s)
 
+	# as trincas e a energia do cristal, a onda da quebra e os clarões grandes
+	# passam por cima de tudo (a luz não para no contorno de nenhum plano)
+	_z_planos.sort()
+	var topo: int = (_z_planos.back() + 1) if not _z_planos.is_empty() else 0
 	_fx_n = Node2D.new()
 	_fx_n.name = "FxTirosFundo"
 	_fx_n.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	_fx_n.z_as_relative = false
+	_fx_n.z_index = topo
 	_fx_n.draw.connect(_desenhar_fx_n)
 	add_child(_fx_n)
 	_fx_s = Node2D.new()
 	_fx_s.name = "LuzTirosFundo"
 	_fx_s.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	_fx_s.z_as_relative = false
+	_fx_s.z_index = topo
 	var soma := CanvasItemMaterial.new()
 	soma.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
 	_fx_s.material = soma
 	_fx_s.draw.connect(_desenhar_fx_s)
 	add_child(_fx_s)
+	_fx_camadas[topo] = [_fx_n, _fx_s]
 
 
 func _ferir_cristal(p: Vector2) -> void:
@@ -1903,7 +1951,7 @@ func _ferir_cristal(p: Vector2) -> void:
 		_trincas.pop_front()
 	var cor := Color(1.0, 0.55, 0.9).lerp(Color(1.0, 0.25, 0.35), _noite)
 	_soltar_cacos(p, 9, cor, 260.0)
-	_claroes.append({"pos": p, "t": 0.0, "vida": 0.35, "raio": 70.0, "cor": cor})
+	_clarao({"pos": p, "t": 0.0, "vida": 0.35, "raio": 70.0, "cor": cor})
 	if _cristal_danos >= TIROS_CRISTAL:
 		_quebrar_cristal()
 	else:
@@ -1921,8 +1969,8 @@ func _quebrar_cristal() -> void:
 	for i in 34:
 		var q := centro + Vector2(randf_range(-50, 50), randf_range(-150, 160))
 		_soltar_cacos(q, 1, cor if i % 3 else Color(0.4, 0.4, 0.5), 520.0)
-	_claroes.append({"pos": centro, "t": 0.0, "vida": 0.6, "raio": 420.0, "cor": cor})
-	_claroes.append({"pos": centro, "t": 0.0, "vida": 0.9, "raio": 220.0, "cor": Color.WHITE})
+	_clarao({"pos": centro, "t": 0.0, "vida": 0.6, "raio": 420.0, "cor": cor})
+	_clarao({"pos": centro, "t": 0.0, "vida": 0.9, "raio": 220.0, "cor": Color.WHITE})
 	_onda_quebra = 0.0
 	Maquina.efeito(SOM_QUEBRA, -1.0)
 
@@ -1934,27 +1982,69 @@ func _tocar_ouro(p: Vector2) -> void:
 		_faiscas_ouro.append({"pos": p, "vel": Vector2.RIGHT.rotated(randf_range(-PI, 0.2)) * randf_range(120.0, 340.0), "t": 0.0, "vida": randf_range(0.35, 0.7)})
 	for i in 10:
 		_cacos.append({"pos": p + Vector2(randf_range(-6, 6), randf_range(-4, 4)), "vel": Vector2(randf_range(-60, 60), randf_range(-140, -20)), "t": 0.0,
-			"vida": randf_range(0.9, 1.6), "tam": randf_range(1.5, 3.0), "rot": randf() * TAU, "giro": randf_range(-14, 14), "cor": ouro, "ouro": true})
-	_claroes.append({"pos": p, "t": 0.0, "vida": 0.4, "raio": 60.0, "cor": ouro})
+			"vida": randf_range(0.9, 1.6), "tam": randf_range(1.5, 3.0), "rot": randf() * TAU, "giro": randf_range(-14, 14), "cor": ouro, "ouro": true,
+			"camada": _fx_n.z_index})
+	_clarao({"pos": p, "t": 0.0, "vida": 0.4, "raio": 60.0, "cor": ouro})
 	Maquina.efeito(SOM_OURO, -5.0, randf_range(0.94, 1.08))
 
 
 ## Pedra (lascas + pó) ou areia (só o pó e os grãos).
 func _estilhacar(p: Vector2, cor: Color, lascas: int, po: int) -> void:
 	_soltar_cacos(p, lascas, cor, 220.0)
+	var camada := _camada_do_ponto(p)
 	for i in po:
 		_poeiras.append({"pos": p + Vector2(randf_range(-4, 4), randf_range(-3, 3)), "vel": Vector2(randf_range(-50, 50), randf_range(-70, -15)),
-			"t": 0.0, "vida": randf_range(0.7, 1.2), "tam": randf_range(8.0, 16.0), "cor": cor})
+			"t": 0.0, "vida": randf_range(0.7, 1.2), "tam": randf_range(8.0, 16.0), "cor": cor, "camada": camada})
 	while _poeiras.size() > 60:
 		_poeiras.pop_front()
 
 
 func _soltar_cacos(p: Vector2, n: int, cor: Color, forca: float) -> void:
+	var camada := _camada_do_ponto(p)
 	for i in n:
 		_cacos.append({"pos": p, "vel": Vector2.RIGHT.rotated(randf_range(-PI * 0.95, -PI * 0.05)) * randf_range(forca * 0.35, forca), "t": 0.0,
-			"vida": randf_range(0.6, 1.1), "tam": randf_range(2.0, 5.0), "rot": randf() * TAU, "giro": randf_range(-12, 12), "cor": cor, "ouro": false})
+			"vida": randf_range(0.6, 1.1), "tam": randf_range(2.0, 5.0), "rot": randf() * TAU, "giro": randf_range(-12, 12), "cor": cor, "ouro": false,
+			"camada": camada})
 	while _cacos.size() > 90:
 		_cacos.pop_front()
+
+
+## Clarão de um tiro: o pequeno na distância do ponto, o grande por cima de
+## tudo (a luz não para no contorno de nenhum plano).
+func _clarao(c: Dictionary) -> void:
+	c["camada"] = _fx_n.z_index if float(c["raio"]) > 150.0 else _camada_do_ponto(c["pos"])
+	_claroes.append(c)
+
+
+## Camada de desenho dos estilhaços de um tiro no ponto p (px da imagem):
+## logo acima do plano mais perto que ainda fica atrás do ponto (ou do chão
+## ali). Uma camada por distância de plano, criada na primeira vez.
+func _camada_do_ponto(p: Vector2) -> int:
+	var v := z_desenho(1.0 / maxf(_inv_z_local(p), 0.001)) + 2
+	var z := 0
+	for zp: int in _z_planos:
+		if zp <= v:
+			z = zp + 1
+	if z == 0:
+		z = _z_planos.front() - 1 if not _z_planos.is_empty() else _fx_n.z_index
+	if not _fx_camadas.has(z):
+		var par: Array = []
+		for soma in [false, true]:
+			var no := Node2D.new()
+			no.name = ("LuzTiros%d" if soma else "FxTiros%d") % z
+			no.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+			no.z_as_relative = false
+			no.z_index = z
+			no.position = _fx_n.position
+			if soma:
+				no.material = _fx_s.material
+				no.draw.connect(_desenhar_tiros_s.bind(no, z))
+			else:
+				no.draw.connect(_desenhar_tiros_n.bind(no, z))
+			add_child(no)
+			par.append(no)
+		_fx_camadas[z] = par
+	return z
 
 
 func _atualizar_tiros_fundo(delta: float) -> void:
@@ -2007,6 +2097,9 @@ func _atualizar_tiros_fundo(delta: float) -> void:
 		mf.set_shader_parameter("energia", _energia)
 		mf.set_shader_parameter("luz_lados", lados)
 		mf.set_shader_parameter("pontas_acesas", _pontas_acesas)
+	_mat_planos.set_shader_parameter("energia", _energia)
+	for m5 in _mat_simples:
+		m5.set_shader_parameter("energia", _energia)
 	for pl in _planos:
 		if pl["lua"] != null:
 			continue
@@ -2066,26 +2159,34 @@ func _atualizar_tiros_fundo(delta: float) -> void:
 	var ativo := not (_cacos.is_empty() and _faiscas_ouro.is_empty() and _poeiras.is_empty() and _claroes.is_empty()) \
 		or not _trincas.is_empty() or _onda_quebra >= 0.0 or _cristal_refaz >= 0.0
 	if ativo or _fx_sujo:
-		_fx_n.queue_redraw()
-		_fx_s.queue_redraw()
+		for par: Array in _fx_camadas.values():
+			(par[0] as CanvasItem).queue_redraw()
+			(par[1] as CanvasItem).queue_redraw()
 	_fx_sujo = ativo
 
 
 func _desenhar_fx_n() -> void:
-	for p in _poeiras:
-		var k: float = p["t"] / p["vida"]
-		Pincel.forma(_fx_n, Pincel.FUMACA, p["pos"], p["tam"] * (0.5 + 1.4 * k), Color(p["cor"], 0.5 * (1.0 - k)), k)
 	# trincas: risco escuro (some quando o cristal se refaz)
 	var a_tr := 1.0 if _cristal_refaz < 0.0 else 1.0 - _cristal_refaz
 	if not _trincas.is_empty() and a_tr > 0.0:
 		for linha: PackedVector2Array in _trincas:
 			for i in range(linha.size() - 1):
 				Pincel.linha(_fx_n, linha[i], linha[i + 1], Color(0.06, 0.02, 0.08, 0.85 * a_tr), 1.4)
+	_desenhar_tiros_n(_fx_n, _fx_n.z_index)
+
+
+## O pó e as lascas da camada `camada` (z_index) no nó `no`.
+func _desenhar_tiros_n(no: CanvasItem, camada: int) -> void:
+	for p in _poeiras:
+		if p["camada"] != camada:
+			continue
+		var k: float = p["t"] / p["vida"]
+		Pincel.forma(no, Pincel.FUMACA, p["pos"], p["tam"] * (0.5 + 1.4 * k), Color(p["cor"], 0.5 * (1.0 - k)), k)
 	for c in _cacos:
-		if c["ouro"]:
+		if c["ouro"] or c["camada"] != camada:
 			continue
 		var k2: float = c["t"] / c["vida"]
-		Pincel.caco(_fx_n, c["pos"], c["tam"], c["rot"], Color(c["cor"], 1.0 - k2 * k2))
+		Pincel.caco(no, c["pos"], c["tam"], c["rot"], Color(c["cor"], 1.0 - k2 * k2))
 
 
 ## Ponto k (0 longe .. 1 no cristal) de um fio de energia espiralando para
@@ -2127,17 +2228,27 @@ func _desenhar_fx_s() -> void:
 	if _onda_quebra >= 0.0:
 		var k0 := _onda_quebra / 0.8
 		Pincel.anel(_fx_s, Vector2(508, 790), 40.0 + 420.0 * k0, 10.0 * (1.0 - k0) + 2.0, Color(cor_e, 0.7 * (1.0 - k0)))
-	for c2 in _claroes:
-		var k: float = c2["t"] / c2["vida"]
-		Pincel.brilho(_fx_s, c2["pos"], c2["raio"] * (0.6 + 0.6 * k), Color(c2["cor"], 0.55 * (1.0 - k)))
-	for c in _cacos:
-		var k3: float = c["t"] / c["vida"]
-		if c["ouro"]:
-			var pisca := 0.5 + 0.5 * sin(c["t"] * 30.0 + c["rot"] * 5.0)
-			Pincel.caco(_fx_s, c["pos"], c["tam"], c["rot"], Color(c["cor"], (1.0 - k3) * (0.4 + 0.6 * pisca)))
-		elif randf() < 0.3:
-			Pincel.circulo(_fx_s, c["pos"], c["tam"] * 0.6, Color(1, 1, 1, 0.5 * (1.0 - k3)))
+	_desenhar_tiros_s(_fx_s, _fx_s.z_index)
 	for f in _faiscas_ouro:
 		var k4: float = f["t"] / f["vida"]
 		var pf: Vector2 = f["pos"]
 		Pincel.linha(_fx_s, pf, pf - (f["vel"] as Vector2) * 0.03, Color(1.0, 0.85, 0.45, 1.0 - k4), 1.6)
+
+
+## Os clarões e o brilho das lascas da camada `camada` (z_index) no nó `no`
+## (soma de luz).
+func _desenhar_tiros_s(no: CanvasItem, camada: int) -> void:
+	for c2 in _claroes:
+		if c2["camada"] != camada:
+			continue
+		var k: float = c2["t"] / c2["vida"]
+		Pincel.brilho(no, c2["pos"], c2["raio"] * (0.6 + 0.6 * k), Color(c2["cor"], 0.55 * (1.0 - k)))
+	for c in _cacos:
+		if c["camada"] != camada:
+			continue
+		var k3: float = c["t"] / c["vida"]
+		if c["ouro"]:
+			var pisca := 0.5 + 0.5 * sin(c["t"] * 30.0 + c["rot"] * 5.0)
+			Pincel.caco(no, c["pos"], c["tam"], c["rot"], Color(c["cor"], (1.0 - k3) * (0.4 + 0.6 * pisca)))
+		elif randf() < 0.3:
+			Pincel.circulo(no, c["pos"], c["tam"] * 0.6, Color(1, 1, 1, 0.5 * (1.0 - k3)))

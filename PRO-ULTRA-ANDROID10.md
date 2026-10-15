@@ -1237,6 +1237,50 @@ ETC2, como o Bar.
 
 APK 1.20.0 (código 22).
 
+## Rodada 21: cenário inteiro, tiro em primeira pessoa e anúncios de cada cenário
+
+**Cenário inteiro (Egito e Mar), sem recorte nem remendo aparecendo.** A
+causa era a mesma nas duas telas: cada recorte (coluna, Anúbis, pedra com
+escritas) andava diferente do fundo quando a câmera seguia a mira e mostrava
+o remendo atrás dele; a luz que passava (onda do cristal, raios e cáustica do
+mar) acendia só o fundo; e as lascas, a poeira e os clarões do tiro eram
+desenhados atrás do recorte, aparecendo só fora do contorno.
+- A cena anda inteira junta com a mira (fundo, planos e efeitos); a
+  profundidade continua nos alvos e na frente (algas, poeira de perto).
+- Debaixo de cada plano volta a pintura original: plano e fundo são os
+  mesmos pixels (`tools/gerar_fundo_inteiro.py`, `tools/gerar_mar_inteiro.py`).
+- A mesma luz nos planos e no fundo: no Egito a onda do cristal, o pulso da
+  música e o crepúsculo (`shaders/egito_plano_simples.gdshader`); no Mar os
+  raios e a cáustica do sol de fora numa conta só, usada pelo fundo e pelas
+  pedras (`shaders/mar_luz.gdshaderinc`). As pedras do Mar pegam a cor da
+  própria textura do fundo e têm contorno liso.
+- Lascas, pó e clarões de cada tiro ficam na distância do ponto atingido:
+  na frente da coluna ou da pedra atingida, atrás do que está mais perto. A
+  luz grande (quebra do cristal) passa por cima de tudo.
+- **Mar:** onde era o navio (o preenchimento deixava blocos em escada, um
+  vulto cinza e uma rocha chapada atrás do templo) agora é a distância da
+  água em névoa, com o templo e o Poseidon nela e o chão continuando para
+  trás.
+
+**Tiro em primeira pessoa** (`scripts/trajetoria.gd`): a arma está logo
+abaixo da vista e a bala vai para dentro da tela, na linha da mira; então
+ela aparece só no ponto da mira, saindo grande e encolhendo (anéis fechando)
+enquanto vai para longe, e o clarão da arma acende de leve a beirada de
+baixo. No ponto, o impacto de cada cenário: estrela de luz ao sol, anel frio
+à lua, ondas e bolhas no mar, faísca e fumaça no bar, clarão de laser na
+arena. Nada de risco nascendo no meio da tela.
+
+**Anúncios de combo com a cara de cada cenário** (`scripts/combo_anuncio.gd`):
+- **Bar:** placa de madeira de saloon pendurada, letra de ouro velho e
+  estouro de pólvora, bem no alto (acima das garrafas de 100).
+- **Mar:** letra de espuma, ondas abrindo na água e bolhas subindo, no alto
+  da água.
+- **Egito:** ouro com raios de sol. **Arena:** neon com linhas de laser.
+- Sem o rosa/roxo de antes. Os pontos dos cristais do Egito saem em ouro ao
+  sol e prata à lua; dois avisos de tiro no mesmo lugar não se encavalam.
+
+APK 1.21.0 (código 23).
+
 ## Para testar no PC como se fosse a TV Box
 
 ```

@@ -1768,7 +1768,8 @@ func _processar_tiro(pos_global: Vector2) -> void:
 
 
 ## Cristal quebrado neste tiro: o do meio vale BONUS_CRISTAL, o da ponta de
-## um obelisco BONUS_PONTA (pontos rosados saltando do cristal).
+## um obelisco BONUS_PONTA (pontos em ouro gravado ao sol, em prata à lua,
+## como os dos brasões, só que maiores).
 func _premiar_cristal(pos_global: Vector2) -> void:
 	var quebrou: String = _vivo.quebrou_agora if _vivo != null else ""
 	if quebrou == "":
@@ -1776,9 +1777,11 @@ func _premiar_cristal(pos_global: Vector2) -> void:
 	var pontos := BONUS_CRISTAL if quebrou == "cristal" else BONUS_PONTA
 	pontuacao_total += pontos
 	total_acertos += 1
-	AvisoTiro.pontos(self, get_viewport().get_canvas_transform() * pos_global, "+%d" % pontos,
-		Color(1.0, 0.66, 0.96), Color(1.0, 1.0, 1.0, 0.7))
-	AvisoTiro.instrucao(self, "CRISTAL QUEBRADO! +%d" % pontos, Color(1.0, 0.78, 0.97))
+	var lua := modo_atual == MODO_LUA
+	var cor := Color(0.90, 0.95, 1.0) if lua else Color(1.0, 0.80, 0.24)
+	var brilho := Color(1.0, 1.0, 1.0, 0.9) if lua else Color(1.0, 0.97, 0.75, 0.9)
+	_pontos.mostrar(get_viewport().get_canvas_transform() * pos_global, "+%d" % pontos, cor, 1.5, brilho)
+	AvisoTiro.instrucao(self, "CRISTAL QUEBRADO! +%d" % pontos, cor.lerp(Color.WHITE, 0.25))
 
 
 func _iniciar_countdown() -> void:

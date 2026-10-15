@@ -47,6 +47,11 @@ static func mostrar(fase: Node, pos_tela: Vector2, texto: String, cor := Color(1
 	var no := _no(fase)
 	if no == null or texto.strip_edges() == "":
 		return
+	# um aviso novo no mesmo lugar troca o que estava ali (dois tiros juntos
+	# não deixam um texto encavalado no outro)
+	for i in range(no._lista.size() - 1, -1, -1):
+		if (no._lista[i]["pos"] as Vector2).distance_to(pos_tela) < 160.0:
+			no._lista.remove_at(i)
 	no._lista.append({"pos": pos_tela, "texto": texto, "cor": cor, "t": 0.0})
 	while no._lista.size() > MAX:
 		no._lista.pop_front()

@@ -6,22 +6,24 @@ para a porta do templo (o ponto de fuga) e cada coisa em pé tem a distância
 do ponto onde ela encosta no chão. Daqui sai, para cada pixel do fundo, a
 distância Z (Z = 1 é o plano dos alvos comuns):
   chão          em perspectiva: Z = (chão perto - fuga) / (y na tela - fuga)
-  pedras        fora do mapa: são planos recortados à parte, cada um na
-                distância do pé dele (scripts/mar_vida.gd)
+  pedras        fora do mapa: cada uma tem a distância do pé dela
+                (scripts/mar_vida.gd), para os alvos passarem na frente ou
+                atrás delas
   templo e céu  longe (Z = 10)
-O shader do fundo (shaders/fundo_profundo.gdshader) move cada pixel conforme
-essa distância quando a mira anda (paralaxe de verdade, pixel a pixel), e
-os alvos passam na frente ou atrás das pedras pela distância deles.
+Desde a Rodada 21 a cena do Mar anda inteira (sem paralaxe pixel a pixel,
+que mostrava o recorte das pedras); R fica só como referência.
 
-Gera sprites/mar_profundidade.png (RGB, 1/4 da resolução do fundo):
+Gera sprites/mar_profundidade.png (RGBA, 1/4 da resolução do fundo):
   R  t = (1/Z - 1/Z_LONGE) / (1/Z_PERTO - 1/Z_LONGE)
   G  onde a luz cáustica do sol cai (chão e superfícies com textura, mais
      nas claras; a água aberta não recebe)
-  B  onde os raios de sol aparecem inteiros (a água aberta, lisa)
+  B  coisa em pé no chão (as duas pedras com escritas, pelo contorno de
+     sprites/mar_pedra_*.png): leva a cáustica de parede, não a de chão
   A  a força parada dos raios em cada ponto: caem saindo do sol (acima do
-     topo, SOL_MAR) e são fortes na água aberta (B), fracos no que está perto
-O mesmo shader do fundo usa G e A para a luz do sol de fora andando (só a
-parte que mexe é feita lá).
+     topo, SOL_MAR) e são fortes na água aberta (lisa), fracos no que está
+     perto
+A luz do sol de fora andando (shaders/mar_luz.gdshaderinc, a mesma no fundo
+e nas pedras) usa G, B e A.
 
 Egito (sprites/egito_profundidade.png, L, metade da resolução, a mesma para
 o dia e a noite): a imagem é uma câmera olhando o horizonte (ponto de fuga
@@ -100,9 +102,8 @@ def mar():
     z = np.where(yy > PE_TEMPLO, z_chao(yy), Z_LONGE)
     templo = mascara("mar_frente_navio_mascara.png", (195, 530), 0)
     z = np.where(templo > 0.5, np.minimum(z, float(z_chao(PE_TEMPLO))), z)
-    # as duas pedras com escritas não entram: são planos à parte
-    # (sprites/mar_pedra_*.png, tools/gerar_camadas.py) e o fundo atrás delas
-    # foi reconstruído (atlantis_fundo.png), então ali o fundo é chão
+    # as duas pedras com escritas não entram: a distância delas é a do pé
+    # (scripts/mar_vida.gd)
     inv = 1.0 / z
     t = (inv - 1 / Z_LONGE) / (1 / Z_PERTO - 1 / Z_LONGE)
     cau, raio = luz_mar(yy)
@@ -120,6 +121,13 @@ def mar():
     b = np.asarray(canais[2]).astype(np.float64) / 255
     fixa = np.exp(-vy * 0.9 - s * s * 0.8) * (0.4 + 0.6 * b) * (1 - 0.8 * r)
     canais.append(Image.fromarray((np.clip(fixa, 0, 1) * 255 + 0.5).astype(np.uint8), "L"))
+    # B: as pedras em pé (o contorno dos planos, na folga de MAR_FOLGA px)
+    em_pe = np.zeros((TEX[1], TEX[0]), np.float32)
+    for nome, canto in (("esq", (0, 466)), ("dir", (523, 523))):
+        a = np.asarray(Image.open(os.path.join(SP, "mar_pedra_%s.png" % nome)).convert("RGBA"))[..., 3] / 255.0
+        x0, y0 = max(canto[0] - 24, 0), max(canto[1] - 24, 0)
+        em_pe[y0:y0 + a.shape[0], x0:x0 + a.shape[1]] = np.maximum(em_pe[y0:y0 + a.shape[0], x0:x0 + a.shape[1]], a)
+    canais[2] = Image.fromarray((em_pe * 255 + 0.5).astype(np.uint8), "L").resize((w, h), Image.BILINEAR)
     peq = Image.merge("RGBA", canais)
     peq.save(os.path.join(SP, "mar_profundidade.png"), optimize=True)
     print("  mar_profundidade.png   %dx%d  pedras: esq Z=%.2f dir Z=%.2f templo Z=%.2f" % (
