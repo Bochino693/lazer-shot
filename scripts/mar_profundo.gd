@@ -22,9 +22,10 @@ var BOLHA: Texture2D = load("res://sprites/mar_bolha.png")
 
 # Câmera: com a mira no canto, ela anda CAMERA_PASSO px; uma coisa à
 # distância Z anda CAMERA_PASSO * (1 - 1/Z) na tela (Z = 1, o plano dos alvos,
-# fica parado; longe anda com a mira, perto anda contra). O fundo inteiro anda
-# como a parte mais longe (Z_FUNDO) e o shader do fundo dá a cada pixel a
-# diferença da distância dele (shaders/fundo_profundo.gdshader).
+# fica parado; longe anda com a mira, perto anda contra). O fundo anda
+# inteiro como a parte mais longe (Z_FUNDO), com as pedras e tudo que está
+# pintado nele: nada se desloca da pintura (sem recorte nem remendo
+# aparecendo); os alvos andam cada um pela distância dele.
 const CAMERA_PASSO := 26.0
 const Z_FUNDO := 8.0
 const Z_FRENTE := 0.32
@@ -126,9 +127,6 @@ func _process(delta: float) -> void:
 	if fundo != null and is_instance_valid(fundo):
 		var balanco := Vector2(4.0 * sin(_t * 0.31), 3.0 * sin(_t * 0.23 + 1.2))
 		fundo.position = fundo_base + paralaxe(Z_FUNDO) + balanco
-		var mat := fundo.material as ShaderMaterial
-		if mat != null:
-			mat.set_shader_parameter("olhar", _c)
 		if ao_mover.is_valid():
 			ao_mover.call(_c, 1.0 / Z_FUNDO)
 

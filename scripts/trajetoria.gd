@@ -1,35 +1,47 @@
 class_name Trajetoria
 extends CanvasLayer
 
-## Trajetória do tiro: a bala sai reta da mira, para dentro da tela (a arma
-## está logo abaixo da vista do jogador): um risco curto que nasce largo
-## pertinho da mira e afina até o ponto, como quem vai para longe. Assim ela
-## nunca cruza a tela por cima de outras coisas: acerta exatamente o que a
-## mira mostra (o recuo também sai dali, no MiraGlobal).
+## O tiro visto de quem atira (primeira pessoa): a arma está logo abaixo da
+## vista e a bala vai PARA DENTRO da tela, na linha da mira. Por isso ela
+## não cruza a tela nem nasce no meio dela: aparece só no ponto da mira,
+## grande e desfocada saindo da arma e encolhendo até o ponto enquanto vai
+## para longe (anéis fechando, como um zoom), e o clarão da boca da arma
+## acende de leve a beirada de baixo da tela. No ponto, o impacto de cada
+## cenário (o recuo sai dali também, no MiraGlobal):
 ##
-##   laser  (Arena)  feixe vermelho como o da abertura: halo, faixa e miolo
-##                   branco, um pulso correndo até o alvo e o clarão no ponto
-##   sol    (Egito)  raio de sol dourado com brilhos soltos e uma estrela de
-##                   luz no ponto
-##   lua    (Egito)  raio de luar prateado-azulado com pó de estrela e um
-##                   anel frio no ponto
-##   mar    (Mar)    a bala corta a água: risco claro rápido e um rastro de
-##                   bolhas que sobem e estouram, anel na água no ponto
-##   bar    (Bar)    traçante quente correndo até o alvo e um fio de fumaça
-##                   que fica no ar e se desfaz
+##   laser  (Arena)  anéis vermelhos fechando e núcleo branco; no ponto o
+##                   clarão do laser e um anel de choque
+##   sol    (Egito)  anéis de ouro fechando; no ponto a estrela de luz de
+##                   quatro pontas finas girando e brilhos soltos subindo
+##   lua    (Egito)  anéis de prata azulada; no ponto um anel frio abrindo e
+##                   pó de estrela
+##   mar    (Mar)    a bala empurra a água: anéis de água fechando, no ponto
+##                   ondas abrindo e bolhas subindo
+##   bar    (Bar)    traçante: um ponto quente encolhendo rápido; no ponto a
+##                   faísca e um fio de fumaça
 ##
 ##   Trajetoria.disparar(fase, ponto_na_tela, "laser")
 ##
 ## Uma camada por fase (criada no primeiro tiro), um desenho para a luz
 ## (mistura somada) e um para a fumaça; só redesenha enquanto há tiro no ar.
+## Tudo com as formas macias do Pincel (nada de risco com ponta reta).
 
 const Pincel := preload("res://scripts/pincel.gd")
 const MAX_TIROS := 8
-const COMPRIMENTO := 130.0     # px do risco (da boca da arma até o ponto, em perspectiva)
+const IMPACTO := 0.35          # s do impacto no ponto, depois que a bala chega
+# por estilo: tempo de voo (s), raio de saída (px), cor dos anéis, cor do
+# núcleo, cor do clarão da arma
+const ESTILOS := {
+	"laser": [0.07, 96.0, Color(1.0, 0.16, 0.10), Color(1.0, 0.75, 0.70), Color(1.0, 0.25, 0.18)],
+	"sol": [0.10, 118.0, Color(1.0, 0.70, 0.22), Color(1.0, 0.95, 0.75), Color(1.0, 0.70, 0.30)],
+	"lua": [0.10, 112.0, Color(0.55, 0.75, 1.0), Color(0.92, 0.97, 1.0), Color(0.60, 0.78, 1.0)],
+	"mar": [0.12, 106.0, Color(0.55, 0.90, 1.0), Color(0.90, 0.99, 1.0), Color(0.40, 0.80, 1.0)],
+	"bar": [0.06, 74.0, Color(1.0, 0.55, 0.15), Color(1.0, 0.92, 0.65), Color(1.0, 0.62, 0.25)],
+}
 # (o som é o estampido de cada fase: raio de sol, de luar, arpão no mar,
-# laser na arena, pistola no bar; o rastro não toca nada por cima)
+# laser na arena, pistola no bar; o tiro não toca nada por cima)
 
-var _tiros: Array = []         # {de, para, t, vida, estilo}
+var _tiros: Array = []         # {para, t, voo, estilo}
 var _parts: Array = []         # {pos, vel, t, vida, tam, tipo, cor}
 var _soma: Node2D
 var _normal: Node2D
@@ -64,40 +76,35 @@ func _ready() -> void:
 func _novo(para: Vector2, estilo: String) -> void:
 	if not is_node_ready():
 		await ready
-	var tela := get_viewport().get_visible_rect().size
-	# nasce logo abaixo da mira, um tico puxado para o meio da tela (onde
-	# está a mão do jogador)
-	var de := para + Vector2((tela.x * 0.5 - para.x) * 0.05, COMPRIMENTO)
-	var vida := {"laser": 0.17, "sol": 0.30, "lua": 0.32, "mar": 0.20, "bar": 0.10}.get(estilo, 0.2) as float
-	_tiros.append({"de": de, "para": para, "t": 0.0, "vida": vida, "estilo": estilo})
+	if not ESTILOS.has(estilo):
+		estilo = "laser"
+	var voo: float = ESTILOS[estilo][0]
+	_tiros.append({"para": para, "t": 0.0, "voo": voo, "estilo": estilo})
 	while _tiros.size() > MAX_TIROS:
 		_tiros.pop_front()
-	var d := para - de
+	# o que sai do ponto depois que a bala chega (t negativo = ainda no voo)
 	match estilo:
 		"sol":
-			for i in 7:
-				var k := randf()
-				_parts.append({"pos": de + d * k, "vel": Vector2(randf_range(-30, 30), randf_range(-50, -10)), "t": 0.0,
-					"vida": randf_range(0.35, 0.7), "tam": randf_range(3.0, 7.0), "tipo": "brilho", "cor": Color(1.0, 0.85, 0.45)})
+			for i in 6:
+				_parts.append({"pos": para + Vector2(randf_range(-6, 6), randf_range(-6, 6)),
+					"vel": Vector2.from_angle(randf_range(-PI, 0.0)) * randf_range(60.0, 170.0), "t": -voo,
+					"vida": randf_range(0.35, 0.65), "tam": randf_range(7.0, 13.0), "tipo": "estrela", "cor": Color(1.0, 0.85, 0.45)})
 		"lua":
-			for i in 9:
-				var k := randf()
-				_parts.append({"pos": de + d * k + Vector2(randf_range(-8, 8), 0), "vel": Vector2(randf_range(-20, 20), randf_range(-30, 10)), "t": 0.0,
-					"vida": randf_range(0.4, 0.8), "tam": randf_range(2.0, 4.5), "tipo": "brilho", "cor": Color(0.75, 0.88, 1.0)})
+			for i in 8:
+				_parts.append({"pos": para + Vector2(randf_range(-10, 10), randf_range(-10, 10)),
+					"vel": Vector2.from_angle(randf() * TAU) * randf_range(30.0, 110.0), "t": -voo,
+					"vida": randf_range(0.4, 0.8), "tam": randf_range(5.0, 9.0), "tipo": "estrela", "cor": Color(0.78, 0.9, 1.0)})
 		"mar":
-			var n := clampi(int(d.length() / 10.0), 8, 16)
-			for i in n:
-				var k := (i + randf()) / n
-				var lado := Vector2(-d.y, d.x).normalized() * randf_range(-10.0, 10.0)
-				_parts.append({"pos": de + d * k + lado, "vel": Vector2(randf_range(-14, 14), randf_range(-90, -35)), "t": -k * 0.05,
-					"vida": randf_range(0.6, 1.1), "tam": randf_range(4.0, 11.0), "tipo": "bolha", "cor": Color(0.85, 0.97, 1.0)})
+			for i in 9:
+				var lado := Vector2.from_angle(randf() * TAU) * randf_range(4.0, 26.0)
+				_parts.append({"pos": para + lado, "vel": Vector2(randf_range(-18, 18), randf_range(-110, -45)), "t": -voo - randf() * 0.12,
+					"vida": randf_range(0.6, 1.0), "tam": randf_range(4.0, 10.0), "tipo": "bolha", "cor": Color(0.85, 0.97, 1.0)})
 		"bar":
-			var n2 := clampi(int(d.length() / 30.0), 3, 6)
-			for i in n2:
-				var k := (i + 0.5) / n2
-				_parts.append({"pos": de + d * k, "vel": Vector2(randf_range(-8, 8), randf_range(-26, -10)), "t": -k * 0.08,
-					"vida": randf_range(0.5, 0.8), "tam": randf_range(10.0, 16.0), "tipo": "fumaca", "cor": Color(0.75, 0.72, 0.68)})
-	while _parts.size() > 160:
+			for i in 2:
+				_parts.append({"pos": para + Vector2(randf_range(-4, 4), 0.0), "vel": Vector2(randf_range(-10, 10), randf_range(-30, -14)),
+					"t": -voo - i * 0.06, "vida": randf_range(0.55, 0.85), "tam": randf_range(12.0, 18.0), "tipo": "fumaca",
+					"cor": Color(0.75, 0.72, 0.68)})
+	while _parts.size() > 120:
 		_parts.pop_front()
 	set_process(true)
 
@@ -105,7 +112,7 @@ func _novo(para: Vector2, estilo: String) -> void:
 func _process(delta: float) -> void:
 	for t in _tiros:
 		t["t"] += delta
-	while not _tiros.is_empty() and _tiros[0]["t"] > _tiros[0]["vida"] + 0.35:
+	while not _tiros.is_empty() and _tiros[0]["t"] > _tiros[0]["voo"] + IMPACTO:
 		_tiros.pop_front()
 	for p in _parts:
 		p["t"] += delta
@@ -120,15 +127,6 @@ func _process(delta: float) -> void:
 		set_process(false)
 
 
-## Risco em perspectiva: largo na boca (perto do jogador) e fino no ponto.
-func _raio(de: Vector2, para: Vector2, cor: Color, larg: float) -> void:
-	var m1 := de.lerp(para, 0.35)
-	var m2 := de.lerp(para, 0.7)
-	Pincel.laser(_soma, de, m1, cor, larg * 1.25)
-	Pincel.laser(_soma, m1, m2, cor, larg * 0.8)
-	Pincel.laser(_soma, m2, para, cor, larg * 0.45)
-
-
 func _desenhar_normal() -> void:
 	for p in _parts:
 		if p["tipo"] != "fumaca" or p["t"] <= 0.0:
@@ -137,72 +135,69 @@ func _desenhar_normal() -> void:
 		Pincel.forma(_normal, Pincel.FUMACA, p["pos"], p["tam"] * (0.7 + 1.3 * k), Color(p["cor"], 0.28 * (1.0 - k)), k)
 
 
+## A bala indo para longe na linha da mira: anéis fechando no ponto (o zoom
+## de quem vê a bala se afastar), o núcleo encolhendo e o clarão da arma
+## embaixo da tela.
+func _voo(para: Vector2, idade: float, voo: float, e: Array) -> void:
+	var r0: float = e[1]
+	var cor_anel: Color = e[2]
+	var k := clampf(idade / voo, 0.0, 1.0)
+	var vai := 1.0 - (1.0 - k) * (1.0 - k)
+	var forcas := [1.0, 0.6, 0.3]
+	for j in 3:
+		var kj := clampf((idade - j * 0.014) / voo, 0.0, 1.0)
+		if kj >= 1.0:
+			continue
+		var vj := 1.0 - (1.0 - kj) * (1.0 - kj)
+		Pincel.anel(_soma, para, lerpf(r0, 5.0, vj), lerpf(14.0, 2.5, vj), Color(cor_anel, forcas[j] * (1.0 - 0.3 * kj)))
+	Pincel.brilho(_soma, para, lerpf(r0 * 0.6, 12.0, vai), Color(e[3], 0.85))
+	Pincel.circulo(_soma, para, lerpf(8.0, 2.5, vai), Color(1, 1, 1, 0.95))
+	var tela := get_viewport().get_visible_rect().size
+	var arma := Vector2(tela.x * 0.5 + (para.x - tela.x * 0.5) * 0.35, tela.y + 70.0)
+	Pincel.brilho(_soma, arma, 460.0 * (1.0 - 0.4 * k), Color(e[4], 0.20 * (1.0 - k)))
+
+
 func _desenhar_soma() -> void:
 	for t in _tiros:
 		var idade: float = t["t"]
-		var vida: float = t["vida"]
-		var de: Vector2 = t["de"]
+		var voo: float = t["voo"]
 		var para: Vector2 = t["para"]
-		var a := clampf(1.0 - idade / vida, 0.0, 1.0)
-		var depois := clampf((idade - vida) / 0.35, 0.0, 1.0)   # clarão no ponto ainda some depois
+		var e: Array = ESTILOS[t["estilo"]]
+		if idade < voo:
+			_voo(para, idade, voo, e)
+			continue
+		var di := clampf((idade - voo) / IMPACTO, 0.0, 1.0)
+		var fa := 1.0 - di
 		match t["estilo"]:
 			"laser":
-				if a > 0.0:
-					_raio(de, para, Color(1.0, 0.1, 0.06, 0.22 * a), 34.0)
-					_raio(de, para, Color(1.0, 0.18, 0.12, 0.5 * a), 13.0)
-					_raio(de, para, Color(1.0, 0.88, 0.85, 0.95 * a), 4.0)
-					var k := clampf(idade / 0.07, 0.0, 1.0)
-					var cabeca := de.lerp(para, k)
-					Pincel.brilho(_soma, cabeca, 26.0, Color(1.0, 0.5, 0.45, 0.8 * a))
-				var r := 20.0 + 70.0 * clampf(idade / (vida + 0.35), 0.0, 1.0)
-				Pincel.brilho(_soma, para, r, Color(1.0, 0.25, 0.15, 0.5 * (1.0 - depois)))
-				Pincel.brilho(_soma, para, r * 0.4, Color(1.0, 0.9, 0.85, 0.7 * (1.0 - depois)))
+				Pincel.brilho(_soma, para, 22.0 + 70.0 * di, Color(1.0, 0.25, 0.15, 0.55 * fa))
+				Pincel.brilho(_soma, para, 10.0 + 18.0 * di, Color(1.0, 0.9, 0.85, 0.8 * fa))
+				Pincel.anel(_soma, para, 12.0 + 58.0 * di, 3.0, Color(1.0, 0.4, 0.3, 0.7 * fa))
 			"sol":
-				if a > 0.0:
-					_raio(de, para, Color(1.0, 0.62, 0.15, 0.20 * a), 50.0)
-					_raio(de, para, Color(1.0, 0.82, 0.40, 0.45 * a), 17.0)
-					_raio(de, para, Color(1.0, 0.98, 0.85, 0.95 * a), 5.0)
-				var fa := 1.0 - depois
-				var raio := 40.0 + 30.0 * (1.0 - a)
-				Pincel.brilho(_soma, para, raio, Color(1.0, 0.75, 0.3, 0.55 * fa))
-				var giro := idade * 2.0
-				for i in 2:
-					var dir := Vector2.RIGHT.rotated(giro + i * PI * 0.5) * raio * 1.3
-					Pincel.laser(_soma, para - dir, para + dir, Color(1.0, 0.9, 0.6, 0.6 * fa), 4.0)
+				Pincel.brilho(_soma, para, 40.0 + 34.0 * di, Color(1.0, 0.75, 0.3, 0.55 * fa))
+				var giro := idade * 2.2
+				Pincel.forma(_soma, Pincel.FAISCA, para, 64.0 * (1.0 - 0.35 * di), Color(1.0, 0.92, 0.65, 0.95 * fa), giro)
+				Pincel.forma(_soma, Pincel.FAISCA, para, 38.0 * (1.0 - 0.35 * di), Color(1.0, 0.8, 0.45, 0.6 * fa), giro + PI * 0.25)
 			"lua":
-				if a > 0.0:
-					_raio(de, para, Color(0.45, 0.65, 1.0, 0.20 * a), 46.0)
-					_raio(de, para, Color(0.70, 0.85, 1.0, 0.45 * a), 15.0)
-					_raio(de, para, Color(0.95, 0.98, 1.0, 0.95 * a), 4.0)
-				var fa2 := 1.0 - depois
-				Pincel.brilho(_soma, para, 36.0, Color(0.6, 0.8, 1.0, 0.5 * fa2))
-				Pincel.anel(_soma, para, 18.0 + 46.0 * clampf(idade / (vida + 0.35), 0.0, 1.0), 3.0, Color(0.85, 0.93, 1.0, 0.7 * fa2))
+				Pincel.brilho(_soma, para, 36.0, Color(0.6, 0.8, 1.0, 0.5 * fa))
+				Pincel.anel(_soma, para, 18.0 + 48.0 * di, 3.0, Color(0.85, 0.93, 1.0, 0.7 * fa))
+				Pincel.forma(_soma, Pincel.FAISCA, para, 44.0 * (1.0 - 0.3 * di), Color(0.9, 0.96, 1.0, 0.85 * fa), PI * 0.25)
 			"mar":
-				if a > 0.0:
-					_raio(de, para, Color(0.4, 0.8, 1.0, 0.28 * a), 26.0)
-					_raio(de, para, Color(0.8, 0.97, 1.0, 0.95 * a), 4.5)
-				var k2 := clampf(idade / (vida + 0.35), 0.0, 1.0)
-				Pincel.anel(_soma, para, 10.0 + 60.0 * k2, 3.0, Color(0.75, 0.95, 1.0, 0.6 * (1.0 - k2)))
-				Pincel.anel(_soma, para, 6.0 + 34.0 * k2, 2.0, Color(0.75, 0.95, 1.0, 0.5 * (1.0 - k2)))
+				Pincel.anel(_soma, para, 10.0 + 60.0 * di, 3.0, Color(0.75, 0.95, 1.0, 0.6 * fa))
+				Pincel.anel(_soma, para, 6.0 + 34.0 * di, 2.0, Color(0.75, 0.95, 1.0, 0.5 * fa))
+				Pincel.brilho(_soma, para, 24.0, Color(0.5, 0.85, 1.0, 0.35 * fa))
 			"bar":
-				# traçante: um risco quente correndo da arma até o ponto
-				var k3 := clampf(idade / vida, 0.0, 1.0)
-				if k3 < 1.0:
-					var cabeca2 := de.lerp(para, k3)
-					var cauda := de.lerp(para, maxf(0.0, k3 - 0.35))
-					_raio(cauda, cabeca2, Color(1.0, 0.55, 0.15, 0.45), 10.0)
-					_raio(cauda, cabeca2, Color(1.0, 0.92, 0.6, 0.95), 3.0)
-				var fb := 1.0 - depois
-				Pincel.brilho(_soma, para, 24.0, Color(1.0, 0.6, 0.2, 0.5 * fb * (1.0 if k3 >= 1.0 else 0.0)))
+				Pincel.brilho(_soma, para, 26.0, Color(1.0, 0.6, 0.2, 0.5 * fa))
+				Pincel.forma(_soma, Pincel.FAISCA, para, 48.0 * fa + 8.0, Color(1.0, 0.85, 0.5, 0.95 * fa), 0.4)
+				Pincel.anel(_soma, para, 8.0 + 40.0 * di, 2.5, Color(1.0, 0.75, 0.4, 0.6 * fa))
 	for p in _parts:
 		if p["t"] <= 0.0:
 			continue
 		var k4: float = p["t"] / p["vida"]
 		match p["tipo"]:
-			"brilho":
+			"estrela":
 				var b := sin(k4 * PI)
-				Pincel.brilho(_soma, p["pos"], p["tam"] * 2.2, Color(p["cor"], 0.5 * b))
-				Pincel.circulo(_soma, p["pos"], p["tam"] * 0.4, Color(1, 1, 1, 0.8 * b))
+				Pincel.forma(_soma, Pincel.FAISCA, p["pos"], p["tam"] * 1.6, Color(p["cor"], 0.8 * b), k4 * 3.0)
 			"bolha":
 				var tam: float = p["tam"] * (0.6 + 0.6 * k4)
 				var b2 := minf(1.0, (1.0 - k4) * 3.0)

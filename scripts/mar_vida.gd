@@ -44,7 +44,6 @@ var MASCARA_FRENTE: Texture2D = load("res://sprites/mar_frente_navio_mascara.png
 var BOLHA: Texture2D = load("res://sprites/mar_bolha.png")
 var LODO: Texture2D = load("res://sprites/mar_lodo.png")
 var FARPA: Texture2D = load("res://sprites/mar_farpa.png")
-var CAUSTICA: Texture2D = load("res://sprites/mar_caustica.png")
 var MASCARA_PEDRA_ESQ: Texture2D = load("res://sprites/mar_pedra_esq_mascara.png")
 var MASCARA_PEDRA_DIR: Texture2D = load("res://sprites/mar_pedra_dir_mascara.png")
 # as pedras recortadas (o fundo, atlantis_fundo.png, não tem mais as pedras:
@@ -640,11 +639,20 @@ func _criar_pedras() -> void:
 		mat.set_shader_parameter("aspecto", tam.x / tam.y)
 		mat.set_shader_parameter("fase", d["fase"])
 		mat.set_shader_parameter("n_danos", 0)
-		mat.set_shader_parameter("caustica", CAUSTICA)
-		mat.set_shader_parameter("tam_px", tex_tam)
+		# a cor e a luz são as do fundo, no mesmo ponto da foto (a pedra está
+		# pintada nele): pedra e fundo são os mesmos pixels
+		var fundo := get_parent() as Sprite2D
+		if fundo != null and fundo.texture != null:
+			mat.set_shader_parameter("fundo", fundo.texture)
+			mat.set_shader_parameter("tam_foto", fundo.texture.get_size())
+			var mf := fundo.material as ShaderMaterial
+			if mf != null:
+				for nome in ["profundidade", "caustica", "caustica_perto", "raios"]:
+					mat.set_shader_parameter(nome, mf.get_shader_parameter(nome))
+		mat.set_shader_parameter("canto", tex_canto)
 		s.material = mat
-		# cada pedra é uma camada na distância dela (anda pela paralaxe e os
-		# alvos passam na frente ou atrás dela)
+		# cada pedra fica na ordem de desenho da distância dela: os alvos
+		# passam na frente ou atrás dela
 		s.z_as_relative = false
 		s.z_index = z_desenho(d["z"])
 		add_child(s)
@@ -687,18 +695,11 @@ func z_da_pedra_em(pos: Vector2) -> float:
 	return z
 
 
-var _cam := Vector2.ZERO
-var _inv_z_fundo := 0.125
-
-
-## A câmera andou (scripts/mar_profundo.gd): cada pedra anda o quanto a
-## distância dela manda, por cima do fundo (que já andou como a parte longe).
-func ajustar_paralaxe(c: Vector2, inv_z_fundo: float) -> void:
-	_cam = c
-	_inv_z_fundo = inv_z_fundo
-	var esc := absf((get_parent() as Node2D).scale.x) if get_parent() is Node2D else 1.0
-	for p in _pedras:
-		(p["no"] as Node2D).position = p["canto"] + c * (inv_z_fundo - 1.0 / float(p["z"])) / esc
+## A câmera andou (scripts/mar_profundo.gd). A cena anda inteira junto com o
+## fundo (as pedras são filhas dele): nada se desloca da pintura, então não
+## há recorte nem remendo para aparecer.
+func ajustar_paralaxe(_c: Vector2, _inv_z_fundo: float) -> void:
+	pass
 
 
 ## Distância do chão na linha y (px da textura).
@@ -710,10 +711,10 @@ func z_do_chao(y: float) -> float:
 	return clampf((perto - fuga) / maxf(to_global(Vector2(0, y)).y - fuga, 0.001), 0.7, 10.0)
 
 
-## Quanto um ponto do chão (px da textura) anda por cima do fundo agora.
-func deslocamento_no_chao(p: Vector2) -> Vector2:
-	var esc := absf((get_parent() as Node2D).scale.x) if get_parent() is Node2D else 1.0
-	return _cam * (_inv_z_fundo - 1.0 / z_do_chao(p.y)) / esc
+## Quanto um ponto do chão (px da textura) anda por cima do fundo agora:
+## nada (o chão é o próprio fundo).
+func deslocamento_no_chao(_p: Vector2) -> Vector2:
+	return Vector2.ZERO
 
 
 func _quebrar(p: Dictionary, pos: Vector2, local: Vector2) -> void:
@@ -734,12 +735,22 @@ func _quebrar(p: Dictionary, pos: Vector2, local: Vector2) -> void:
 	mat.set_shader_parameter("danos", arr)
 	mat.set_shader_parameter("n_danos", danos.size())
 
-	# a pedra que sai do buraco (recortada do próprio lugar) + lasquinhas
+	# a pedra que sai do buraco (recortada do próprio lugar) + lasquinhas,
+	# a poeira e as bolhas: tudo na frente da pedra (saem dela para o vidro;
+	# atrás dela só apareceriam fora do contorno, desenhando o recorte)
+	var na_frente := (p["no"] as CanvasItem).z_index + 1
 	var tex_pedra: Texture2D = (p["no"] as Sprite2D).texture
-	_soltar_lasca(pos, raio * 1.05, true, tex_pedra, local)
+	var lascas := [_soltar_lasca(pos, raio * 1.05, true, tex_pedra, local)]
 	for i in 4:
 		var v := Vector2(randf_range(-6, 6), randf_range(-6, 6))
-		_soltar_lasca(pos + v, raio * randf_range(0.28, 0.45), false, tex_pedra, local + v)
+		lascas.append(_soltar_lasca(pos + v, raio * randf_range(0.28, 0.45), false, tex_pedra, local + v))
+	for l: Dictionary in lascas:
+		var no := l["no"] as CanvasItem
+		no.z_as_relative = false
+		no.z_index = na_frente
+	for fx: CanvasItem in [_poeira_pedra, _bolhas_pedra]:
+		fx.z_as_relative = false
+		fx.z_index = na_frente
 	_poeira_pedra.position = pos
 	_poeira_pedra.restart()
 	_poeira_pedra.emitting = true
@@ -800,6 +811,8 @@ func _soltar_lasca(pos: Vector2, raio: float, grande: bool, textura: Texture2D =
 	no.color = Color(1.12, 1.12, 1.12) if grande else Color(0.95, 0.95, 0.95)
 	no.modulate.a = 1.0
 	no.visible = true
+	no.z_as_relative = true
+	no.z_index = 0
 	if atras and _frente != null:
 		var k := _frente.get_index()
 		move_child(no, k - 1 if no.get_index() < k else k)

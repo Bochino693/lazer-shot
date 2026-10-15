@@ -3301,7 +3301,8 @@ func _ajustar_background_fullscreen() -> void:
 	background.position = Vector2(floor(tela.x * 0.5), floor(tela.y * 0.5))
 	background.scale = Vector2.ONE * escala
 	background.z_index = -100
-	# a foto vira cena de câmera: cada pixel anda pela distância dele
+	# a pintura inteira com a luz do sol de fora andando (a cena anda junta
+	# com a mira: scripts/mar_profundo.gd)
 	var mat_fundo := background.material as ShaderMaterial
 	if mat_fundo == null and TEX_PROFUNDIDADE != null:
 		mat_fundo = ShaderMaterial.new()
@@ -3311,9 +3312,6 @@ func _ajustar_background_fullscreen() -> void:
 		mat_fundo.set_shader_parameter("caustica_perto", TEX_CAUSTICA)
 		mat_fundo.set_shader_parameter("raios", TEX_RAIOS)
 		background.material = mat_fundo
-	if mat_fundo != null:
-		mat_fundo.set_shader_parameter("escala", escala)
-		mat_fundo.set_shader_parameter("px_uv", Vector2.ONE / tex_size)
 	if _profundo != null:
 		_profundo.fundo = background
 		_profundo.fundo_base = background.position

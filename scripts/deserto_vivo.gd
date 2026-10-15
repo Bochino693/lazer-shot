@@ -327,6 +327,13 @@ var _faiscas_ouro: Array = []
 var _poeiras: Array = []
 var _claroes: Array = []
 var _toque_ouro := Vector3(0, 0, -1)
+# Lascas, pó e clarões de cada tiro ficam na distância do ponto atingido: na
+# frente da coisa (ou do chão) onde a bala bateu e atrás do que está mais
+# perto. Desenhados atrás de tudo, só apareciam fora do contorno da coluna e
+# mostravam o recorte. Uma camada logo acima de cada distância de plano
+# (z_index -> [normal, soma]); 0 = a de baixo (_fx_n / _fx_s).
+var _fx_camadas: Dictionary = {}
+var _z_planos: Array[int] = []
 
 
 func _init() -> void:
@@ -1178,6 +1185,11 @@ func _animar_camera(delta: float) -> void:
 	_camada_ceu.position = anda
 	_camada_perto.position = anda
 	_camada_obeliscos.position = anda
+	_fx_n.position = anda
+	_fx_s.position = anda
+	for par: Array in _fx_camadas.values():
+		(par[0] as Node2D).position = anda
+		(par[1] as Node2D).position = anda
 	for pl in _planos:
 		var pos: Vector2 = pl["canto"] + anda
 		(pl["no"] as Node2D).position = pos
@@ -1683,6 +1695,8 @@ func _criar_planos() -> void:
 			lua.set_instance_shader_parameter("canto", d["canto"])
 			lua.visible = false
 		var lado := 0 if nome.ends_with("_esq") else (1 if nome.ends_with("_dir") else -1)
+		if not s.z_index in _z_planos:
+			_z_planos.append(s.z_index)
 		_planos.append({"no": s, "lua": lua, "canto": d["canto"], "z": float(d["z"]), "lado": lado})
 		match nome:
 			"cristal":
@@ -1788,7 +1802,7 @@ func _ferir_ponta(i: int, p: Vector2) -> void:
 		if linha.size() > 1:
 			(pt["trincas"] as Array).append(linha)
 	_soltar_cacos(p, 6, cor, 200.0)
-	_claroes.append({"pos": p, "t": 0.0, "vida": 0.3, "raio": 50.0, "cor": cor})
+	_clarao({"pos": p, "t": 0.0, "vida": 0.3, "raio": 50.0, "cor": cor})
 	if pt["danos"] >= TIROS_PONTA:
 		pt["quebrado"] = true
 		quebrou_agora = "ponta"
@@ -1796,8 +1810,8 @@ func _ferir_ponta(i: int, p: Vector2) -> void:
 		var centro: Vector2 = PONTAS_OBELISCO[i]
 		for k2 in 16:
 			_soltar_cacos(centro + Vector2(randf_range(-10, 10), randf_range(-30, 30)), 1, cor if k2 % 2 else Color(0.4, 0.4, 0.5), 380.0)
-		_claroes.append({"pos": centro, "t": 0.0, "vida": 0.5, "raio": 160.0, "cor": cor})
-		_claroes.append({"pos": centro, "t": 0.0, "vida": 0.6, "raio": 80.0, "cor": Color.WHITE})
+		_clarao({"pos": centro, "t": 0.0, "vida": 0.5, "raio": 160.0, "cor": cor})
+		_clarao({"pos": centro, "t": 0.0, "vida": 0.6, "raio": 80.0, "cor": Color.WHITE})
 		_reagir("surpreso", 0.6)
 		Maquina.efeito(SOM_QUEBRA, -6.0, 1.25)
 	else:
@@ -1863,7 +1877,7 @@ func disparar_descarga(alvos_global: Array) -> void:
 		locais.append(inv * g)
 	_feixes.descarga(locais)
 	var cor := Color(1.0, 0.85, 0.5).lerp(Color(1.0, 0.35, 0.45), _noite)
-	_claroes.append({"pos": Vector2(508, 700), "t": 0.0, "vida": 0.5, "raio": 380.0, "cor": cor})
+	_clarao({"pos": Vector2(508, 700), "t": 0.0, "vida": 0.5, "raio": 380.0, "cor": cor})
 	_onda = 0.0
 	carga = 0.0
 	_reagir("radiante", 1.4)
@@ -1890,19 +1904,28 @@ func _criar_cristal_vivo() -> void:
 		s.centered = false
 		_morto.add_child(s)
 
+	# as trincas e a energia do cristal, a onda da quebra e os clarões grandes
+	# passam por cima de tudo (a luz não para no contorno de nenhum plano)
+	_z_planos.sort()
+	var topo: int = (_z_planos.back() + 1) if not _z_planos.is_empty() else 0
 	_fx_n = Node2D.new()
 	_fx_n.name = "FxTirosFundo"
 	_fx_n.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	_fx_n.z_as_relative = false
+	_fx_n.z_index = topo
 	_fx_n.draw.connect(_desenhar_fx_n)
 	add_child(_fx_n)
 	_fx_s = Node2D.new()
 	_fx_s.name = "LuzTirosFundo"
 	_fx_s.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	_fx_s.z_as_relative = false
+	_fx_s.z_index = topo
 	var soma := CanvasItemMaterial.new()
 	soma.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
 	_fx_s.material = soma
 	_fx_s.draw.connect(_desenhar_fx_s)
 	add_child(_fx_s)
+	_fx_camadas[topo] = [_fx_n, _fx_s]
 
 
 func _ferir_cristal(p: Vector2) -> void:
@@ -1928,7 +1951,7 @@ func _ferir_cristal(p: Vector2) -> void:
 		_trincas.pop_front()
 	var cor := Color(1.0, 0.55, 0.9).lerp(Color(1.0, 0.25, 0.35), _noite)
 	_soltar_cacos(p, 9, cor, 260.0)
-	_claroes.append({"pos": p, "t": 0.0, "vida": 0.35, "raio": 70.0, "cor": cor})
+	_clarao({"pos": p, "t": 0.0, "vida": 0.35, "raio": 70.0, "cor": cor})
 	if _cristal_danos >= TIROS_CRISTAL:
 		_quebrar_cristal()
 	else:
@@ -1946,8 +1969,8 @@ func _quebrar_cristal() -> void:
 	for i in 34:
 		var q := centro + Vector2(randf_range(-50, 50), randf_range(-150, 160))
 		_soltar_cacos(q, 1, cor if i % 3 else Color(0.4, 0.4, 0.5), 520.0)
-	_claroes.append({"pos": centro, "t": 0.0, "vida": 0.6, "raio": 420.0, "cor": cor})
-	_claroes.append({"pos": centro, "t": 0.0, "vida": 0.9, "raio": 220.0, "cor": Color.WHITE})
+	_clarao({"pos": centro, "t": 0.0, "vida": 0.6, "raio": 420.0, "cor": cor})
+	_clarao({"pos": centro, "t": 0.0, "vida": 0.9, "raio": 220.0, "cor": Color.WHITE})
 	_onda_quebra = 0.0
 	Maquina.efeito(SOM_QUEBRA, -1.0)
 
@@ -1959,27 +1982,69 @@ func _tocar_ouro(p: Vector2) -> void:
 		_faiscas_ouro.append({"pos": p, "vel": Vector2.RIGHT.rotated(randf_range(-PI, 0.2)) * randf_range(120.0, 340.0), "t": 0.0, "vida": randf_range(0.35, 0.7)})
 	for i in 10:
 		_cacos.append({"pos": p + Vector2(randf_range(-6, 6), randf_range(-4, 4)), "vel": Vector2(randf_range(-60, 60), randf_range(-140, -20)), "t": 0.0,
-			"vida": randf_range(0.9, 1.6), "tam": randf_range(1.5, 3.0), "rot": randf() * TAU, "giro": randf_range(-14, 14), "cor": ouro, "ouro": true})
-	_claroes.append({"pos": p, "t": 0.0, "vida": 0.4, "raio": 60.0, "cor": ouro})
+			"vida": randf_range(0.9, 1.6), "tam": randf_range(1.5, 3.0), "rot": randf() * TAU, "giro": randf_range(-14, 14), "cor": ouro, "ouro": true,
+			"camada": _fx_n.z_index})
+	_clarao({"pos": p, "t": 0.0, "vida": 0.4, "raio": 60.0, "cor": ouro})
 	Maquina.efeito(SOM_OURO, -5.0, randf_range(0.94, 1.08))
 
 
 ## Pedra (lascas + pó) ou areia (só o pó e os grãos).
 func _estilhacar(p: Vector2, cor: Color, lascas: int, po: int) -> void:
 	_soltar_cacos(p, lascas, cor, 220.0)
+	var camada := _camada_do_ponto(p)
 	for i in po:
 		_poeiras.append({"pos": p + Vector2(randf_range(-4, 4), randf_range(-3, 3)), "vel": Vector2(randf_range(-50, 50), randf_range(-70, -15)),
-			"t": 0.0, "vida": randf_range(0.7, 1.2), "tam": randf_range(8.0, 16.0), "cor": cor})
+			"t": 0.0, "vida": randf_range(0.7, 1.2), "tam": randf_range(8.0, 16.0), "cor": cor, "camada": camada})
 	while _poeiras.size() > 60:
 		_poeiras.pop_front()
 
 
 func _soltar_cacos(p: Vector2, n: int, cor: Color, forca: float) -> void:
+	var camada := _camada_do_ponto(p)
 	for i in n:
 		_cacos.append({"pos": p, "vel": Vector2.RIGHT.rotated(randf_range(-PI * 0.95, -PI * 0.05)) * randf_range(forca * 0.35, forca), "t": 0.0,
-			"vida": randf_range(0.6, 1.1), "tam": randf_range(2.0, 5.0), "rot": randf() * TAU, "giro": randf_range(-12, 12), "cor": cor, "ouro": false})
+			"vida": randf_range(0.6, 1.1), "tam": randf_range(2.0, 5.0), "rot": randf() * TAU, "giro": randf_range(-12, 12), "cor": cor, "ouro": false,
+			"camada": camada})
 	while _cacos.size() > 90:
 		_cacos.pop_front()
+
+
+## Clarão de um tiro: o pequeno na distância do ponto, o grande por cima de
+## tudo (a luz não para no contorno de nenhum plano).
+func _clarao(c: Dictionary) -> void:
+	c["camada"] = _fx_n.z_index if float(c["raio"]) > 150.0 else _camada_do_ponto(c["pos"])
+	_claroes.append(c)
+
+
+## Camada de desenho dos estilhaços de um tiro no ponto p (px da imagem):
+## logo acima do plano mais perto que ainda fica atrás do ponto (ou do chão
+## ali). Uma camada por distância de plano, criada na primeira vez.
+func _camada_do_ponto(p: Vector2) -> int:
+	var v := z_desenho(1.0 / maxf(_inv_z_local(p), 0.001)) + 2
+	var z := 0
+	for zp: int in _z_planos:
+		if zp <= v:
+			z = zp + 1
+	if z == 0:
+		z = _z_planos.front() - 1 if not _z_planos.is_empty() else _fx_n.z_index
+	if not _fx_camadas.has(z):
+		var par: Array = []
+		for soma in [false, true]:
+			var no := Node2D.new()
+			no.name = ("LuzTiros%d" if soma else "FxTiros%d") % z
+			no.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+			no.z_as_relative = false
+			no.z_index = z
+			no.position = _fx_n.position
+			if soma:
+				no.material = _fx_s.material
+				no.draw.connect(_desenhar_tiros_s.bind(no, z))
+			else:
+				no.draw.connect(_desenhar_tiros_n.bind(no, z))
+			add_child(no)
+			par.append(no)
+		_fx_camadas[z] = par
+	return z
 
 
 func _atualizar_tiros_fundo(delta: float) -> void:
@@ -2094,26 +2159,34 @@ func _atualizar_tiros_fundo(delta: float) -> void:
 	var ativo := not (_cacos.is_empty() and _faiscas_ouro.is_empty() and _poeiras.is_empty() and _claroes.is_empty()) \
 		or not _trincas.is_empty() or _onda_quebra >= 0.0 or _cristal_refaz >= 0.0
 	if ativo or _fx_sujo:
-		_fx_n.queue_redraw()
-		_fx_s.queue_redraw()
+		for par: Array in _fx_camadas.values():
+			(par[0] as CanvasItem).queue_redraw()
+			(par[1] as CanvasItem).queue_redraw()
 	_fx_sujo = ativo
 
 
 func _desenhar_fx_n() -> void:
-	for p in _poeiras:
-		var k: float = p["t"] / p["vida"]
-		Pincel.forma(_fx_n, Pincel.FUMACA, p["pos"], p["tam"] * (0.5 + 1.4 * k), Color(p["cor"], 0.5 * (1.0 - k)), k)
 	# trincas: risco escuro (some quando o cristal se refaz)
 	var a_tr := 1.0 if _cristal_refaz < 0.0 else 1.0 - _cristal_refaz
 	if not _trincas.is_empty() and a_tr > 0.0:
 		for linha: PackedVector2Array in _trincas:
 			for i in range(linha.size() - 1):
 				Pincel.linha(_fx_n, linha[i], linha[i + 1], Color(0.06, 0.02, 0.08, 0.85 * a_tr), 1.4)
+	_desenhar_tiros_n(_fx_n, _fx_n.z_index)
+
+
+## O pó e as lascas da camada `camada` (z_index) no nó `no`.
+func _desenhar_tiros_n(no: CanvasItem, camada: int) -> void:
+	for p in _poeiras:
+		if p["camada"] != camada:
+			continue
+		var k: float = p["t"] / p["vida"]
+		Pincel.forma(no, Pincel.FUMACA, p["pos"], p["tam"] * (0.5 + 1.4 * k), Color(p["cor"], 0.5 * (1.0 - k)), k)
 	for c in _cacos:
-		if c["ouro"]:
+		if c["ouro"] or c["camada"] != camada:
 			continue
 		var k2: float = c["t"] / c["vida"]
-		Pincel.caco(_fx_n, c["pos"], c["tam"], c["rot"], Color(c["cor"], 1.0 - k2 * k2))
+		Pincel.caco(no, c["pos"], c["tam"], c["rot"], Color(c["cor"], 1.0 - k2 * k2))
 
 
 ## Ponto k (0 longe .. 1 no cristal) de um fio de energia espiralando para
@@ -2155,17 +2228,27 @@ func _desenhar_fx_s() -> void:
 	if _onda_quebra >= 0.0:
 		var k0 := _onda_quebra / 0.8
 		Pincel.anel(_fx_s, Vector2(508, 790), 40.0 + 420.0 * k0, 10.0 * (1.0 - k0) + 2.0, Color(cor_e, 0.7 * (1.0 - k0)))
-	for c2 in _claroes:
-		var k: float = c2["t"] / c2["vida"]
-		Pincel.brilho(_fx_s, c2["pos"], c2["raio"] * (0.6 + 0.6 * k), Color(c2["cor"], 0.55 * (1.0 - k)))
-	for c in _cacos:
-		var k3: float = c["t"] / c["vida"]
-		if c["ouro"]:
-			var pisca := 0.5 + 0.5 * sin(c["t"] * 30.0 + c["rot"] * 5.0)
-			Pincel.caco(_fx_s, c["pos"], c["tam"], c["rot"], Color(c["cor"], (1.0 - k3) * (0.4 + 0.6 * pisca)))
-		elif randf() < 0.3:
-			Pincel.circulo(_fx_s, c["pos"], c["tam"] * 0.6, Color(1, 1, 1, 0.5 * (1.0 - k3)))
+	_desenhar_tiros_s(_fx_s, _fx_s.z_index)
 	for f in _faiscas_ouro:
 		var k4: float = f["t"] / f["vida"]
 		var pf: Vector2 = f["pos"]
 		Pincel.linha(_fx_s, pf, pf - (f["vel"] as Vector2) * 0.03, Color(1.0, 0.85, 0.45, 1.0 - k4), 1.6)
+
+
+## Os clarões e o brilho das lascas da camada `camada` (z_index) no nó `no`
+## (soma de luz).
+func _desenhar_tiros_s(no: CanvasItem, camada: int) -> void:
+	for c2 in _claroes:
+		if c2["camada"] != camada:
+			continue
+		var k: float = c2["t"] / c2["vida"]
+		Pincel.brilho(no, c2["pos"], c2["raio"] * (0.6 + 0.6 * k), Color(c2["cor"], 0.55 * (1.0 - k)))
+	for c in _cacos:
+		if c["camada"] != camada:
+			continue
+		var k3: float = c["t"] / c["vida"]
+		if c["ouro"]:
+			var pisca := 0.5 + 0.5 * sin(c["t"] * 30.0 + c["rot"] * 5.0)
+			Pincel.caco(no, c["pos"], c["tam"], c["rot"], Color(c["cor"], (1.0 - k3) * (0.4 + 0.6 * pisca)))
+		elif randf() < 0.3:
+			Pincel.circulo(no, c["pos"], c["tam"] * 0.6, Color(1, 1, 1, 0.5 * (1.0 - k3)))
