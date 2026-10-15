@@ -6,12 +6,23 @@ param(
     # Instala na Pro Ultra 4K pelo adb depois de gerar (TV Box ligada no adb)
     [switch]$Instalar,
     # So puxa o registro do Android (logcat) da TV Box pelo adb, sem gerar APK:
-    # abre o jogo, espera 40 s e salva em build\android\LOGCAT-TVBOX.txt
-    [switch]$Registro
+    # abre o jogo, espera 60 s e salva em build\android\LOGCAT-TVBOX.txt
+    [switch]$Registro,
+    # IP da TV Box na rede (adb sem cabo), para -Registro e -Instalar:
+    # GERAR_APK_PRO_ULTRA.bat -Registro -Ip 192.168.0.50
+    [string]$Ip = ""
 )
 $ErrorActionPreference = "Stop"
 $Projeto = $PSScriptRoot
 $Saida = Join-Path $Projeto "build\android"
+
+# adb sem cabo: conecta na TV Box pelo IP (a depuracao precisa estar ligada).
+function Conectar-TvBox([string]$Adb) {
+    if ($Ip -eq "") { return }
+    Write-Host "Conectando na TV Box em $Ip ..."
+    & $Adb connect $Ip
+    Start-Sleep -Seconds 2
+}
 
 # Registro do Android: o que a TV Box diz quando o jogo abre (ou fecha).
 function Puxar-Registro([string]$Adb) {
@@ -20,11 +31,13 @@ function Puxar-Registro([string]$Adb) {
     & $Adb logcat -c
     & $Adb shell am force-stop com.lazersport.lazershot
     & $Adb shell monkey -p com.lazersport.lazershot -c android.intent.category.LAUNCHER 1
-    Write-Host "Jogo aberto na TV Box. Aguardando 40 s..."
-    Start-Sleep -Seconds 40
-    & $Adb logcat -d -v time > $Arquivo
+    Write-Host "Jogo aberto na TV Box. Aguardando 60 s (nao mexa na TV Box)..."
+    Start-Sleep -Seconds 60
+    & $Adb logcat -d -v time -b main -b system -b crash > $Arquivo
     & $Adb shell getprop ro.product.model >> $Arquivo
     & $Adb shell getprop ro.board.platform >> $Arquivo
+    & $Adb shell getprop ro.build.version.release >> $Arquivo
+    & $Adb shell cat /proc/meminfo >> $Arquivo
     # caixa-preta do jogo (o que ele fazia quando parou)
     $Caixa = Join-Path $Saida "caixa_preta"
     New-Item -ItemType Directory -Path $Caixa -Force | Out-Null
@@ -36,7 +49,8 @@ if ($Registro) {
     $SdkR = if ($env:ANDROID_HOME) { $env:ANDROID_HOME } elseif ($env:ANDROID_SDK_ROOT) { $env:ANDROID_SDK_ROOT } elseif (Test-Path "C:\AndroidSdk") { "C:\AndroidSdk" } else { Join-Path $env:LOCALAPPDATA "Android\Sdk" }
     $AdbR = Join-Path $SdkR "platform-tools\adb.exe"
     if (-not (Test-Path $AdbR)) { throw "adb nao encontrado em $AdbR." }
-    if (-not ((& $AdbR devices) -match "\tdevice$")) { throw "Nenhuma TV Box no adb. Ligue a depuracao (ADB) na TV Box e conecte: adb connect IP-DA-TVBOX" }
+    Conectar-TvBox $AdbR
+    if (-not ((& $AdbR devices) -match "\tdevice$")) { throw "Nenhuma TV Box no adb. Ligue a depuracao (ADB) na TV Box e rode de novo com -Ip IP-DA-TVBOX" }
     Puxar-Registro $AdbR
     exit 0
 }
@@ -247,6 +261,7 @@ Write-Host "Instale este APK na Pro Ultra 4K. O jogo gira internamente; mantenha
 
 if ($Instalar) {
     $Adb = Join-Path $Sdk "platform-tools\adb.exe"
+    Conectar-TvBox $Adb
     & $Adb install -r $Apk
     Puxar-Registro $Adb
 }

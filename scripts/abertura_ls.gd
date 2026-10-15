@@ -9,13 +9,14 @@ extends Control
 ## tremendo e o logo da Lazer & Sport aparece, com GAMES batendo embaixo
 ## e "apresenta" logo depois.
 ## Depois vai para o menu. Qualquer tiro ou START pula.
-## Tudo desenhado na hora; a única imagem é o logo.
 ##
-## Antes do primeiro quadro, com a tela preta, a placa de vídeo prepara cada
-## jeito de desenhar que a apresentação e os efeitos do jogo usam, os dois
-## shaders daqui e os sons, um passo por quadro (scripts/aquecedor.gd). Na
-## TV Box a apresentação caía no primeiro tiro, quando a placa montava a luz
-## somada e as faíscas no meio da animação.
+## Tudo desenhado na hora com o pincel (scripts/pincel.gd: retângulos de uma
+## textura só); a única imagem própria é o logo. É o jeito mais simples que
+## a placa da TV Box conhece: nada de linhas, polígonos ou sistema de
+## partículas (faíscas, estouro e brasas são pontos de luz desenhados aqui)
+## e, na TV Box, sem luz somada. Começa no primeiro quadro, como na 1.24.0
+## (a última que mostrou a apresentação na TV Box); se o app fechou sozinho
+## na última vez, espera a página de queda (scripts/pagina_queda.gd).
 
 const Pincel := preload("res://scripts/pincel.gd")
 const LOGO := preload("res://sprites/logo_lazer_sport.png")
@@ -41,11 +42,10 @@ var _logo: TextureRect
 var _games: Label
 var _apresenta: Label
 var _marcas: Node2D       # furos na parede (mistura normal)
-var _luz: Node2D          # feixes, clarões, mira e onda (mistura somada)
-var _faiscas: Array[CPUParticles2D] = []
-var _faisca_vez := 0
-var _estouro: CPUParticles2D
-var _brasas: CPUParticles2D
+var _luz: Node2D          # feixes, clarões, mira, onda e faíscas (pincel)
+var _chispas: Array = []  # faíscas, estouro e brasas: {pos, vel, t, vida, r, grav}
+var _brasas := false      # brasas subindo do logo depois do tiro final
+var _brasas_acc := 0.0
 var _clarao: ColorRect
 var _escuro: ColorRect
 
@@ -66,13 +66,39 @@ var _logo_t := -1.0
 var _games_t := -1.0
 var _apresenta_t := -1.0
 var _roteiro: Array = []           # [tempo, Callable], em ordem
-var _aquecedor: Aquecedor = null   # preparando a placa: a apresentação espera
-var _barra: Control                # andamento da preparação (só traços)
 static var _marcou := false        # caixa-preta: cada passo, só na 1ª vez
+
+## Cores das faíscas ao longo da vida (quente: amarelo, laranja, some).
+const QUENTE := [Color(1.0, 0.95, 0.7, 1.0), Color(1.0, 0.55, 0.15, 1.0), Color(1.0, 0.15, 0.05, 0.0)]
 
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if Tela.contorna("abertura") or Tela.pagina_aberta():
+		# parada e escondida, sem montar nada
+		visible = false
+		set_process(false)
+		set_process_input(false)
+		if Tela.contorna("abertura"):
+			# já derrubou o app nesta versão: direto para o menu (depois da
+			# página de queda, se ela estiver na tela)
+			if Tela.pagina_aberta():
+				await Tela.pagina_fechou
+			Tela.marca("contorno: pulando a apresentação")
+			TransicaoGlobal.trocar_cena(PROXIMA, 0.0, 0.3)
+			return
+		# o app fechou sozinho na última vez: a página da caixa-preta fica na
+		# tela primeiro (scripts/pagina_queda.gd) e a apresentação começa
+		# quando ela fecha
+		Tela.pagina_fechou.connect(_iniciar, CONNECT_ONE_SHOT)
+		return
+	_iniciar()
+
+
+func _iniciar() -> void:
+	visible = true
+	set_process(true)
+	set_process_input(true)
 	_tela = get_viewport_rect().size
 	_montar()
 	_ajustar()
@@ -98,54 +124,9 @@ func _ready() -> void:
 		[3.58, func() -> void: _bater_games()],
 		[4.25, func() -> void: _apresenta_t = 0.0],
 	]
-	# Com a tela preta: os jeitos de desenhar (luz somada, linhas, polígonos,
-	# faíscas, letras), os dois shaders e os sons daqui, um por quadro. Os
-	# shaders de cada fase ficam para a troca de tela, com o cartão de
-	# carregamento à vista (scripts/TransiaoGlobal.gd).
-	_fundo.visible = false
-	_aquecedor = Aquecedor.shaders([SHADER_FUNDO.resource_path, SHADER_LOGO.resource_path], self,
-		[SOM_TIRO, SOM_IMPACTO, SOM_CARGA, SOM_FINAL, SOM_ALVO])
-	_aquecedor.terminou.connect(_comecar)
-
-
-## A placa está pronta: a apresentação começa.
-func _comecar() -> void:
-	_aquecedor = null
-	_fundo.visible = true
-	if not Tela.contorna("abertura"):
-		Tela.risco("abertura")   # se o app morrer aqui, a caixa-preta sabe
+	Tela.risco("abertura")   # se o app morrer aqui, a caixa-preta sabe
 	var tw := create_tween()
 	tw.tween_property(_escuro, "color:a", 0.0, 0.6)
-	tw.parallel().tween_property(_barra, "modulate:a", 0.0, 0.3)
-	tw.tween_callback(_barra.queue_free)
-
-
-## Andamento da preparação, embaixo, na tela preta: um traço por passo.
-## Aceso = pronto; vermelho = esse passo derrubou o app antes e agora fica
-## desligado. Sem texto: se a TV Box parar aqui, uma foto mostra onde.
-func _desenhar_barra() -> void:
-	if _aquecedor == null or not is_instance_valid(_aquecedor):
-		return
-	var lista := _aquecedor.passos()
-	var n := lista.size()
-	if n == 0:
-		return
-	var larg := 26.0
-	var vao := 10.0
-	var total := n * larg + (n - 1) * vao
-	var x := (_tela.x - total) * 0.5
-	var y := _tela.y * 0.86
-	for item in lista:
-		var cor := Color(1, 1, 1, 0.12)
-		match item[1]:
-			"ok":
-				cor = Color(1, 1, 1, 0.75)
-			"agora":
-				cor = Color(1, 1, 1, 0.35 + 0.25 * sin(Time.get_ticks_msec() * 0.012))
-			"pulado":
-				cor = Color(1.0, 0.18, 0.2, 0.9)
-		_barra.draw_rect(Rect2(x, y, larg, 6.0), cor)
-		x += larg + vao
 
 
 func _montar() -> void:
@@ -157,6 +138,7 @@ func _montar() -> void:
 	add_child(_fundo)
 
 	_marcas = Node2D.new()
+	_marcas.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	_marcas.draw.connect(_desenhar_marcas)
 	add_child(_marcas)
 
@@ -209,43 +191,14 @@ func _montar() -> void:
 	_apresenta.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_apresenta)
 
-	var soma := CanvasItemMaterial.new()
-	soma.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
 	_luz = Node2D.new()
-	_luz.material = soma
+	if OS.get_name() != "Android":
+		var soma := CanvasItemMaterial.new()
+		soma.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
+		_luz.material = soma
 	_luz.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	_luz.draw.connect(_desenhar_luz)
 	add_child(_luz)
-
-	var ponto := FundoVivo.brilho_redondo()
-	var quente := Gradient.new()
-	quente.offsets = PackedFloat32Array([0.0, 0.3, 1.0])
-	quente.colors = PackedColorArray([Color(1.0, 0.95, 0.7, 1), Color(1.0, 0.55, 0.15, 1), Color(1.0, 0.15, 0.05, 0)])
-	for i in 2:
-		var f := _particulas(26, 0.6, ponto, soma, quente)
-		f.initial_velocity_min = 220.0
-		f.initial_velocity_max = 640.0
-		f.gravity = Vector2(0, 1200)
-		f.scale_amount_min = 0.18
-		f.scale_amount_max = 0.45
-		_faiscas.append(f)
-	_estouro = _particulas(70, 1.1, ponto, soma, quente)
-	_estouro.initial_velocity_min = 300.0
-	_estouro.initial_velocity_max = 1100.0
-	_estouro.gravity = Vector2(0, 900)
-	_estouro.scale_amount_min = 0.25
-	_estouro.scale_amount_max = 0.8
-	_brasas = _particulas(30, 3.2, ponto, soma, quente)
-	_brasas.one_shot = false
-	_brasas.explosiveness = 0.0
-	_brasas.emission_shape = CPUParticles2D.EMISSION_SHAPE_RECTANGLE
-	_brasas.direction = Vector2(0, -1)
-	_brasas.spread = 25.0
-	_brasas.gravity = Vector2(0, -35)
-	_brasas.initial_velocity_min = 20.0
-	_brasas.initial_velocity_max = 70.0
-	_brasas.scale_amount_min = 0.08
-	_brasas.scale_amount_max = 0.24
 
 	_clarao = ColorRect.new()
 	_clarao.color = Color(1, 1, 1, 0)
@@ -255,30 +208,34 @@ func _montar() -> void:
 	_escuro.color = Color(0, 0, 0, 1)
 	_escuro.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_escuro)
-	_barra = Control.new()
-	_barra.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_barra.draw.connect(_desenhar_barra)
-	add_child(_barra)
 
 
-func _particulas(n: int, vida: float, tex: Texture2D, mat: Material, rampa: Gradient) -> CPUParticles2D:
-	var p := CPUParticles2D.new()
-	p.amount = n
-	p.lifetime = vida
-	p.one_shot = true
-	p.explosiveness = 1.0
-	p.emitting = false
-	p.spread = 180.0
-	p.texture = tex
-	p.material = mat
-	p.color_ramp = rampa
-	add_child(p)
-	return p
+## Faíscas: `n` pontos de luz saindo de `pos` em todas as direções.
+func _emitir(pos: Vector2, n: int, vel_min: float, vel_max: float, grav: float, vida: float, r_min: float, r_max: float) -> void:
+	for i in n:
+		var dir := Vector2.RIGHT.rotated(randf() * TAU)
+		_chispas.append({"pos": pos, "vel": dir * randf_range(vel_min, vel_max), "t": 0.0,
+			"vida": vida * randf_range(0.75, 1.0), "r": randf_range(r_min, r_max), "grav": grav})
+
+
+## Uma brasa subindo devagar da base do logo.
+func _brasa() -> void:
+	var larg := _logo.size.x
+	var base := Vector2(_tela.x * 0.5 + randf_range(-0.5, 0.5) * larg, _logo.position.y + _logo.size.y)
+	var dir := Vector2.UP.rotated(deg_to_rad(randf_range(-25.0, 25.0)))
+	_chispas.append({"pos": base, "vel": dir * randf_range(20.0, 70.0), "t": 0.0,
+		"vida": 3.2 * randf_range(0.75, 1.0), "r": randf_range(1.5, 4.0), "grav": -35.0})
+
+
+static func _cor_quente(k: float) -> Color:
+	if k < 0.3:
+		return (QUENTE[0] as Color).lerp(QUENTE[1], k / 0.3)
+	return (QUENTE[1] as Color).lerp(QUENTE[2], (k - 0.3) / 0.7)
 
 
 func _ajustar() -> void:
 	_tela = get_viewport_rect().size
-	for r: Control in [_fundo, _clarao, _escuro, _barra]:
+	for r: Control in [_fundo, _clarao, _escuro]:
 		r.position = Vector2.ZERO
 		r.size = _tela
 	var larg := _tela.x * 0.80
@@ -293,8 +250,6 @@ func _ajustar() -> void:
 	_apresenta.size = Vector2(_tela.x, 70)
 	_apresenta.position = Vector2(0, _games.position.y + 175)
 	_origem = Vector2(_tela.x * 0.84, _tela.y + 70)
-	_brasas.position = Vector2(_tela.x * 0.5, _logo.position.y + alt)
-	_brasas.emission_rect_extents = Vector2(larg * 0.5, 10)
 	(_fundo.material as ShaderMaterial).set_shader_parameter("foco", Vector2(0.5, 0.42))
 
 
@@ -312,11 +267,7 @@ func _disparar(p: Vector2, forte: bool) -> void:
 				pl["caiu"] = 0.0
 				pl["vel"] = Vector2(randf_range(-160.0, 160.0), randf_range(-420.0, -300.0))
 				pl["giro"] = randf_range(-7.0, 7.0)
-		var f := _faiscas[_faisca_vez]
-		_faisca_vez = (_faisca_vez + 1) % _faiscas.size()
-		f.position = p
-		f.restart()
-		f.emitting = true
+		_emitir(p, 26, 220.0, 640.0, 1200.0, 0.6, 3.0, 7.0)
 		_tremor = maxf(_tremor, 7.0)
 		Maquina.efeito(SOM_TIRO, -2.0, randf_range(0.95, 1.05))
 		Maquina.efeito(SOM_IMPACTO, -6.0, randf_range(0.9, 1.1))
@@ -335,12 +286,10 @@ func _tiro_final() -> void:
 	_onda_t = 0.0
 	_tremor = 22.0
 	_clarao.color.a = 0.9
-	_estouro.position = _alvo
-	_estouro.restart()
-	_estouro.emitting = true
+	_emitir(_alvo, 70, 300.0, 1100.0, 900.0, 1.1, 4.0, 13.0)
 	_logo.visible = true
 	_logo_t = 0.0
-	_brasas.emitting = true
+	_brasas = true
 	Maquina.efeito(SOM_FINAL, 0.0)
 	Maquina.efeito(SOM_ALVO, -3.0, 0.85)
 
@@ -373,9 +322,6 @@ func _input(event: InputEvent) -> void:
 
 # ───────────────────────────────────────────── quadro a quadro
 func _process(delta: float) -> void:
-	if _aquecedor != null:
-		_barra.queue_redraw()
-		return   # a placa ainda está sendo preparada (tela preta)
 	# um quadro pode demorar: o roteiro não pula
 	delta = minf(delta, 0.05)
 	_t += delta
@@ -416,6 +362,18 @@ func _process(delta: float) -> void:
 			_onda_t = -1.0
 	_clarao.color.a = move_toward(_clarao.color.a, 0.0, delta * 2.6)
 
+	# faíscas, estouro e brasas (pontos de luz soltos, com gravidade)
+	for c in _chispas:
+		c["t"] += delta
+		c["vel"] += Vector2(0, c["grav"]) * delta
+		c["pos"] += c["vel"] * delta
+	_chispas = _chispas.filter(func(c) -> bool: return c["t"] < c["vida"])
+	if _brasas:
+		_brasas_acc += delta * 9.4   # ~30 brasas no ar
+		while _brasas_acc >= 1.0:
+			_brasas_acc -= 1.0
+			_brasa()
+
 	# tremor da tela (só a cena, não a transição)
 	_tremor = move_toward(_tremor, 0.0, delta * 40.0)
 	position = Vector2(randf_range(-1, 1), randf_range(-1, 1)) * _tremor
@@ -446,15 +404,17 @@ func _process(delta: float) -> void:
 
 
 # ───────────────────────────────────────────── desenho
+## Furos e placas também pelo pincel (mistura normal): a apresentação inteira
+## é feita de retângulos de uma textura só.
 func _desenhar_marcas() -> void:
 	var some := 0.45 if _logo_t >= 0.0 else 1.0
 	for f in _furos:
 		var p: Vector2 = f["pos"]
-		_marcas.draw_circle(p, 26.0, Color(0.08, 0.04, 0.02, 0.28 * some))
-		_marcas.draw_circle(p, 15.0, Color(0, 0, 0, 0.45 * some))
+		Pincel.circulo(_marcas, p, 26.0, Color(0.08, 0.04, 0.02, 0.28 * some))
+		Pincel.circulo(_marcas, p, 15.0, Color(0, 0, 0, 0.45 * some))
 		for r: Vector2 in f["raios"]:
-			_marcas.draw_line(p + r * 0.3, p + r, Color(0.02, 0.02, 0.02, 0.6 * some), 2.0, true)
-		_marcas.draw_circle(p, 9.0, Color(0, 0, 0, 0.92 * some))
+			Pincel.linha(_marcas, p + r * 0.3, p + r, Color(0.02, 0.02, 0.02, 0.6 * some), 2.0)
+		Pincel.circulo(_marcas, p, 9.0, Color(0, 0, 0, 0.92 * some))
 	for pl in _placas:
 		_desenhar_placa(pl)
 
@@ -476,24 +436,27 @@ func _desenhar_placa(pl: Dictionary) -> void:
 	var giro: float = pl["giro"] * maxf(cai, 0.0)
 	# haste e sombra na parede (só enquanto está de pé)
 	if cai < 0.0:
-		_marcas.draw_line(p + Vector2(0, r * 0.8), p + Vector2(0, r * 2.4), Color(0.05, 0.04, 0.04, 0.9 * sobe), 8.0, true)
-		_marcas.draw_circle(p + Vector2(7, 9), r * mola, Color(0, 0, 0, 0.45 * sobe))
-	_marcas.draw_set_transform(p, giro, Vector2(mola, mola * vira))
+		Pincel.linha(_marcas, p + Vector2(0, r * 0.8), p + Vector2(0, r * 2.4), Color(0.05, 0.04, 0.04, 0.9 * sobe), 8.0)
+		Pincel.circulo(_marcas, p + Vector2(7, 9), r * mola, Color(0, 0, 0, 0.45 * sobe))
+	Pincel.base(_marcas, Transform2D(giro, Vector2(mola, mola * vira), 0.0, p))
 	var aneis := [[1.0, Color(0.16, 0.15, 0.16)], [0.92, Color(0.93, 0.92, 0.90)], [0.74, VERMELHO.darkened(0.1)],
 		[0.56, Color(0.93, 0.92, 0.90)], [0.38, VERMELHO.darkened(0.1)], [0.18, Color(0.95, 0.94, 0.92)]]
 	for anel in aneis:
-		_marcas.draw_circle(Vector2.ZERO, r * anel[0], Color(anel[1], a))
+		Pincel.circulo(_marcas, Vector2.ZERO, r * anel[0], Color(anel[1], a))
 	# brilho de metal no canto de cima
-	_marcas.draw_arc(Vector2.ZERO, r * 0.96, -2.6, -1.2, 16, Color(1, 1, 1, 0.35 * a), 3.0, true)
+	Pincel.arco(_marcas, Vector2.ZERO, r * 0.96, -2.6, -1.2, Color(1, 1, 1, 0.35 * a), 3.0)
 	if cai >= 0.0:
-		_marcas.draw_circle(Vector2.ZERO, 8.0, Color(0, 0, 0, 0.95 * a))
-	_marcas.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+		Pincel.circulo(_marcas, Vector2.ZERO, 8.0, Color(0, 0, 0, 0.95 * a))
+	Pincel.base(_marcas, Transform2D.IDENTITY)
 
 
-## A luz (mistura somada) só com o pincel: retângulos de uma textura só
-## (scripts/pincel.gd), o jeito de desenhar que a TV Box já usa no jogo
-## inteiro. Linhas e curvas com luz somada coincidiam com as quedas na TV Box.
+## A luz só com o pincel: retângulos de uma textura só (scripts/pincel.gd),
+## o jeito de desenhar que a TV Box já usa no jogo inteiro. No PC ela soma
+## (mistura somada); na TV Box, mistura comum.
 func _desenhar_luz() -> void:
+	# faíscas, estouro e brasas
+	for c in _chispas:
+		Pincel.brilho(_luz, c["pos"], c["r"] * 1.25, _cor_quente(c["t"] / c["vida"]))
 	# furos em brasa esfriando
 	for f in _furos:
 		var quente := clampf(1.0 - f["t"] / 1.6, 0.0, 1.0)

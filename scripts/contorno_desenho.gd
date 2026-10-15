@@ -1,9 +1,10 @@
 extends Node
 
 ## CONTORNO DE DESENHO: liga só quando a caixa-preta mandou (a TV Box já caiu
-## uma vez preparando um jeito de desenhar ou um shader; scripts/aquecedor.gd,
+## uma vez montando um shader de fase; scripts/aquecedor.gd,
 ## scripts/caixa_preta.gd). Em vez de cair de novo no mesmo ponto, o jogo
-## segue sem aquele recurso:
+## segue sem aquele recurso. Os jeitos de desenhar ("desenho:...") vinham da
+## preparação da 1.25.0 e da 1.26.0, que saiu; ficam aqui caso voltem:
 ##
 ##   "desenho:soma_*"           luz somada (CanvasItemMaterial BLEND_MODE_ADD)
 ##                              vira mistura comum: brilhos ficam mais fracos

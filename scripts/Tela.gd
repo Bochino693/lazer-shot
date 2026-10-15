@@ -27,6 +27,10 @@ extends Node
 const BASE := Vector2(1024, 1536)
 const CaixaPreta := preload("res://scripts/caixa_preta.gd")
 const ContornoDesenho := preload("res://scripts/contorno_desenho.gd")
+const PaginaQueda := preload("res://scripts/pagina_queda.gd")
+
+## A página de queda saiu da tela (scripts/pagina_queda.gd): o jogo segue.
+signal pagina_fechou
 
 var giro := 0
 var mira_direta := true
@@ -36,6 +40,7 @@ var _conteudo := BASE            # a tela em pé que os scripts enxergam
 var _escala := 1.0               # pixels do HDMI por pixel do jogo
 var _caixa: Node = null         # diagnóstico, só grava (scripts/caixa_preta.gd)
 var _primeiros: Dictionary = {}  # marca_primeiro: evento|tela já anotados
+var _pagina: CanvasLayer = null  # página de queda na tela (ou null)
 
 
 func _init() -> void:
@@ -58,6 +63,24 @@ func _ready() -> void:
 		contorno.configurar(_caixa.contornos)
 	janela.size_changed.connect(_aplicar)
 	janela.window_input.connect(_corrigir_evento)
+	# o app fechou sozinho na última vez: antes de tudo, a página com o fim
+	# da caixa-preta daquela sessão (para uma foto)
+	if not _caixa.pagina.is_empty():
+		_pagina = PaginaQueda.new()
+		_pagina.name = "PaginaQueda"
+		add_child(_pagina)
+		# a fonte embutida do Godot (letras desenhadas na hora, sem MSDF),
+		# antes de scripts/Maquina.gd trocar a fonte padrão pela do jogo
+		_pagina.montar(ThemeDB.fallback_font, CaixaPreta.VERSAO, _caixa.pagina[0], _caixa.pagina[1],
+			_caixa.duracao_anterior(), _caixa.contornos)
+		_pagina.fechou.connect(func() -> void:
+			_pagina = null
+			pagina_fechou.emit())
+
+
+## A página de queda está na tela? (a apresentação espera ela fechar)
+func pagina_aberta() -> bool:
+	return _pagina != null and is_instance_valid(_pagina)
 
 
 func _giro_configurado() -> int:
@@ -128,13 +151,6 @@ func risco(trecho: String) -> void:
 ## O trecho arriscado em que o jogo está agora ("" = nenhum).
 func risco_atual() -> String:
 	return _caixa.risco_atual() if _caixa != null else ""
-
-
-## A pasta da caixa-preta que o gerenciador de arquivos enxerga (e o
-## pendrive, se houver): passo "pasta" da preparação (scripts/aquecedor.gd).
-func abrir_pasta_externa() -> void:
-	if _caixa != null:
-		_caixa.abrir_pasta_externa()
 
 
 ## Marca e confere: se os dois quadros seguintes chegarem a ser desenhados,

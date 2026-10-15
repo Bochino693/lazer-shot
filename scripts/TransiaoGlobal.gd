@@ -132,8 +132,10 @@ func trocar_cena(caminho: String, tempo_saida: float = TEMPO_SAIDA, tempo_entrad
 	Tela.marca("troca para " + caminho.get_file())
 
 	# Começa a carregar já, em paralelo com o escurecer: a cena e o que ela
-	# lê no _ready (cada arquivo numa thread do pool).
-	var pediu := ResourceLoader.load_threaded_request(caminho, "PackedScene", true) == OK
+	# lê no _ready (cada arquivo numa thread do pool). Na TV Box, a cena vem
+	# numa thread só, como no Dragon Bowling (menos memória e processador
+	# disputados ao mesmo tempo nos 4 núcleos fracos).
+	var pediu := ResourceLoader.load_threaded_request(caminho, "PackedScene", OS.get_name() != "Android") == OK
 	var extras: Array[String] = []
 	for p in Precarga.LISTA.get(caminho, []):
 		if ResourceLoader.has_cached(p) or not ResourceLoader.exists(p):

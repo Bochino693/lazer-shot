@@ -53,6 +53,13 @@ static func mira_fim(ci: CanvasItem) -> void:
 	ci.draw_set_transform_matrix(_base)
 
 
+## Tudo o que for desenhado depois sai com a transformação `t` (girado,
+## esticado, deslocado), inclusive linhas e arcos. Voltar com IDENTITY.
+static func base(ci: CanvasItem, t: Transform2D) -> void:
+	_base = t
+	ci.draw_set_transform_matrix(_base)
+
+
 static func _girar(ci: CanvasItem, pos: Vector2, rot: float, escala: Vector2 = Vector2.ONE) -> void:
 	ci.draw_set_transform_matrix(_base * Transform2D(rot, escala, 0.0, pos))
 

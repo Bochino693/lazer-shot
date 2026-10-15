@@ -106,11 +106,9 @@ func _ready() -> void:
 	process_priority = -100   # atualiza antes das telas lerem
 	# Depois do Tela.gd (autoload anterior), que corrige o giro do evento.
 	get_tree().root.window_input.connect(_ao_evento)
-	# Na TV Box a captura da arma e o cursor transparente (chamadas ao
-	# Android que só este jogo faz) entram num passo vigiado da preparação,
-	# com a tela preta (scripts/aquecedor.gd, passo "arma").
-	if not _android:
-		iniciar_arma()
+	# Captura da arma e cursor transparente logo na partida do app, como até
+	# a 1.24.0 (a última que mostrou a apresentação na TV Box).
+	iniciar_arma(Tela.contorna("arma"))
 
 
 ## Liga a arma: seta transparente e ponteiro capturado. `seguro`: a TV Box
