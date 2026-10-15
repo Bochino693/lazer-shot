@@ -107,6 +107,7 @@ func _preparar_fontes() -> void:
 				# fonte de emoji que o Godot consiga usar).
 				f.allow_system_fallback = false
 				_fontes_guardadas.append(f)
+				_juntar_folhas(f)
 	if ResourceLoader.exists(FONTE_PADRAO):
 		var padrao: Font = load(FONTE_PADRAO)
 		ThemeDB.get_default_theme().default_font = padrao
@@ -114,6 +115,87 @@ func _preparar_fontes() -> void:
 
 
 var _fontes_guardadas: Array[Font] = []
+
+## As letras MSDF (Rodada 24) vêm prontas do APK, mas espalhadas em 8 folhas
+## de 512x512 por fonte (o Godot faz a folha do tamanho da letra, 48 px). Na
+## placa (GLES3) o lote de desenho quebra a cada troca de folha, e as letras
+## de uma palavra caem em folhas diferentes: cada letra virava um desenho por
+## quadro (o dobro com contorno). O COMO JOGAR do Mar custava 265 desenhos por
+## quadro, o placar e os textos de acerto também. Aqui as mesmas imagens das
+## letras vão para uma folha só (nada é desenhado de novo): cada texto sai num
+## desenho e os textos vizinhos se juntam no mesmo.
+const FOLHA_LARGURA := 1024
+## O alto da folha fica livre para alguma letra que ainda apareça (o Godot a
+## desenha ali); as ligaduras (fi, fl...) só aparecem no meio das palavras,
+## por isso são desenhadas antes de juntar.
+const FOLHA_LIVRE := 256
+const FOLHA_MARGEM := 2
+const LIGADURAS := "ff ffi ffl fi fl"
+
+
+func _juntar_folhas(f: FontFile) -> void:
+	if not f.multichannel_signed_distance_field or f.get_cache_count() < 1:
+		return
+	var c := 0
+	var tam := Vector2i(f.msdf_size, 0)
+	if not tam in f.get_size_cache_list(c) or f.get_texture_count(c, tam) <= 1:
+		return
+	var t0 := Time.get_ticks_usec()
+	var ts := TextServerManager.get_primary_interface()
+	var rid: RID = f.get_rids()[0]
+	var frase := ts.create_shaped_text()
+	ts.shaped_text_add_string(frase, LIGADURAS, [rid], f.msdf_size)
+	ts.shaped_text_shape(frase)
+	for g: Dictionary in ts.shaped_text_get_glyphs(frase):
+		if g.get("font_rid", RID()) == rid:
+			f.render_glyph(c, tam, int(g["index"]))
+	ts.free_rid(frase)
+	var n := f.get_texture_count(c, tam)
+	var folhas: Array[Image] = []
+	for i in n:
+		folhas.append(f.get_texture_image(c, tam, i))
+	if folhas[0] == null:
+		return
+	# cada letra com a beirada dela (a filtragem lê 1 px em volta)
+	var letras: Array = []
+	for g in f.get_glyph_list(c, tam):
+		var ti := f.get_glyph_texture_idx(c, tam, g)
+		var uv := f.get_glyph_uv_rect(c, tam, g)
+		if ti < 0 or ti >= n or folhas[ti] == null or uv.size.x <= 0.0 or uv.size.y <= 0.0:
+			continue
+		var de := Rect2i(Vector2i(uv.position.floor()) - Vector2i(FOLHA_MARGEM, FOLHA_MARGEM),
+			Vector2i(uv.size.ceil()) + Vector2i(FOLHA_MARGEM * 2 + 1, FOLHA_MARGEM * 2 + 1))
+		de = de.intersection(Rect2i(Vector2i.ZERO, folhas[ti].get_size()))
+		letras.append([g, ti, uv, de])
+	# prateleiras, das letras mais altas para as mais baixas
+	letras.sort_custom(func(a: Array, b: Array) -> bool: return a[3].size.y > b[3].size.y)
+	var lugares: Array[Vector2i] = []
+	var x := 0
+	var y := FOLHA_LIVRE
+	var alto := 0
+	for l: Array in letras:
+		var s: Vector2i = l[3].size
+		if x + s.x > FOLHA_LARGURA:
+			x = 0
+			y += alto
+			alto = 0
+		lugares.append(Vector2i(x, y))
+		x += s.x
+		alto = maxi(alto, s.y)
+	var folha := Image.create_empty(FOLHA_LARGURA, (y + alto + 3) / 4 * 4, false, folhas[0].get_format())
+	for i in letras.size():
+		folha.blit_rect(folhas[letras[i][1]], letras[i][3], lugares[i])
+	for i in letras.size():
+		var uv: Rect2 = letras[i][2]
+		var de: Rect2i = letras[i][3]
+		f.set_glyph_texture_idx(c, tam, letras[i][0], 0)
+		f.set_glyph_uv_rect(c, tam, letras[i][0], Rect2(Vector2(lugares[i]) + uv.position - Vector2(de.position), uv.size))
+	for i in range(n - 1, -1, -1):
+		f.remove_texture(c, tam, i)
+	f.set_texture_image(c, tam, 0, folha)
+	Tela.marca("letras de %s: %d folhas -> 1 (%dx%d, %d letras, %.0f ms)" % [
+		f.resource_path.get_file(), n, folha.get_width(), folha.get_height(), letras.size(),
+		(Time.get_ticks_usec() - t0) / 1000.0])
 
 
 func _ready() -> void:

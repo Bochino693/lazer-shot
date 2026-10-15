@@ -130,25 +130,28 @@ func _ponto_jato(f: Dictionary, u: float) -> Vector2:
 	return fio.lerp(jato, k)
 
 
+## Tudo sem textura, num arranjo de triângulos só (Triangulos): cada
+## draw_circle/draw_line/draw_polyline era um desenho novo na placa da TV
+## Box, refeito a cada quadro (dezenas por quadro com o barril furado).
 func _draw() -> void:
+	var tri := Triangulos.new()
 	# a madeira molhada (do furo até o pé) e as poças no chão
 	for f in _furos:
 		var p: Vector2 = f["p"]
 		var fim := minf(1.0, f["t"] / 1.2)
 		var y1 := lerpf(p.y, BASE_Y, fim)
-		draw_line(p, Vector2(p.x + f["lado"] * 3.0, y1), COR_MOLHADO, 7.0)
+		tri.reta(p, Vector2(p.x + f["lado"] * 3.0, y1), COR_MOLHADO, 7.0)
 	for f in _furos:
 		var vol: float = f["volume"]
 		if vol <= 0.01:
 			continue
 		var r := 10.0 + 26.0 * sqrt(vol)
 		var c := Vector2(f["x_poca"], CHAO_Y + 22.0 + r * 0.08)
-		draw_set_transform(c, 0.0, Vector2(1.0, 0.26))
-		draw_circle(Vector2.ZERO, r, Color(0.20, 0.01, 0.03, 0.82))
-		draw_circle(Vector2(-r * 0.2, -r * 0.25), r * 0.62, Color(0.34, 0.03, 0.07, 0.6))
+		var ach := Vector2(1.0, 0.26)   # a poça vista de lado
+		tri.elipse(c, Vector2(r, r) * ach, Color(0.20, 0.01, 0.03, 0.82), 20)
+		tri.elipse(c + Vector2(-r * 0.2, -r * 0.25) * ach, Vector2(r, r) * 0.62 * ach, Color(0.34, 0.03, 0.07, 0.6), 16)
 		# reflexo da janela (luz vem do alto à esquerda)
-		draw_circle(Vector2(-r * 0.35, -r * 0.42), r * 0.26, Color(0.95, 0.62, 0.52, 0.22))
-		draw_set_transform(Vector2.ZERO)
+		tri.elipse(c + Vector2(-r * 0.35, -r * 0.42) * ach, Vector2(r, r) * 0.26 * ach, Color(0.95, 0.62, 0.52, 0.22), 12)
 	# os jatos / fios
 	for f in _furos:
 		var idade: float = f["t"]
@@ -156,8 +159,8 @@ func _draw() -> void:
 			continue
 		var pr := _pressao(idade)
 		var largura := lerpf(1.8, 9.0, smoothstep(0.0, 0.6, pr)) * (1.0 - smoothstep(VIDA_FIO - 2.0, VIDA_FIO, idade) * 0.6)
-		var tira := PackedVector2Array()
 		var meio := PackedVector2Array()
+		var ini := tri.pontos.size()
 		var ant := _ponto_jato(f, 0.0)
 		for k in PONTOS + 1:
 			var u := float(k) / PONTOS
@@ -169,24 +172,23 @@ func _draw() -> void:
 			var nrm := Vector2(-tang.y, tang.x)
 			# afina descendo e treme um pouco (o jato não é liso)
 			var w := largura * (1.0 - 0.35 * u) * (1.0 + 0.18 * sin(_t * 23.0 + u * 11.0 + f["semente"]))
-			tira.append(q + nrm * w * 0.5)
-			tira.append(q - nrm * w * 0.5)
+			tri.pontos.append(q + nrm * w * 0.5)
+			tri.pontos.append(q - nrm * w * 0.5)
+			tri.cores.append(COR)
+			tri.cores.append(COR)
 			meio.append(q - nrm * w * 0.18)
 			ant = q
 		# uma tira de triângulos (não depende de triangular um contorno)
-		var idx := PackedInt32Array()
 		for k in PONTOS:
-			idx.append_array([2 * k, 2 * k + 1, 2 * k + 2, 2 * k + 1, 2 * k + 3, 2 * k + 2])
-		var cores := PackedColorArray()
-		cores.resize(tira.size())
-		cores.fill(COR)
-		RenderingServer.canvas_item_add_triangle_array(get_canvas_item(), idx, tira, cores)
-		draw_polyline(meio, Color(COR_CLARA, 0.55), maxf(1.0, largura * 0.22))
+			var a := ini + 2 * k
+			tri.indices.append_array([a, a + 1, a + 2, a + 1, a + 3, a + 2])
+		tri.linha(meio, Color(COR_CLARA, 0.55), maxf(1.0, largura * 0.22))
 		# o vinho correndo: brilhos que descem pelo jato
 		for n in 2:
 			var u2 := fmod(_t * (1.6 + pr * 1.4) + n * 0.5 + f["semente"], 1.0)
-			draw_circle(_ponto_jato(f, u2), maxf(1.0, largura * 0.28), Color(1.0, 0.55, 0.6, 0.45))
+			tri.circulo(_ponto_jato(f, u2), maxf(1.0, largura * 0.28), Color(1.0, 0.55, 0.6, 0.45), 10)
 		# o furo cheio de vinho
-		draw_circle(f["p"], 3.2, COR)
+		tri.circulo(f["p"], 3.2, COR, 10)
 	for g in _gotas:
-		draw_circle(g["pos"], g["tam"], COR)
+		tri.circulo(g["pos"], g["tam"], COR, 8)
+	tri.desenhar(self)

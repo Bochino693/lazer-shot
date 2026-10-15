@@ -1626,6 +1626,72 @@ aparelho e o registro de quedas do Android.
 
 APK 1.27.0 (código 29).
 
+## Rodada 28: o vaso sem derrubar o app, o texto num desenho só e o fundo do Mar continuando
+
+O que a 1.27.0 fez na TV Box: abriu direto no jogo. No Mar, quebrar o vaso
+(o do cavalo-marinho) fechava o app, e as fases davam umas enroscadas ao
+surgir e ao acertar os alvos.
+
+**Por que o vaso derrubava o app:** as rachaduras do vaso e as beiradas dos
+cacos eram desenhadas com linhas suavizadas refeitas a cada quadro. Cada
+linha suavizada vira 3 polígonos, e cada polígono ganha buffers novos na
+placa a cada quadro: dezenas por quadro enquanto o vaso quebrava (140 a 173
+desenhos). Na Mali-G31, essa troca de memória sem parar é o que derruba.
+- As rachaduras e os cacos agora saem num lote só de triângulos por quadro
+  (`scripts/triangulos.gd`: linha, reta, círculo, arco e polígono com cores),
+  e os brilhos saem pelo pincel.
+- O mesmo vale para a explosão da bomba, os raios do combo, os acertos do
+  Egito, os fachos e o giroflex da Arena, o vinho e a janela do Bar, a sombra
+  das garrafas e as molduras do COMO JOGAR.
+- No vaso, o pior quadro tem 104 desenhos (antes, 140 a 173). Em 30 vasos
+  seguidos, nada de memória acumulando.
+
+**Texto num desenho só, o que mais pesava em todas as telas.**
+- As letras do jogo (MSDF, Rodada 24) vinham em 8 folhas de 512x512 por
+  fonte. Na placa (GLES3), o lote de desenho quebra a cada troca de folha, e
+  as letras de uma palavra caíam em folhas diferentes.
+- Por isso cada letra era um desenho por quadro, e o contorno dobrava a conta:
+  - o placar;
+  - os textos de acerto;
+  - os anúncios de combo;
+  - o COMO JOGAR.
+- Agora, na partida do app (`scripts/Maquina.gd`), as mesmas imagens das
+  letras vão para uma folha só. Leva 13 ms por fonte. As letras saem
+  idênticas (conferido pixel a pixel) e cada texto sai num desenho.
+- As ligaduras (fi, fl, ff, ffi, ffl), que o Godot só desenhava na hora,
+  agora vêm prontas no APK (`fonts/*.import`).
+
+| desenhos por quadro | antes | agora |
+|---|---|---|
+| COMO JOGAR do Deserto | 307 | 69 |
+| COMO JOGAR do Mar | 265 | 64 |
+| COMO JOGAR do Bar | 243 | 69 |
+| COMO JOGAR da Arena | 317 | 57 |
+| Mar jogando | 83 | 42 |
+
+**Surgir e acertar:** medido no PC, surgir um alvo custa 0,2 ms e o tiro que
+acerta custa de 1,3 a 2,5 ms. Na TV Box é umas 5 vezes isso e cabe no quadro.
+As imagens que o Bar lê para quebrar as garrafas já ficam guardadas: nada é
+lido da placa no tiro.
+
+**O fundo do Mar sem o borrado** (`tools/gerar_mar_inteiro.py` e
+`tools/completar_textura.py`).
+- Onde era o navio, a Rodada 21 tinha posto névoa, e ficava um borrão atrás
+  do templo. Agora o cenário continua: a pintura original, sem o navio e sem
+  o poneglifo apagado do meio, tem o buraco preenchido com pedaços dela mesma.
+  O método é o do "preenchimento inteligente" dos editores de imagem (busca
+  de quadradinhos parecidos em várias escalas e mistura sem emenda).
+- Acima do chão continuam a água aberta e o penhasco da esquerda, e a cidade
+  com a cachoeira desce atrás do Poseidon.
+- No chão vai água clara e areia, com os pedaços achatados para parecerem
+  mais longe.
+- O templo, o Poseidon e o poneglifo pequeno ficam por cima, nítidos e sem
+  névoa. As pedras grandes não mudam.
+- A versão em alta foi refeita só onde mudou (a @2x com EDSR, depois a @hd e
+  o `.res` em ETC2). `tools/gerar_hd.gd -- atlantis_fundo` comprime só ela.
+
+APK 1.28.0 (código 30).
+
 ## Para testar no PC como se fosse a TV Box
 
 ```

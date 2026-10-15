@@ -228,7 +228,9 @@ func _desenhar_luz() -> void:
 		var s := 260.0 * _k * (0.5 + 0.7 * k)
 		_luz.draw_texture_rect(_brilho, Rect2(_centro - Vector2(s, s) * 0.5, Vector2(s, s)), false,
 			Color(_cor.lerp(Color(1, 1, 1), 0.5), (1.0 - k) * (1.0 - k)))
-	# leque de raios do sol
+	# leque de raios do sol (todos num desenho só: cada draw_polygon era um
+	# desenho novo na placa a cada quadro)
+	var tri := Triangulos.new()
 	for r in _raios:
 		var k: float = r["t"] / r["vida"]
 		if k >= 1.0:
@@ -243,7 +245,8 @@ func _desenhar_luz() -> void:
 		# feixe: forte na base, some na ponta
 		var forte := Color(_cor.lerp(Color(1, 1, 1), 0.4), 0.9 * (1.0 - k))
 		var some := Color(_cor, 0.0)
-		_luz.draw_polygon(PackedVector2Array([base, ponta + lado, ponta - lado]), PackedColorArray([forte, some, some]))
+		tri.triangulo(base, ponta + lado, ponta - lado, forte, some, some)
+	tri.desenhar(_luz)
 	# anéis
 	for a in _aneis:
 		var t: float = a["t"]
