@@ -1983,6 +1983,8 @@ func _resetar_visual_arco(alvo: Area2D) -> void:
 # ═══════════════════════════════════════════════════════════
  
 func _registrar_fx_colisao(pos: Vector2, pontos_ganhos: int, cor: Color) -> void:
+	# caixa-preta: o primeiro acerto de cada partida (scripts/caixa_preta.gd)
+	Tela.marca_primeiro("acerto", "%+d" % pontos_ganhos)
 	var quantidade: int = 18
 	if pontos_ganhos >= 100:
 		quantidade = 42

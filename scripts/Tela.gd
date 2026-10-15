@@ -35,6 +35,7 @@ var _janela_px := Vector2.ZERO   # tamanho da janela (HDMI), em pixels
 var _conteudo := BASE            # a tela em pé que os scripts enxergam
 var _escala := 1.0               # pixels do HDMI por pixel do jogo
 var _caixa: Node = null         # diagnóstico, só grava (scripts/caixa_preta.gd)
+var _primeiros: Dictionary = {}  # marca_primeiro: evento|tela já anotados
 
 
 func _init() -> void:
@@ -134,6 +135,19 @@ func risco_atual() -> String:
 func marca_quadro(txt: String) -> void:
 	if _caixa != null:
 		_caixa.marca_quadro(txt)
+
+
+## Como marca_quadro, mas só a primeira vez de cada `evento` ("tiro",
+## "acerto") em cada tela: "primeiro acerto em Mar (+80)".
+func marca_primeiro(evento: String, detalhe: String = "") -> void:
+	var cena := get_tree().current_scene
+	if cena == null:
+		return
+	var chave := "%s|%d" % [evento, cena.get_instance_id()]
+	if _primeiros.has(chave):
+		return
+	_primeiros[chave] = true
+	marca_quadro("primeiro %s em %s%s" % [evento, cena.name, " (%s)" % detalhe if detalhe != "" else ""])
 
 
 ## Tamanho da tela do jogo (em pé), o mesmo que get_viewport_rect().size.

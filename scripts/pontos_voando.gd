@@ -18,6 +18,10 @@ var _lista: Array[Dictionary] = []
 ## brilho: cor da borda clara por dentro do contorno (o ouro e a prata
 ## parecem metal); transparente = sem.
 func mostrar(pos_tela: Vector2, texto: String, cor: Color, escala: float = 1.0, brilho := Color(0, 0, 0, 0)) -> void:
+	# caixa-preta: o primeiro acerto de cada partida (scripts/caixa_preta.gd);
+	# fora da tela é a preparação das letras (scripts/aviso_tiro.gd)
+	if pos_tela.x > -1000.0:
+		Tela.marca_primeiro("acerto", texto.strip_edges())
 	if fonte == null:
 		return
 	_lista.append({"pos": pos_tela, "texto": texto, "cor": cor, "esc": clampf(escala, 0.6, 1.6), "t": 0.0, "brilho": brilho})
