@@ -607,7 +607,7 @@ var _efeitos: Dictionary = {}
 
 
 func efeito(stream: AudioStream, volume_db: float = 0.0, pitch: float = 1.0, inicio: float = 0.0) -> void:
-	if stream == null:
+	if stream == null or Tela.contorna("som"):
 		return
 	var p := _player_efeito(stream)
 	p.volume_db = volume_db
@@ -618,6 +618,7 @@ func efeito(stream: AudioStream, volume_db: float = 0.0, pitch: float = 1.0, ini
 func _player_efeito(stream: AudioStream) -> AudioStreamPlayer:
 	var p: AudioStreamPlayer = _efeitos.get(stream)
 	if p == null or not is_instance_valid(p):
+		Tela.marca("som: " + stream.resource_path.get_file())
 		p = AudioStreamPlayer.new()
 		p.name = "Efeito"
 		p.bus = "Efeitos"

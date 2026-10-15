@@ -39,6 +39,13 @@ O jogo não mostra nada técnico na tela. Por trás, ele tem duas proteções:
   ele é contornado nas próximas aberturas desta versão: a apresentação é
   pulada, ou os vídeos passam a tocar pelo player do Godot. Todo o resto do
   jogo continua igual. Instalar uma versão nova zera tudo.
+- **Preparação vigiada da placa** (desde a 1.25.0): ao abrir, com a tela
+  preta, cada jeito de desenhar, cada shader e os sons são preparados um
+  por vez. Se o app morrer num desses passos, da abertura seguinte em diante
+  o jogo segue **sem aquele recurso** (luz somada vira mistura comum,
+  partículas somem, o shader vira imagem simples, ou os efeitos sonoros
+  calam) em vez de cair de novo. A caixa-preta diz qual foi
+  (`contornos.txt` e as linhas `preparado ...` de `sessao.txt`).
 
 Para ver o que aconteceu, sem cabo: no gerenciador de arquivos da TV Box,
 abra `Android/data/com.lazersport.lazershot/files/caixa_preta` e copie
@@ -55,7 +62,7 @@ Ele abre o jogo, espera 40 s e salva `build/android/LOGCAT-TVBOX.txt` e a
 pasta `build/android/caixa_preta`. Com `-Instalar`, o mesmo acontece logo
 depois de instalar o APK novo.
 
-A versão do APK aparece em Configurações > Apps da TV Box (1.24.0, código 26).
+A versão do APK aparece em Configurações > Apps da TV Box (1.25.0, código 27).
 
 ## Tela em pé na TV Box
 
@@ -1419,6 +1426,73 @@ objeto é apagado, sem explosão, som nem tremida. Bomba acertada pelo tiro
 continua explodindo.
 
 APK 1.24.0 (código 26).
+
+## Rodada 25: a placa pronta antes da apresentação e o jogo que se protege sozinho
+
+O que a 1.24.0 fez na TV Box: abriu, mas caiu durante a apresentação. Na
+1.23.0 (com a apresentação pulada) caiu no primeiro acerto do Mar.
+
+**O ponto em comum.** O Godot da TV Box (renderizador de compatibilidade)
+tem 5 jeitos de desenhar: retângulo, linha, polígono, instâncias
+(partículas e MultiMesh) e nove-partes (este o jogo não usa). Cada material
+tem um programa próprio na placa para cada jeito, montado na hora em que é
+usado pela primeira vez (`drivers/gles3/rasterizer_canvas_gles3.cpp`). A luz
+somada (`CanvasItemMaterial` com `BLEND_MODE_ADD`), das faíscas, clarões,
+feixes e efeitos de acerto, é um material à parte.
+- Na apresentação, a mira (aos 0,35 s) foi o primeiro desenho de linhas e
+  polígonos com luz somada do app, e o primeiro tiro (1,10 s), as primeiras
+  partículas.
+- No Mar, o primeiro acerto foi a primeira luz somada em polígonos e linhas
+  (antes só havia retângulos e partículas somadas).
+- Na Rodada 13, a última que abria, esses programas eram montados todos
+  juntos ao abrir, e você já tinha dito que "nem sempre abre".
+
+O Mali-G31 monta cada programa no processador, que é fraco. Montar vários no
+meio de uma animação, ou o próprio driver da placa falhando num deles, derruba
+o app. Sem os arquivos da caixa-preta não dá para saber qual dos dois é;
+esta versão resolve o primeiro caso e se defende do segundo.
+
+**Tudo pronto antes do primeiro quadro** (`scripts/aquecedor.gd`,
+`scripts/abertura_ls.gd`). Ao abrir o app, com a tela preta, a placa prepara:
+1. Cada jeito de desenhar com o material comum e com a luz somada: linha,
+   polígono e instâncias, mais o retângulo somado.
+2. As letras das quatro fontes.
+3. Os sons da apresentação, mudos.
+4. Os dois shaders da apresentação.
+
+É **um passo por quadro**, e a apresentação só começa depois. No PC levou
+0,5 s; na TV Box deve levar 1 a 3 s, só na primeira abertura. Os shaders de
+cada fase continuam na troca de tela, com o cartão de carregamento.
+
+**Cada passo é vigiado** (`scripts/caixa_preta.gd`,
+`scripts/contorno_desenho.gd`). Antes de cada passo a caixa-preta anota qual
+é. Se o app morrer ali, na abertura seguinte aquele recurso fica desligado
+no jogo todo, já na primeira queda:
+
+| passo que derrubou | o jogo segue assim |
+|---|---|
+| luz somada (qualquer jeito) | brilhos em mistura comum (mais fracos) |
+| partículas/MultiMesh comuns | faíscas, poeira e cardumes somem |
+| letras | letras desenhadas na hora (sem MSDF) |
+| um shader | a imagem sem o efeito |
+| sons | sem efeitos sonoros |
+
+Retângulo, linha e polígono comuns não têm substituto, porque o jogo inteiro
+é feito deles. Se um deles cair, a caixa-preta mostra qual foi.
+
+Testado no PC com cada contorno ligado à força: a apresentação roda inteira,
+sem erro (fundo preto no lugar do shader, laser sem luz somada, sem faíscas).
+
+**Caixa-preta mais precisa.** Agora ela também grava:
+- cada passo da preparação, com o tempo que levou (`preparado desenho:soma_poligono (35 ms)`);
+- cada momento da apresentação;
+- o primeiro tiro e o primeiro acerto de cada tela;
+- o primeiro uso de cada som.
+
+Cada um desses momentos ganha um `ok` quando os quadros seguintes saem.
+Numa queda, a última linha de `queda.txt` diz o instante exato.
+
+APK 1.25.0 (código 27).
 
 ## Para testar no PC como se fosse a TV Box
 

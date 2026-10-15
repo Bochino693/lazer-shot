@@ -10,6 +10,12 @@ extends Control
 ## e "apresenta" logo depois.
 ## Depois vai para o menu. Qualquer tiro ou START pula.
 ## Tudo desenhado na hora; a única imagem é o logo.
+##
+## Antes do primeiro quadro, com a tela preta, a placa de vídeo prepara cada
+## jeito de desenhar que a apresentação e os efeitos do jogo usam, os dois
+## shaders daqui e os sons, um passo por quadro (scripts/aquecedor.gd). Na
+## TV Box a apresentação caía no primeiro tiro, quando a placa montava a luz
+## somada e as faíscas no meio da animação.
 
 const LOGO := preload("res://sprites/logo_lazer_sport.png")
 const SHADER_FUNDO := preload("res://shaders/abertura_fundo.gdshader")
@@ -59,16 +65,12 @@ var _logo_t := -1.0
 var _games_t := -1.0
 var _apresenta_t := -1.0
 var _roteiro: Array = []           # [tempo, Callable], em ordem
+var _aquecedor: Aquecedor = null   # preparando a placa: a apresentação espera
+static var _marcou := false        # caixa-preta: cada passo, só na 1ª vez
 
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	if not Tela.contorna("abertura"):
-		Tela.risco("abertura")   # se o app morrer aqui, a caixa-preta sabe
-	# Nada das fases é preparado aqui: na partida do app a placa da TV Box só
-	# monta os dois shaders da apresentação. Os de cada fase são montados na
-	# troca de tela, um por quadro, com o cartão de carregamento à vista
-	# (scripts/aquecedor.gd, scripts/TransiaoGlobal.gd).
 	_tela = get_viewport_rect().size
 	_montar()
 	_ajustar()
@@ -94,6 +96,22 @@ func _ready() -> void:
 		[3.58, func() -> void: _bater_games()],
 		[4.25, func() -> void: _apresenta_t = 0.0],
 	]
+	# Com a tela preta: os jeitos de desenhar (luz somada, linhas, polígonos,
+	# faíscas, letras), os dois shaders e os sons daqui, um por quadro. Os
+	# shaders de cada fase ficam para a troca de tela, com o cartão de
+	# carregamento à vista (scripts/TransiaoGlobal.gd).
+	_fundo.visible = false
+	_aquecedor = Aquecedor.shaders([SHADER_FUNDO.resource_path, SHADER_LOGO.resource_path], self,
+		[SOM_TIRO, SOM_IMPACTO, SOM_CARGA, SOM_FINAL, SOM_ALVO])
+	_aquecedor.terminou.connect(_comecar)
+
+
+## A placa está pronta: a apresentação começa.
+func _comecar() -> void:
+	_aquecedor = null
+	_fundo.visible = true
+	if not Tela.contorna("abertura"):
+		Tela.risco("abertura")   # se o app morrer aqui, a caixa-preta sabe
 	var tw := create_tween()
 	tw.tween_property(_escuro, "color:a", 0.0, 0.6)
 
@@ -318,12 +336,18 @@ func _input(event: InputEvent) -> void:
 
 # ───────────────────────────────────────────── quadro a quadro
 func _process(delta: float) -> void:
-	# o primeiro quadro pode demorar (pré-aquecimento): o roteiro não pula
+	if _aquecedor != null:
+		return   # a placa ainda está sendo preparada (tela preta)
+	# um quadro pode demorar: o roteiro não pula
 	delta = minf(delta, 0.05)
 	_t += delta
 	while not _roteiro.is_empty() and _t >= _roteiro[0][0]:
 		var passo: Array = _roteiro.pop_front()
+		if not _marcou:
+			Tela.marca_quadro("apresentação %.2f s" % passo[0])
 		(passo[1] as Callable).call()
+	if _roteiro.is_empty():
+		_marcou = true
 	if _t >= FIM:
 		_sair()
 

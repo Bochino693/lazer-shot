@@ -324,6 +324,9 @@ func mira() -> Vector2:
 ## A tela chama a cada tiro dado (bala gasta): a arma dá o tranco. `forca`
 ## muda com a arma da tela (pistola do bar mais forte, laser da arena leve).
 func coice(forca: float = 1.0) -> void:
+	# caixa-preta: o primeiro tiro de cada tela e se os quadros seguintes
+	# saíram (scripts/caixa_preta.gd)
+	Tela.marca_primeiro("tiro")
 	var agora := Time.get_ticks_msec()
 	var dt := (agora - _ultimo_coice_ms) / 1000.0
 	_ultimo_coice_ms = agora

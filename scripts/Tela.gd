@@ -26,6 +26,7 @@ extends Node
 
 const BASE := Vector2(1024, 1536)
 const CaixaPreta := preload("res://scripts/caixa_preta.gd")
+const ContornoDesenho := preload("res://scripts/contorno_desenho.gd")
 
 var giro := 0
 var mira_direta := true
@@ -34,6 +35,7 @@ var _janela_px := Vector2.ZERO   # tamanho da janela (HDMI), em pixels
 var _conteudo := BASE            # a tela em pé que os scripts enxergam
 var _escala := 1.0               # pixels do HDMI por pixel do jogo
 var _caixa: Node = null         # diagnóstico, só grava (scripts/caixa_preta.gd)
+var _primeiros: Dictionary = {}  # marca_primeiro: evento|tela já anotados
 
 
 func _init() -> void:
@@ -48,6 +50,12 @@ func _ready() -> void:
 	var janela := get_tree().root
 	_aplicar()
 	add_child(_caixa)
+	# a TV Box já caiu preparando algum jeito de desenhar: o jogo segue sem ele
+	if ContornoDesenho.precisa(_caixa.contornos):
+		var contorno := ContornoDesenho.new()
+		contorno.name = "ContornoDesenho"
+		add_child(contorno)
+		contorno.configurar(_caixa.contornos)
 	janela.size_changed.connect(_aplicar)
 	janela.window_input.connect(_corrigir_evento)
 
@@ -115,6 +123,31 @@ func contorna(trecho: String) -> bool:
 func risco(trecho: String) -> void:
 	if _caixa != null:
 		_caixa.risco(trecho)
+
+
+## O trecho arriscado em que o jogo está agora ("" = nenhum).
+func risco_atual() -> String:
+	return _caixa.risco_atual() if _caixa != null else ""
+
+
+## Marca e confere: se os dois quadros seguintes chegarem a ser desenhados,
+## a caixa-preta anota "ok" (diz se uma queda foi no instante do evento).
+func marca_quadro(txt: String) -> void:
+	if _caixa != null:
+		_caixa.marca_quadro(txt)
+
+
+## Como marca_quadro, mas só a primeira vez de cada `evento` ("tiro",
+## "acerto") em cada tela: "primeiro acerto em Mar (+80)".
+func marca_primeiro(evento: String, detalhe: String = "") -> void:
+	var cena := get_tree().current_scene
+	if cena == null:
+		return
+	var chave := "%s|%d" % [evento, cena.get_instance_id()]
+	if _primeiros.has(chave):
+		return
+	_primeiros[chave] = true
+	marca_quadro("primeiro %s em %s%s" % [evento, cena.name, " (%s)" % detalhe if detalhe != "" else ""])
 
 
 ## Tamanho da tela do jogo (em pé), o mesmo que get_viewport_rect().size.
