@@ -1401,6 +1401,11 @@ material comum e a luz somada (que todos os efeitos de acerto usam) são
 montados em todos os jeitos de desenhar (retângulo, polígono, linha,
 partículas), debaixo do preto: o primeiro acerto não monta nada na placa.
 
+**Bomba no chão do Mar** (`scripts/mar.gd`, `_bater_no_chao`). A bomba
+que cai até o chão não explode mais: só sai de cena (some em 0,25 s) e o
+objeto é apagado, sem explosão, som nem tremida. Bomba acertada pelo tiro
+continua explodindo.
+
 APK 1.24.0 (código 26).
 
 ## Para testar no PC como se fosse a TV Box
