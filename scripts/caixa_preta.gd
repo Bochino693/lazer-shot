@@ -1,7 +1,8 @@
 extends Node
 
-## CAIXA-PRETA: o que o jogo estava fazendo quando parou na TV Box. Não
-## mostra nada na tela; só grava.
+## CAIXA-PRETA: o que o jogo estava fazendo quando parou na TV Box. Grava
+## em silêncio; só aparece na tela quando o app fechou sozinho na última vez
+## (a página de queda, scripts/pagina_queda.gd).
 ##
 ## Grava em user://caixa_preta/ (memória interna do app, sem permissão):
 ##   sessao.txt    esta sessão: aparelho, placa de vídeo, memória, cada troca
@@ -12,13 +13,23 @@ extends Node
 ##   queda.txt     a última sessão que parou sozinha em menos de 10 min (não
 ##                 é apagada pelas aberturas seguintes).
 ##   vivo.txt      quanto tempo a sessão está rodando (reescrito a cada 2 s).
+## Os primeiros quadros (1, 2, 3, 10, 60 e 300) também são anotados, com a
+## memória livre do aparelho: numa tela preta, diz se o jogo chegou a
+## desenhar.
 ## Na abertura seguinte, as últimas linhas da sessão anterior também saem no
 ## registro do Android (GERAR_APK_PRO_ULTRA.bat -Registro as puxa pelo adb).
 ## Na TV Box, uma cópia fica também na pasta do app que o gerenciador de
-## arquivos enxerga (Android/data/com.lazersport.lazershot/files/caixa_preta)
-## e, com um pendrive espetado, no próprio pendrive (a mesma pasta
-## Android/data/... dentro dele): é só levar o pendrive ao PC. A cópia
-## começa no passo "pasta" da preparação (scripts/aquecedor.gd).
+## arquivos enxerga (Android/data/com.lazersport.lazershot/files/caixa_preta),
+## desde a partida do app (como na 1.24.0), e, com um pendrive espetado, no
+## próprio pendrive (a mesma pasta Android/data/... dentro dele): é só levar
+## o pendrive ao PC. A pasta do pendrive é pedida ao Android quando o menu
+## aparece pela primeira vez (trecho vigiado "pasta"); dali em diante a
+## cópia vai para ela logo na partida.
+##
+## PÁGINA DE QUEDA (só na TV Box): se a sessão anterior parou sozinha em
+## menos de 10 min, sem ter ido para segundo plano, a abertura seguinte
+## mostra as últimas linhas dela numa página simples, antes de tudo
+## (scripts/pagina_queda.gd). É para tirar uma foto.
 ##
 ## PROTEÇÃO PONTUAL (só na TV Box): o jogo avisa quando entra num trecho que
 ## depende do aparelho (Tela.risco("abertura"), Tela.risco("video")) e
@@ -32,14 +43,14 @@ extends Node
 ##   "shader:<nome>"    aquele shader vira um desenho simples
 ##   "som"              efeitos sonoros desligados
 ##   "arma"             a mira segue o ponteiro sem capturá-lo
-##   "pasta"            sem cópia da caixa-preta fora do app
+##   "pasta"            sem pedir a pasta do pendrive ao Android
 ## (scripts/contorno_desenho.gd aplica). Todo o resto continua igual.
 ## Instalar uma versão nova zera tudo.
 ##
 ## Criada pela Tela (o primeiro autoload) no _init, antes de qualquer cena.
 ## Outros scripts marcam etapas com Tela.marca("texto").
 
-const VERSAO := "1.26.0"
+const VERSAO := "1.27.0"
 const PASTA := "user://caixa_preta"
 const SESSAO := PASTA + "/sessao.txt"
 const ANTERIOR := PASTA + "/anterior.txt"
@@ -52,6 +63,9 @@ const QUEDA_ATE := 600.0       # s: parou sozinha antes disso = provável queda
 const CENA_MENU := "res://scenes/main.tscn"
 const MAX_LINHAS := 2500      # depois disso o arquivo recomeça (fica o cabeçalho)
 const LINHAS_NO_REGISTRO := 40
+const LINHAS_NA_PAGINA := 26  # últimas linhas da sessão anterior na página de queda
+const QUADROS_MARCADOS := [1, 2, 3, 10, 60, 300]
+const PACOTE := "com.lazersport.lazershot"
 
 
 ## Escreve no arquivo; o motor chama de qualquer thread.
@@ -141,6 +155,11 @@ var _cena_id := 0
 var _externas: Array[String] = []   # pastas visíveis fora do app (interna e pendrive)
 var _conferir := 0     # quadros que faltam para anotar o "ok" de marca_quadro
 var _conferir_txt := ""
+var _quadros := 0
+var _pendrive := false  # a pasta do pendrive já foi pedida nesta sessão
+## Página de queda: [cabeçalho da sessão anterior, últimas linhas dela];
+## vazia = a sessão anterior terminou bem (ou não é TV Box).
+var pagina: Array[PackedStringArray] = []
 
 
 func _init() -> void:
@@ -162,21 +181,18 @@ func _init() -> void:
 
 
 func _ready() -> void:
+	# como na 1.24.0: a pasta do app que o gerenciador de arquivos enxerga
+	# (e a do pendrive, se ela já existir) recebe a caixa-preta já na partida
+	_externas = _pastas_externas()
+	for caminho in _externas:
+		marca("cópia da caixa-preta em " + caminho)
+	_copiar_fora(ANTERIOR, "anterior.txt")
+	_copiar_fora(QUEDA, "queda.txt")
+	_copiar_fora(SESSAO, "sessao.txt")
 	marca("vídeo: %s | %s | %s | tela %s | janela %s" % [RenderingServer.get_video_adapter_name(), RenderingServer.get_video_adapter_vendor(),
 		RenderingServer.get_video_adapter_api_version(), DisplayServer.screen_get_size(), DisplayServer.window_get_size()])
-	var primeira := get_tree().current_scene
-	if contorna("abertura") and primeira != null and primeira.scene_file_path != CENA_MENU:
-		# a apresentação já derrubou o app nesta versão: ela fica parada e
-		# escondida (ainda não desenhou nada) e o jogo vai direto para o menu
-		primeira.process_mode = Node.PROCESS_MODE_DISABLED
-		if primeira is CanvasItem:
-			(primeira as CanvasItem).visible = false
-		_ir_para_menu.call_deferred()
-
-
-func _ir_para_menu() -> void:
-	marca("contorno: pulando a apresentação")
-	TransicaoGlobal.trocar_cena(CENA_MENU, 0.0, 0.3)
+	# (o contorno "abertura" é aplicado pela própria apresentação: ela vai
+	# direto para o menu, scripts/abertura_ls.gd)
 
 
 ## Este trecho já derrubou o app nesta versão?
@@ -186,6 +202,11 @@ func contorna(trecho: String) -> bool:
 
 func risco_atual() -> String:
 	return _risco
+
+
+## Quantos segundos a sessão anterior durou (-1: não havia).
+func duracao_anterior() -> float:
+	return _duracao_anterior
 
 
 ## Entrando ("abertura", "video") ou saindo ("") de um trecho arriscado.
@@ -233,6 +254,10 @@ func marca_quadro(txt: String) -> void:
 
 func _process(delta: float) -> void:
 	_t += delta
+	if _quadros < 300:
+		_quadros += 1
+		if _quadros in QUADROS_MARCADOS:
+			marca("quadro %d | %s" % [_quadros, _estado()])
 	if _conferir > 0:
 		_conferir -= 1
 		if _conferir == 0:
@@ -244,6 +269,9 @@ func _process(delta: float) -> void:
 		if cena != null:
 			marca("TELA %s (%s) | %s" % [cena.name, cena.scene_file_path.get_file(), _estado()])
 			_copiar_fora(SESSAO, "sessao.txt")
+			if cena.scene_file_path == CENA_MENU and not _pendrive:
+				_pendrive = true
+				get_tree().create_timer(3.0).timeout.connect(_pasta_do_pendrive)
 	_vivo_t -= delta
 	if _vivo_t <= 0.0:
 		_vivo_t = 2.0
@@ -257,51 +285,63 @@ func _process(delta: float) -> void:
 		_copiar_fora(SESSAO, "sessao.txt")
 
 
-## Passo "pasta" da preparação: acha as pastas do app que ficam visíveis
-## fora dele (sem permissão nenhuma) e copia a caixa-preta para elas.
-func abrir_pasta_externa() -> void:
-	if not _externas.is_empty():
+## A pasta do app em cada pendrive/cartão: o Android só a cria quando o app
+## pede a lista (getExternalFilesDirs). Uma vez por sessão, com o menu na
+## tela, num trecho vigiado: se o app cair aqui, da próxima vez não pede.
+func _pasta_do_pendrive() -> void:
+	if OS.get_name() != "Android" or contorna("pasta") or not Engine.has_singleton("AndroidRuntime"):
 		return
-	for p in _pastas_externas():
+	var antes := _risco
+	risco("pasta")
+	var achadas: Array[String] = []
+	var rt = Engine.get_singleton("AndroidRuntime")
+	var ctx = rt.getApplicationContext() if rt != null else null
+	var todas = ctx.getExternalFilesDirs(null) if ctx != null else null
+	if todas is Array:
+		for d in todas:
+			if d != null:
+				achadas.append(str(d.getAbsolutePath()))
+	risco(antes)
+	var novas := 0
+	for p in achadas:
 		var caminho := p.path_join("caixa_preta")
+		if caminho in _externas:
+			continue
 		if DirAccess.make_dir_recursive_absolute(caminho) == OK or DirAccess.dir_exists_absolute(caminho):
 			_externas.append(caminho)
 			marca("cópia da caixa-preta em " + caminho)
-	_copiar_fora(ANTERIOR, "anterior.txt")
-	_copiar_fora(QUEDA, "queda.txt")
-	_copiar_fora(SESSAO, "sessao.txt")
+			novas += 1
+	if novas > 0:
+		_copiar_fora(ANTERIOR, "anterior.txt")
+		_copiar_fora(QUEDA, "queda.txt")
+		_copiar_fora(SESSAO, "sessao.txt")
 
 
-## Android/data/<app>/files na memória da TV Box e em cada pendrive/cartão.
+## Android/data/<app>/files/caixa_preta na memória da TV Box (pedida ao
+## Android, como na 1.24.0) e em cada pendrive onde a pasta do app já existe
+## (criada numa sessão anterior por _pasta_do_pendrive).
 func _pastas_externas() -> Array[String]:
 	var r: Array[String] = []
 	if OS.get_name() != "Android" or not Engine.has_singleton("AndroidRuntime"):
 		return r
 	var rt = Engine.get_singleton("AndroidRuntime")
 	var ctx = rt.getApplicationContext() if rt != null else null
-	if ctx == null:
-		return r
-	var dir = ctx.getExternalFilesDir(null)
+	var dir = ctx.getExternalFilesDir(null) if ctx != null else null
+	var candidatas: Array[String] = []
 	if dir != null:
-		r.append(str(dir.getAbsolutePath()))
-	# o Android cria a pasta do app em cada volume (pendrive) ao pedir a lista
-	var todas = ctx.getExternalFilesDirs(null)
-	if todas is Array:
-		for d in todas:
-			if d != null:
-				var c := str(d.getAbsolutePath())
-				if not (c in r):
-					r.append(c)
-	# e, se a lista não vier, procura os volumes montados em /storage
-	var pacote := "com.lazersport.lazershot"
+		candidatas.append(str(dir.getAbsolutePath()))
 	var vols := DirAccess.open("/storage")
 	if vols != null:
 		for v in vols.get_directories():
 			if v == "emulated" or v == "self":
 				continue
-			var c := "/storage/%s/Android/data/%s/files" % [v, pacote]
-			if DirAccess.dir_exists_absolute(c) and not (c in r):
-				r.append(c)
+			var c := "/storage/%s/Android/data/%s/files" % [v, PACOTE]
+			if DirAccess.dir_exists_absolute(c) and not (c in candidatas):
+				candidatas.append(c)
+	for p in candidatas:
+		var caminho := p.path_join("caixa_preta")
+		if DirAccess.make_dir_recursive_absolute(caminho) == OK or DirAccess.dir_exists_absolute(caminho):
+			r.append(caminho)
 	return r
 
 
@@ -316,10 +356,31 @@ func _copiar_fora(origem: String, nome: String) -> void:
 
 
 func _estado() -> String:
-	return "%d fps | memória %d MB | texturas %d MB | nós %d" % [Engine.get_frames_per_second(),
+	return "%d fps | memória %d MB | texturas %d MB | nós %d | livre no aparelho %d MB" % [Engine.get_frames_per_second(),
 		int(OS.get_static_memory_usage()) >> 20,
 		int(Performance.get_monitor(Performance.RENDER_TEXTURE_MEM_USED)) >> 20,
-		int(Performance.get_monitor(Performance.OBJECT_NODE_COUNT))]
+		int(Performance.get_monitor(Performance.OBJECT_NODE_COUNT)),
+		int(OS.get_memory_info().get("available", 0)) >> 20]
+
+
+## O app saindo da tela (HOME, outro app) e voltando: se ele for fechado pelo
+## Android lá atrás, não foi queda.
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_APPLICATION_PAUSED:
+		marca("app em segundo plano")
+	elif what == NOTIFICATION_APPLICATION_RESUMED:
+		marca("app de volta")
+
+
+## A última notícia da sessão é "app em segundo plano" (sem "app de volta"
+## depois)?
+static func _em_segundo_plano(linhas: PackedStringArray) -> bool:
+	for i in range(linhas.size() - 1, -1, -1):
+		if linhas[i].contains("app de volta"):
+			return false
+		if linhas[i].contains("app em segundo plano"):
+			return true
+	return false
 
 
 func _guardar_sessao_anterior() -> void:
@@ -344,6 +405,12 @@ func _guardar_sessao_anterior() -> void:
 		print("CAIXA-PRETA | ", l)
 	if OS.get_name() != "Android" and OS.get_environment("LAZER_CAIXA") != "1":
 		return   # no PC o jogo é parado pelo editor a toda hora: não é falha
+	if _em_segundo_plano(anterior):
+		return   # foi fechado pelo Android lá atrás (HOME, outro app): não é queda
+	if _duracao_anterior < QUEDA_ATE:
+		# a página de queda mostra o começo (aparelho, placa) e o fim
+		pagina = [anterior.slice(0, mini(5, anterior.size())),
+			anterior.slice(maxi(5, anterior.size() - LINHAS_NA_PAGINA))]
 	# morreu dentro de um trecho arriscado desta mesma versão: contorna só ele
 	var r := risco_anterior.split("|")
 	if r.size() == 2 and r[0] == VERSAO and r[1] != "" and not (r[1] in contornos):

@@ -27,54 +27,57 @@ A janela fica aberta e o histórico completo vai para
 
 ### Se o jogo não abrir ou fechar sozinho na TV Box
 
-O jogo não mostra nada técnico na tela. Por trás, ele tem duas proteções:
+O jogo não mostra nada técnico na tela, com uma exceção: a **página de
+queda** (abaixo). Por trás, ele tem estas proteções:
 
 - **Caixa-preta** (`scripts/caixa_preta.gd`): grava em silêncio o aparelho,
-  a placa de vídeo, a memória, cada troca de tela, cada erro e um pulso a
+  a placa de vídeo, a memória, os primeiros quadros desenhados (com a
+  memória livre do aparelho), cada troca de tela, cada erro e um pulso a
   cada 30 s. Cada linha vai para o disco na hora. A última sessão que parou
   sozinha em menos de 10 min fica guardada como `queda.txt`.
+- **Página de queda** (desde a 1.27.0, `scripts/pagina_queda.gd`): se o app
+  fechou sozinho na última vez (em menos de 10 min, sem ter ido para a tela
+  inicial da TV Box), a abertura seguinte mostra, antes de tudo, o começo e
+  o fim da caixa-preta daquela sessão, em letras simples. **Tire uma foto
+  da tela inteira e mande.** A última linha diz onde o jogo estava. Ela
+  fecha com um tiro, com START ou sozinha em 30 s, e o jogo segue.
 - **Contorno pontual** (só na TV Box): o jogo avisa quando entra num trecho
   que depende do aparelho (a apresentação Lazer & Sport, um vídeo começando
-  pelo decodificador da TV Box). Se o app morrer **dentro** desse trecho, só
-  ele é contornado nas próximas aberturas desta versão: a apresentação é
-  pulada, ou os vídeos passam a tocar pelo player do Godot. Todo o resto do
-  jogo continua igual. Instalar uma versão nova zera tudo.
-- **Preparação vigiada** (desde a 1.25.0): ao abrir, com a tela preta,
-  o jogo prepara um item por vez: cada jeito de desenhar, as letras, a
-  captura da arma, a pasta da caixa-preta, os sons e os shaders. Embaixo
-  aparece uma fileira de traços, um por item, sem texto: aceso = pronto,
-  vermelho = esse item derrubou o app antes. Se o app morrer num item, da
-  abertura seguinte em diante o jogo segue **sem ele** em vez de cair de
-  novo. A apresentação também é pulada já na primeira queda dentro dela.
-  Sem o item, o jogo fica assim:
-  - luz somada: vira mistura comum;
-  - partículas: somem;
-  - shader: vira imagem simples;
-  - sons: os efeitos calam;
-  - captura da arma: a mira segue o ponteiro sem capturá-lo.
+  pelo decodificador da TV Box, um shader de fase sendo montado, a pasta do
+  pendrive). Se o app morrer **dentro** desse trecho, só ele é contornado
+  nas próximas aberturas desta versão: a apresentação é pulada, os vídeos
+  passam a tocar pelo player do Godot, o shader vira imagem simples, a
+  pasta do pendrive não é mais pedida. Todo o resto do jogo continua igual.
+  Instalar uma versão nova zera tudo.
 
-  A caixa-preta diz qual foi: `contornos.txt` e as linhas `preparado ...`
-  de `sessao.txt`. Se a TV Box cair, **tire uma foto da fileira de traços**.
+**Instale sempre por cima** (sem desinstalar a versão anterior): a
+caixa-preta da versão anterior continua lá e a página de queda mostra onde
+ela parou.
 
-Para ver o que aconteceu, sem cabo: deixe o **pendrive espetado na TV Box**,
-abra o jogo (mesmo que ele caia) e abra de novo. Desde a 1.26.0 o jogo copia
-a caixa-preta sozinho para o pendrive. No PC, ela fica na pasta
+Para ver tudo o que aconteceu, sem cabo: deixe o **pendrive espetado na TV
+Box**. Quando o menu aparece pela primeira vez, o jogo pede ao Android a
+pasta dele no pendrive e copia a caixa-preta para lá; daí em diante a cópia
+vai também a cada abertura. No PC, ela fica na pasta
 `Android\data\com.lazersport.lazershot\files\caixa_preta` do pendrive:
 `queda.txt`, `anterior.txt` e `sessao.txt`. A mesma pasta também fica na
 memória da TV Box (gerenciador de arquivos > `Android/data/...`).
 
-Com adb (TV Box com a depuração ligada, no cabo ou com
-`adb connect IP-DA-TVBOX`):
+Com adb (TV Box com a depuração ligada, no cabo ou pela rede):
 
 ```
-GERAR_APK_PRO_ULTRA.bat -Registro
+GERAR_APK_PRO_ULTRA.bat -Registro -Ip IP-DA-TVBOX
 ```
 
-Ele abre o jogo, espera 40 s e salva `build/android/LOGCAT-TVBOX.txt` e a
-pasta `build/android/caixa_preta`. Com `-Instalar`, o mesmo acontece logo
-depois de instalar o APK novo.
+Ele conecta na TV Box pelo IP, abre o jogo, espera 60 s (não mexa na TV Box)
+e salva `build/android/LOGCAT-TVBOX.txt` (o registro do Android, com o
+motivo de uma queda) e a pasta `build/android/caixa_preta`. Com `-Instalar`
+(e o mesmo `-Ip`), o mesmo acontece logo depois de instalar o APK novo. O IP
+da TV Box aparece em Configurações > Rede; a depuração fica em
+Configurações > Preferências do dispositivo > Opções do desenvolvedor >
+Depuração USB/ADB (as opções do desenvolvedor aparecem depois de clicar 7
+vezes em "Versão" ou "Build" em Sobre).
 
-A versão do APK aparece em Configurações > Apps da TV Box (1.26.0, código 28).
+A versão do APK aparece em Configurações > Apps da TV Box (1.27.0, código 29).
 
 ## Tela em pé na TV Box
 
@@ -1556,6 +1559,72 @@ para 2 MB, com a qualidade praticamente igual. Dois deles já eram QOA e
 tocavam na TV Box. As músicas já eram MP3 comprimido.
 
 APK 1.26.0 (código 28).
+
+## Rodada 27: a partida do app de volta ao jeito que abria
+
+O que a 1.26.0 fez na TV Box: ficou na tela preta.
+
+**O que cada versão fez na TV Box:**
+
+| versão | na TV Box |
+|---|---|
+| 1.22.0 | não abriu (preparava todos os shaders na partida do app) |
+| 1.23.0 | abriu; a apresentação não apareceu, o menu demorou e o Mar fechou no primeiro acerto num vaso |
+| 1.24.0 | abriu e mostrou a apresentação; caiu durante ela |
+| 1.25.0 | tela preta e voltou para a tela inicial da TV Box |
+| 1.26.0 | tela preta |
+
+Entre a 1.24.0 e as duas seguintes só mudou uma coisa na partida do app: a
+partir da 1.25.0 o jogo preparava a placa de vídeo (cada jeito de desenhar,
+as letras, os sons) antes da apresentação. É o mesmo tipo de coisa que a
+Rodada 23 tinha tirado da 1.22.0, que também não abria. Não é a geração do
+APK (o APK gerado do jeito do `.bat` é igual ao gerado aqui) nem o motor (o
+Dragon Bowling usa o mesmo Godot 4.6.1, com as mesmas configurações, na
+mesma TV Box).
+
+**A partida do app volta a ser a da 1.24.0:**
+- nada é preparado antes da apresentação (`scripts/aquecedor.gd`). Os
+  shaders de cada fase continuam sendo montados na troca de tela, um por
+  quadro, com o cartão de carregamento, como na 1.23.0;
+- a captura da arma volta para o começo, como até a 1.24.0
+  (`scripts/MiraGlobal.gd`);
+- a caixa-preta volta a ser copiada para a pasta do app logo na partida,
+  como na 1.24.0. A pasta do pendrive só é pedida ao Android com o menu na
+  tela, num trecho vigiado.
+
+**A apresentação mais simples possível para a placa**
+(`scripts/abertura_ls.gd`). Tudo é desenhado pelo pincel: retângulos de uma
+textura só, o mesmo jeito que a mira e os tiros já usam em todas as telas.
+- placas, furos, mira, feixes, clarões e onda de choque;
+- faíscas, estouro e brasas viraram pontos de luz desenhados pela própria
+  apresentação, sem o sistema de partículas;
+- na TV Box, sem luz somada (mistura comum).
+
+A placa monta 3 programas para ela: o comum e os dois shaders da
+apresentação. Antes eram 6 ou mais. O visual é praticamente o mesmo (fotos
+conferidas no PC, com e sem a luz somada); na TV Box os brilhos ficam só um
+pouco menos estourados.
+
+**Troca de tela na TV Box:** a cena nova é carregada numa thread só, como no
+Dragon Bowling. Há menos disputa nos 4 núcleos e menos memória ocupada ao
+mesmo tempo.
+
+**Página de queda e caixa-preta mais precisa:** veja "Se o jogo não abrir ou
+fechar sozinho na TV Box". A caixa-preta também anota:
+- os primeiros quadros (1, 2, 3, 10, 60 e 300), com a memória livre do
+  aparelho;
+- quando o app vai para segundo plano. Um app fechado pelo Android lá atrás
+  não conta como queda.
+
+**Na primeira abertura da 1.27.0**, instalada por cima da 1.26.0, a página
+de queda deve aparecer com o fim da sessão da 1.26.0. Essa foto diz onde a
+1.26.0 parou.
+
+**Gerador:** `-Ip` conecta o adb na TV Box pela rede (`-Registro -Ip ...`,
+`-Instalar -Ip ...`). O registro espera 60 s e traz também a memória do
+aparelho e o registro de quedas do Android.
+
+APK 1.27.0 (código 29).
 
 ## Para testar no PC como se fosse a TV Box
 
