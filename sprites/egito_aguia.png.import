@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/egito_aguia.png-91ef69dc9aa1f6e9b002c07f26387
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0

@@ -15,7 +15,7 @@ dest_files=["res://.godot/imported/egito_sol_disco.png-16c60f0ea2dae07b000a4c9a3
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0
