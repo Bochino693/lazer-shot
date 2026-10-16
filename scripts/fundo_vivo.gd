@@ -18,6 +18,9 @@ extends Control
 
 const SHADER := preload("res://shaders/fundo_vivo.gdshader")
 const SHADER_DESERTO := preload("res://shaders/deserto_fundo.gdshader")
+## Qualidade leve (TV Box mais fraca, Maquina.qualidade_leve): a mesma
+## imagem e máscara com menos contas, em todos os fundos.
+const SHADER_LEVE := preload("res://shaders/fundo_vivo_leve.gdshader")
 
 ## img, máscara e cor de destaque de cada fundo.
 const FUNDOS := {
@@ -83,7 +86,10 @@ func _criar_camada(chave: String) -> void:
 	camada.visible = false
 	var cor: Color = dados[2]
 	var mat := ShaderMaterial.new()
-	if chave == "deserto":
+	if Maquina.qualidade_leve():
+		mat.shader = SHADER_LEVE
+		mat.set_shader_parameter("cor", Vector3(cor.r, cor.g, cor.b))
+	elif chave == "deserto":
 		mat.shader = SHADER_DESERTO
 		mat.set_shader_parameter("cor_energia", Vector3(cor.r, cor.g, cor.b))
 	else:
@@ -101,7 +107,7 @@ func _criar_camada(chave: String) -> void:
 func _criar_faiscas() -> void:
 	var p := CPUParticles2D.new()
 	p.name = "Faiscas"
-	p.amount = 34
+	p.amount = 14 if Maquina.qualidade_leve() else 34
 	p.lifetime = 6.0
 	p.preprocess = 6.0
 	p.emission_shape = CPUParticles2D.EMISSION_SHAPE_RECTANGLE

@@ -123,6 +123,9 @@ const BASE_TEMPLO := 790.0   # daqui para cima, tudo longe
 static func z_desenho(z: float) -> int:
 	return 100 + int(round(60.0 / maxf(z, 0.05)))
 const MAX_DANOS := 12
+## Qualidade leve (TV Box mais fraca): cada furo é conta em cada ponto da
+## pedra (shaders/mar_pedra.gdshader); ficam só os últimos estes.
+const MAX_DANOS_LEVE := 4
 const FOLGA_PEDRA := 24.0    # tools/gerar_camadas.py MAR_FOLGA
 
 var _baleias: Array = []
@@ -648,7 +651,8 @@ func _criar_pedras() -> void:
 			mat.set_shader_parameter("tam_foto", fundo.texture.get_size())
 			var mf := fundo.material as ShaderMaterial
 			if mf != null:
-				for nome in ["profundidade", "caustica", "caustica_perto", "raios"]:
+				# (forca_caustica: 0 na qualidade leve; sem valor, o padrão)
+				for nome in ["profundidade", "caustica", "caustica_perto", "raios", "forca_caustica"]:
 					mat.set_shader_parameter(nome, mf.get_shader_parameter(nome))
 		mat.set_shader_parameter("canto", tex_canto)
 		s.material = mat
@@ -725,7 +729,8 @@ func _quebrar(p: Dictionary, pos: Vector2, local: Vector2) -> void:
 	var raio := randf_range(13.0, 18.0)
 	var danos: Array = p["danos"]
 	danos.append(Vector4(lm.x / tam.x, lm.y / tam.y, raio / tam.x, randf()))
-	while danos.size() > MAX_DANOS:
+	var limite := MAX_DANOS_LEVE if Maquina.qualidade_leve() else MAX_DANOS
+	while danos.size() > limite:
 		danos.pop_front()
 	var arr := PackedVector4Array()
 	for d in danos:

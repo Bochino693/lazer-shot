@@ -3310,6 +3310,10 @@ func _ajustar_background_fullscreen() -> void:
 		mat_fundo.set_shader_parameter("caustica", TEX_CAUSTICA)
 		mat_fundo.set_shader_parameter("caustica_perto", TEX_CAUSTICA)
 		mat_fundo.set_shader_parameter("raios", TEX_RAIOS)
+		if Maquina.qualidade_leve():
+			# TV Box mais fraca: sem a cáustica (os fachos de sol continuam);
+			# as pedras copiam este valor (scripts/mar_vida.gd)
+			mat_fundo.set_shader_parameter("forca_caustica", 0.0)
 		background.material = mat_fundo
 	if _profundo != null:
 		_profundo.fundo = background

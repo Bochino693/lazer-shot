@@ -114,6 +114,8 @@ func _criar_interface() -> void:
 	_opcoes(coluna, "Ranking na abertura", "", "ranking/ranking_ativo", [[true, "LIGADO"], [false, "DESLIGADO"]])
 	_opcoes(coluna, "Vídeo pelo hardware", "decodificador da TV Box (desligado: player interno do jogo)", "video/nativo", [[true, "LIGADO"], [false, "DESLIGADO"]])
 	_opcoes(coluna, "Imagem do vídeo", "se o vídeo aparecer de cabeça para baixo", "video/virar", [[false, "NORMAL"], [true, "VIRADA"]])
+	# leve: a TV Box mais fraca (Maquina.qualidade_leve)
+	_opcoes(coluna, "Qualidade da imagem", "automática: leve na TV Box", "video/qualidade", [["auto", "AUTOMÁTICA"], ["leve", "LEVE"], ["completa", "COMPLETA"]])
 
 	# SOM
 	_secao(coluna, "SOM")

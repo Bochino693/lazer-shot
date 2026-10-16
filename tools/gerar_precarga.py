@@ -112,6 +112,10 @@ def shaders_fundo_vivo(texto, fundos):
             sh = "res://shaders/deserto_fundo.gdshader" if chave == "deserto" else "res://shaders/fundo_vivo.gdshader"
             if sh not in saida:
                 saida.append(sh)
+    # na qualidade leve todos os fundos usam este (a TransicaoGlobal monta só
+    # os shaders da qualidade em uso)
+    if saida:
+        saida.append("res://shaders/fundo_vivo_leve.gdshader")
     return saida
 
 

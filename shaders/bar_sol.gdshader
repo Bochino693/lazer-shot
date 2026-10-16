@@ -8,11 +8,17 @@ render_mode blend_add;
 
 uniform vec3 cor_luz : source_color = vec3(1.0, 0.78, 0.48);
 uniform float forca = 0.46;
+// false na qualidade leve (TV Box mais fraca, scripts/bar_sol.gd): o feixe
+// sem as listras (dois senos em cada ponto dele)
+uniform bool listras_ligadas = true;
 
 varying vec4 cor_no;
+// a respiração das nuvens só depende do tempo: sai no vértice
+varying float nuvem;
 
 void vertex() {
 	cor_no = COLOR;
+	nuvem = 0.86 + 0.14 * sin(TIME * 0.21) * sin(TIME * 0.137 + 1.3);
 }
 
 // As listras seguem a direção de cada raio saindo da janela (a inclinação
@@ -23,12 +29,13 @@ const vec2 JANELA = vec2(30.0, 18.0);
 
 void fragment() {
 	vec3 t = texture(TEXTURE, UV).rgb;
-	float longe = t.b;
-	vec2 v = UV * TAM - JANELA;
-	float s = v.x / max(v.y, 4.0);
-	float listras = 0.72
-		+ 0.18 * sin(s * 150.0 + TIME * 0.55 - longe * 3.0)
-		+ 0.10 * sin(s * 390.0 - TIME * 0.9 + longe * 7.0);
-	float nuvem = 0.86 + 0.14 * sin(TIME * 0.21) * sin(TIME * 0.137 + 1.3);
+	float listras = 0.72;
+	if (listras_ligadas) {
+		float longe = t.b;
+		vec2 v = UV * TAM - JANELA;
+		float s = v.x / max(v.y, 4.0);
+		listras += 0.18 * sin(s * 150.0 + TIME * 0.55 - longe * 3.0)
+			+ 0.10 * sin(s * 390.0 - TIME * 0.9 + longe * 7.0);
+	}
 	COLOR = vec4(cor_luz * cor_no.rgb, t.r * listras * nuvem * forca * cor_no.a);
 }

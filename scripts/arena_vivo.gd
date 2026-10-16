@@ -24,6 +24,7 @@ extends Node2D
 ## Tudo com o Pincel (uma textura, poucos desenhos) e quase nada de cálculo.
 
 const SHADER := preload("res://shaders/fundo_vivo.gdshader")
+const SHADER_LEVE := preload("res://shaders/fundo_vivo_leve.gdshader")   # TV Box mais fraca
 # load() e não preload(): o Godot 4.6 nunca descarrega um script já carregado,
 # e o que ele pré-carrega ficava na memória depois da primeira partida.
 var MASCARA: Texture2D = load("res://sprites/arena_mascara.png")
@@ -125,7 +126,7 @@ func _ready() -> void:
 
 func _material(cor: Color, fase: float) -> ShaderMaterial:
 	var m := ShaderMaterial.new()
-	m.shader = SHADER
+	m.shader = SHADER_LEVE if Maquina.qualidade_leve() else SHADER
 	m.set_shader_parameter("mascara", MASCARA)
 	m.set_shader_parameter("cor", Vector3(cor.r, cor.g, cor.b))
 	m.set_shader_parameter("respiro", 0.0)
@@ -230,6 +231,11 @@ func _process(delta: float) -> void:
 	_fixa.position = fundo.position
 	_fixa.scale = fundo.scale
 	_fixa.visible = _fixa.modulate.a > 0.004 or _aquecer > 0
+	# com a arte fixa cobrindo tudo, o fundo de baixo nem é pintado (uma tela
+	# inteira a menos por quadro; as duas imagens são opacas)
+	var coberto := _fixa.visible and _fixa.modulate.a >= 0.999
+	if fundo.visible == coberto:
+		fundo.visible = not coberto
 
 	var som := Maquina.pulso_vivo()
 	_mat_base.set_shader_parameter("grave", som.x)

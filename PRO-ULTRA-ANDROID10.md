@@ -1692,10 +1692,91 @@ lido da placa no tiro.
 
 APK 1.28.0 (código 30).
 
+## Rodada 29: versão leve para a TV Box mais fraca e o Egito sem travar no meio da partida
+
+O que a 1.28.0 fez na TV Box (PROSB-3000: Allwinner H313, Mali-G31 MP2,
+2 GB): no Egito, no meio da partida, travava.
+
+**Por que travava.** O que pesava era a placa de vídeo, não o processador:
+os scripts do Egito gastam ~2,8 ms por quadro no PC, e a lógica dos alvos,
+menos de 1 ms.
+- O fundo do Egito (`shaders/deserto_fundo.gdshader`) faz contas pesadas
+  em cada ponto da tela de 1920x1080: ar quente, nuvens, luz do cristal no
+  chão, onda da batida e pontas de ouro. Na Mali-G31 (2 núcleos) isso
+  sozinho passa de um quadro inteiro.
+- Os raios girando em volta do sol e da lua são outro quadrado de ~900x900
+  com contas em cada ponto.
+- A cada 30 s de partida o sol vira lua (e o contrário). O pôr do sol
+  durava 5,4 s com os dois fundos, os dois astros, o recorte das pirâmides e
+  o crepúsculo ao mesmo tempo, ~40% mais caro que o resto da partida. Era o
+  "meio da partida" travando.
+- Além disso, a caixa-preta copiava a sessão inteira para o pendrive a cada
+  30 s no mesmo quadro do jogo. No pendrive isso leva de dezenas a centenas
+  de ms: um tranco a cada 30 s.
+
+**Qualidade da imagem LEVE** (`Maquina.qualidade_leve()`, configuração
+"Qualidade da imagem": AUTOMÁTICA / LEVE / COMPLETA). Na automática, a TV
+Box (Android) fica na leve e o PC na completa. A TV Box mais forte que chega
+depois pode escolher COMPLETA ali, sem gerar outro APK. Para testar no PC:
+`LAZER_QUALIDADE=leve LAZER_RITMO=1`. Na leve:
+- **Todas as telas** a 30 quadros por segundo cravados, e os enfeites
+  opcionais de cada fase (grupo `efeito_opcional`) apagados desde o começo:
+  - poeira e faíscas do Egito;
+  - cardumes e partículas boiando do Mar;
+  - poeira no feixe de sol do Bar.
+- **Egito:**
+  - o fundo é só a imagem andando com a câmera, com as pontas de ouro
+    reagindo ao jogo como antes (`shaders/egito_fundo_leve.gdshader`);
+  - sem os raios em volta do sol e da lua (o halo continua);
+  - a troca sol/lua é um cruzamento de 1 s, com o astro parado no lugar;
+  - olhos, águias, planos, cristais, feixes e brilhos continuam iguais.
+- **Menu, ranking, cenários e Arena:** os fundos vivos usam
+  `shaders/fundo_vivo_leve.gdshader`. Ficam a mesma imagem e máscara, a
+  respiração, as luzes com o grave, o brilho na batida e a vinheta. Saem as
+  ondas, o reflexo correndo, o piscar ponto a ponto e a faixa de brilho.
+- **Mar:** sem a cáustica (as linhas de luz no chão). Os fachos de sol
+  continuam. Cada pedra guarda só os 4 últimos furos de tiro (eram 12),
+  porque cada furo é conta em cada ponto da pedra.
+- **Bar:** o feixe de sol sem as listras.
+- Na troca de tela só os shaders da qualidade em uso são montados
+  (`TransicaoGlobal.SO_NA_COMPLETA` / `SO_NA_LEVE`). O pôr do sol completo, os
+  raios e o recorte nem chegam a ser montados na leve.
+
+**Nas duas qualidades:**
+- A caixa-preta copia para fora (pasta do app e pendrive) numa thread, a cada
+  troca de tela e a cada 30 s. O quadro do jogo não espera: medido, 0,08 ms
+  contra o tempo de gravar no pendrive. Na partida do app a cópia continua na
+  hora, como na 1.24.0.
+- Na Arena, com a arte da rodada fixa cobrindo a tela, o fundo de baixo não é
+  mais pintado (uma tela inteira a menos por quadro).
+- O feixe do Bar calcula a "nuvem" no vértice (era em cada ponto).
+
+**Medido no PC** (llvmpipe, a placa de vídeo feita no processador, em
+1920x1080 com a tela girada como na TV Box). A llvmpipe faz conta bem melhor
+que a Mali-G31, então na TV Box a diferença tende a ser maior: o que saiu é
+justamente conta em cada ponto.
+
+| quadro médio | completa | leve |
+|---|---|---|
+| Egito (partida inteira) | ~57 ms | 40,7 ms |
+| Egito na troca sol/lua | ~78 ms por 3 s | ~53 ms por 1 a 2 s |
+| Mar | 61,0 ms | 56,9 ms |
+| Bar | 51,8 ms | 47,0 ms |
+| Arena | 42,0 ms | 37,7 ms |
+
+Egito leve: partida inteira (118 s, com as trocas aos 30, 60 e 90 s) sem
+erro e sem quadro acima de 80 ms. Fluxo completo (abertura, menu, as 4 fases,
+cenários) nas duas qualidades sem erro.
+
+APK 1.29.0 (código 31).
+
 ## Para testar no PC como se fosse a TV Box
 
 ```
 LAZER_GIRO=1 godot --path . --resolution 1920x1080
 ```
+
+`LAZER_QUALIDADE=leve LAZER_RITMO=1` mostra a versão leve (com os 30
+quadros cravados e sem os enfeites opcionais), como na TV Box.
 
 `LAZER_MIRA_DIRETA=0` testa a mira girada.
