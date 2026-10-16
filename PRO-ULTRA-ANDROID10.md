@@ -1803,8 +1803,10 @@ acertar um baú fechou o app.
 - **As moedas** (pincel, iguais às do resto do Mar).
 
 No PC, o som do baú tocado do meio do arquivo passou sem nenhum erro pelo
-verificador de memória (valgrind, 30 toques com o tom variando). Mesmo
-assim ele não toca mais do meio. No PC, no Mar com acertos no baú, a
+verificador de memória (valgrind, 30 toques com o tom variando). O Mar
+inteiro também passou por ele (leve, tela girada, placa de vídeo feita no
+processador), com três acertos em baú e um em vaso: nenhum erro de memória
+no motor. Mesmo assim o som não toca mais do meio. No PC, no Mar com acertos no baú, a
 memória do jogo fica em ~400 MB e sobe ~3 MB por acerto: não é falta de
 memória.
 
