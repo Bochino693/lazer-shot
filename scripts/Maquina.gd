@@ -54,6 +54,8 @@ const PADRAO := {
 	# vídeos pelo decodificador de hardware da TV Box (scripts/video_nativo.gd)
 	"video/nativo": true,
 	"video/virar": false,
+	# QUALIDADE DA IMAGEM (ver qualidade_leve): "auto", "leve" ou "completa"
+	"video/qualidade": "auto",
 	"audio/volume_musica": -5.0,
 	"audio/volume_fx": 0.0,
 	"sistema/idioma": "pt_br",
@@ -274,6 +276,39 @@ func modo_credito() -> bool:
 	return modo == "credito"
 
 
+## QUALIDADE LEVE (Rodada 29): a imagem para a TV Box mais fraca
+## (PROSB-3000: Allwinner H313, Mali-G31 MP2, 2 GB). Na placa dela o
+## que pesa é pintar a tela de 1920x1080 várias vezes por quadro com contas
+## em cada ponto (fundos com shader, luz em volta do sol, poeira na frente):
+## no meio da partida do Egito ela não dava mais conta. Na leve:
+##   - todas as telas a 30 quadros por segundo cravados (MiraGlobal);
+##   - fundos só com a imagem e o que reage ao jogo (sem ar quente, ondas,
+##     nuvens, faixas de brilho), sem a luz girando em volta do sol e da lua,
+##     menos poeira e faíscas, e a troca sol/lua num cruzamento curto;
+##   - os enfeites opcionais de cada fase (grupo "efeito_opcional") desde o
+##     começo, sem esperar a calibragem.
+## Alvos, acertos, placar, mira e o cenário continuam iguais.
+## "auto" = leve no Android (a TV Box), completa no PC. A TV Box mais forte
+## escolhe COMPLETA na configuração. Para testar no PC: LAZER_QUALIDADE.
+func qualidade_leve() -> bool:
+	return _qualidade_leve
+
+
+var _qualidade_leve := false
+var _qualidade_anotada := false
+
+
+func _decidir_qualidade() -> void:
+	var q := str(valor("video/qualidade"))
+	if OS.has_environment("LAZER_QUALIDADE"):
+		q = OS.get_environment("LAZER_QUALIDADE")
+	var leve := OS.get_name() == "Android" if q == "auto" else q == "leve"
+	if leve != _qualidade_leve or not _qualidade_anotada:
+		_qualidade_leve = leve
+		_qualidade_anotada = true
+		Tela.marca("qualidade da imagem: %s (%s)" % ["leve" if leve else "completa", q])
+
+
 ## Aplica tudo no jogo: metas lidas pelas cenas, botões e volumes.
 func aplicar() -> void:
 	var t := get_tree()
@@ -288,6 +323,7 @@ func aplicar() -> void:
 	t.set_meta("admin_ranking_ativo", bool(valor("ranking/ranking_ativo")))
 	t.set_meta("modo_dificuldade", "facil")   # só existe o jogo com a mira
 	t.set_meta("admin_idioma", str(valor("sistema/idioma")))
+	_decidir_qualidade()
 
 	_mapear_botao(ACAO_START, int(valor("botoes/start")))
 	_mapear_botao(ACAO_SELECT, int(valor("botoes/select")))

@@ -227,6 +227,7 @@ const SHADERS := {
 	],
 	"res://scenes/arena.tscn": [
 		"res://shaders/fundo_vivo.gdshader",
+		"res://shaders/fundo_vivo_leve.gdshader",
 	],
 	"res://scenes/bar.tscn": [
 		"res://shaders/bar_sol.gdshader",
@@ -234,10 +235,12 @@ const SHADERS := {
 	"res://scenes/cenarios.tscn": [
 		"res://shaders/fundo_vivo.gdshader",
 		"res://shaders/deserto_fundo.gdshader",
+		"res://shaders/fundo_vivo_leve.gdshader",
 	],
 	"res://scenes/deserto.tscn": [
 		"res://shaders/egito_astro.gdshader",
 		"res://shaders/deserto_fundo.gdshader",
+		"res://shaders/egito_fundo_leve.gdshader",
 		"res://shaders/egito_alvo.gdshader",
 		"res://shaders/egito_plano.gdshader",
 		"res://shaders/egito_plano_simples.gdshader",
@@ -247,6 +250,7 @@ const SHADERS := {
 	],
 	"res://scenes/main.tscn": [
 		"res://shaders/fundo_vivo.gdshader",
+		"res://shaders/fundo_vivo_leve.gdshader",
 	],
 	"res://scenes/mar.tscn": [
 		"res://shaders/fundo_profundo.gdshader",
@@ -258,5 +262,6 @@ const SHADERS := {
 	],
 	"res://scenes/ranking.tscn": [
 		"res://shaders/fundo_vivo.gdshader",
+		"res://shaders/fundo_vivo_leve.gdshader",
 	],
 }

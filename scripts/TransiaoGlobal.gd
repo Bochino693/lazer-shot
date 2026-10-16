@@ -31,6 +31,13 @@ const ESPERA_ANTES_DO_ANEL := 0.30
 const TEMPO_MINIMO_CARTAO := 0.85
 ## Parte da barra do cartão que é a leitura dos arquivos (o resto: shaders).
 const PESO_ARQUIVOS := 0.8
+## Shaders de uma qualidade só (Maquina.qualidade_leve): a leve troca os
+## fundos pelas versões leves e não usa a luz em volta do sol/lua nem o
+## recorte do pôr do sol; a completa não usa as leves. Só os da qualidade em
+## uso são montados na troca de tela.
+const SO_NA_COMPLETA := ["res://shaders/deserto_fundo.gdshader", "res://shaders/fundo_vivo.gdshader",
+	"res://shaders/egito_raios.gdshader", "res://shaders/egito_astro.gdshader"]
+const SO_NA_LEVE := ["res://shaders/egito_fundo_leve.gdshader", "res://shaders/fundo_vivo_leve.gdshader"]
 const FONTE_TITULO := "res://fonts/Exo2-ExtraBold.ttf"
 
 ## Cartão de carregamento de cada fase.
@@ -169,7 +176,8 @@ func trocar_cena(caminho: String, tempo_saida: float = TEMPO_SAIDA, tempo_entrad
 	# Shaders da tela nova que ainda não estão na placa: montados depois dos
 	# arquivos, UM POR QUADRO, com o cartão à vista (scripts/aquecedor.gd). A
 	# barra conta as duas etapas.
-	var lista_shaders: Array = Precarga.SHADERS.get(caminho, [])
+	var fora: Array = SO_NA_COMPLETA if Maquina.qualidade_leve() else SO_NA_LEVE
+	var lista_shaders: Array = Precarga.SHADERS.get(caminho, []).filter(func(c: String) -> bool: return not c in fora)
 	var peso_carga := 1.0 if Aquecedor.faltam(lista_shaders) == 0 else PESO_ARQUIVOS
 
 	var cena: PackedScene = null

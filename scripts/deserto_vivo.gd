@@ -46,6 +46,14 @@ extends Node2D
 ##   nuvens              ondulam e correm conforme o humor do astro: agitadas
 ##                       quando ele está feliz, calmas quando está tenso.
 ##
+## QUALIDADE LEVE (TV Box mais fraca, Maquina.qualidade_leve; Rodada 29): o
+## fundo é só a imagem andando com a câmera e as pontas de ouro
+## (shaders/egito_fundo_leve.gdshader: sem ar quente, nuvens, luz do cristal
+## no chão e onda da batida), sem a luz girando em volta do sol e da lua, e a
+## troca sol/lua é um cruzamento de TEMPO_TROCA_LEVE no lugar do pôr do sol.
+## Poeira e faíscas (efeito_opcional) somem pela MiraGlobal. Olhos, águias,
+## planos, cristais, feixes, ouro e brilhos continuam iguais.
+##
 ## Uso: var vivo := DesertoVivo.new(); pai.add_child(vivo)
 ## (sem zoom: a imagem só cobre a tela, como as outras fases)
 ##      vivo.mostrar("sol" ou "lua", suave)
@@ -85,6 +93,9 @@ var CRISTAL: Texture2D = load("res://sprites/egito_cristal_mascara.png")
 var ESTRELA: Texture2D = load("res://sprites/egito_estrela.png")
 var PROFUNDIDADE: Texture2D = load("res://sprites/egito_profundidade.png")
 const SHADER_FUNDO := preload("res://shaders/deserto_fundo.gdshader")
+## Qualidade leve (TV Box mais fraca, Maquina.qualidade_leve): o fundo só com
+## a imagem andando com a câmera e as pontas de ouro reagindo ao jogo.
+const SHADER_FUNDO_LEVE := preload("res://shaders/egito_fundo_leve.gdshader")
 const SHADER_ALVO := preload("res://shaders/egito_alvo.gdshader")
 const SHADER_PLANO := preload("res://shaders/egito_plano.gdshader")
 const SHADER_PLANO_SIMPLES := preload("res://shaders/egito_plano_simples.gdshader")
@@ -179,6 +190,12 @@ const BRILHOS_PONTAS := [Vector2(229, 520), Vector2(509, 448), Vector2(774, 520)
 # egito_ceu_*.png, tools/gerar_ceu_astro.py).
 const TEMPO_POENTE := 5.4
 const DESCIDA := 640.0        # px que o astro desce até sumir de todo
+# Na qualidade leve (TV Box mais fraca) a troca é um cruzamento curto: um astro
+# some e o outro aparece no lugar, sem descer atrás das pirâmides (sem o
+# shader do recorte nem o céu sem o astro), e os dois fundos ficam juntos na
+# tela só este tempo. O pôr do sol inteiro (5,4 s com dois fundos, dois
+# astros e o crepúsculo) era o trecho mais pesado da partida na TV Box.
+const TEMPO_TROCA_LEVE := 1.0
 const CEU_SEM_CANTO := Vector2(512 - 232, 300 - 210)   # canto de egito_ceu_*.png na imagem
 # Câmera 3D: com a mira no canto ela anda CAMERA_PASSO px; uma coisa à
 # distância Z anda CAMERA_PASSO * (1 - 1/Z) (Z = 1 é o plano dos brasões).
@@ -261,6 +278,8 @@ var _modo := ""
 var _noite := 0.0             # 0 = sol ... 1 = lua
 var _tw: Tween = null
 var _poente := -1.0            # 0..1 durante o pôr do sol / nascer da lua; -1 parado
+var _leve := false             # qualidade leve (Maquina.qualidade_leve)
+var _troca_leve := -1.0        # 0..1 durante a troca da qualidade leve; -1 parado
 var _poente_de := 0.0
 var _poente_para := 0.0
 var _crepusculo := 0.0
@@ -338,6 +357,7 @@ var _z_planos: Array[int] = []
 
 func _init() -> void:
 	name = "DesertoVivo"
+	_leve = Maquina.qualidade_leve()
 	# no jogo o fundo não tem mais feixes nem cristais pintados (são peças):
 	# a máscara de efeitos dele fica vazia
 	var vazia := Image.create(4, 4, false, Image.FORMAT_RGB8)
@@ -423,17 +443,31 @@ func mostrar(modo: String, suave: bool = true) -> void:
 		_tw.kill()
 	if not suave:
 		_poente = -1.0
+		_troca_leve = -1.0
 		_crepusculo = 0.0
 		_desce = [0.0, 0.0]
 		_astros_cortados(false)
 		_definir_noite(alvo)
 		_aplicar_poente()
 		return
-	# o pôr do sol (ou da lua): _animar_poente
 	_poente_de = _noite
 	_poente_para = alvo
+	if _leve:
+		# qualidade leve: cruzamento curto (_animar_troca_leve)
+		_troca_leve = 0.0
+		return
+	# o pôr do sol (ou da lua): _animar_poente
 	_poente = 0.0
 	_astros_cortados(true)
+
+
+## Qualidade leve: o dia vira noite (ou o contrário) em TEMPO_TROCA_LEVE, com
+## os astros parados no lugar (um some, o outro aparece).
+func _animar_troca_leve(delta: float) -> void:
+	_troca_leve = minf(1.0, _troca_leve + delta / TEMPO_TROCA_LEVE)
+	_definir_noite(lerpf(_poente_de, _poente_para, smoothstep(0.0, 1.0, _troca_leve)))
+	if _troca_leve >= 1.0:
+		_troca_leve = -1.0
 
 
 func _animar_poente(delta: float) -> void:
@@ -516,7 +550,8 @@ func _criar_fundo(tex: Texture2D, mascara: Texture2D, cor: Color, fase: float) -
 	s.texture = tex
 	s.centered = false
 	var mat := ShaderMaterial.new()
-	mat.shader = SHADER_FUNDO
+	# (os parâmetros que o fundo leve não tem ficam guardados sem efeito)
+	mat.shader = SHADER_FUNDO_LEVE if _leve else SHADER_FUNDO
 	mat.set_shader_parameter("mascara", mascara)
 	mat.set_shader_parameter("usa_mascara", false)
 	mat.set_shader_parameter("luz_lancada", LUZ_FUNDO)
@@ -534,6 +569,12 @@ func _criar_raios(c: Vector2, r: float, alcance: float, lua: bool, cor: Color) -
 	q.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	q.size = Vector2.ONE * r * alcance * 2.0
 	q.position = c - q.size * 0.5
+	if _leve:
+		# qualidade leve: os raios ficam sempre escondidos (_definir_noite) e
+		# o shader deles nem é preparado
+		q.visible = false
+		add_child(q)
+		return q
 	var mat := ShaderMaterial.new()
 	mat.shader = SHADER_RAIOS
 	mat.set_shader_parameter("lua", lua)
@@ -1258,7 +1299,10 @@ func _definir_noite(v: float) -> void:
 	_fundo_sol.visible = _noite < 0.999
 	for par in [[_raios_sol, dia], [_raios_lua, _noite], [_disco_sol, dia], [_disco_lua, _noite]]:
 		var no: CanvasItem = par[0]
-		no.visible = par[1] > 0.001
+		# qualidade leve: sem a luz girando em volta do sol e da lua (os
+		# raios, ColorRect com shader em ~900x900 px: a camada mais pesada do
+		# céu); o halo de cada astro continua
+		no.visible = par[1] > 0.001 and not (_leve and no is ColorRect)
 		no.modulate.a = par[1]
 	(_cristal.material as ShaderMaterial).set_shader_parameter("noite", _noite)
 	_mat_planos.set_shader_parameter("noite", _noite)
@@ -1326,7 +1370,9 @@ func _process(delta: float) -> void:
 	m2.set_shader_parameter("batida", som.y)
 	_faiscas.speed_scale = 1.0 + som.y * 1.3
 
-	if _poente >= 0.0:
+	if _troca_leve >= 0.0:
+		_animar_troca_leve(delta)
+	elif _poente >= 0.0:
 		_animar_poente(delta)
 	_animar_olhos(delta)
 	_animar_aguias(delta)

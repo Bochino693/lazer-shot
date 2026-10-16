@@ -24,7 +24,9 @@ extends Node
 ## próprio pendrive (a mesma pasta Android/data/... dentro dele): é só levar
 ## o pendrive ao PC. A pasta do pendrive é pedida ao Android quando o menu
 ## aparece pela primeira vez (trecho vigiado "pasta"); dali em diante a
-## cópia vai para ela logo na partida.
+## cópia vai para ela logo na partida. Depois da partida do app, as cópias
+## (a cada troca de tela e a cada 30 s) vão numa thread: gravar no pendrive
+## no meio da partida era um tranco a cada 30 s (Rodada 29).
 ##
 ## PÁGINA DE QUEDA (só na TV Box): se a sessão anterior parou sozinha em
 ## menos de 10 min, sem ter ido para segundo plano, a abertura seguinte
@@ -50,7 +52,7 @@ extends Node
 ## Criada pela Tela (o primeiro autoload) no _init, antes de qualquer cena.
 ## Outros scripts marcam etapas com Tela.marca("texto").
 
-const VERSAO := "1.28.0"
+const VERSAO := "1.29.0"
 const PASTA := "user://caixa_preta"
 const SESSAO := PASTA + "/sessao.txt"
 const ANTERIOR := PASTA + "/anterior.txt"
@@ -157,6 +159,7 @@ var _conferir := 0     # quadros que faltam para anotar o "ok" de marca_quadro
 var _conferir_txt := ""
 var _quadros := 0
 var _pendrive := false  # a pasta do pendrive já foi pedida nesta sessão
+var _copia := -1        # cópia para fora em andamento (WorkerThreadPool)
 ## Página de queda: [cabeçalho da sessão anterior, últimas linhas dela];
 ## vazia = a sessão anterior terminou bem (ou não é TV Box).
 var pagina: Array[PackedStringArray] = []
@@ -236,6 +239,9 @@ func _ler_contornos() -> void:
 
 func _exit_tree() -> void:
 	marca("fim da sessão (o jogo fechou normalmente)")
+	if _copia >= 0:
+		WorkerThreadPool.wait_for_task_completion(_copia)
+		_copia = -1
 	OS.remove_logger(_registro)
 
 
@@ -268,7 +274,7 @@ func _process(delta: float) -> void:
 		_cena_id = id
 		if cena != null:
 			marca("TELA %s (%s) | %s" % [cena.name, cena.scene_file_path.get_file(), _estado()])
-			_copiar_fora(SESSAO, "sessao.txt")
+			_copiar_fora_sem_esperar([[SESSAO, "sessao.txt"]])
 			if cena.scene_file_path == CENA_MENU and not _pendrive:
 				_pendrive = true
 				get_tree().create_timer(3.0).timeout.connect(_pasta_do_pendrive)
@@ -282,7 +288,7 @@ func _process(delta: float) -> void:
 	if _pulso_t >= 30.0:
 		_pulso_t = 0.0
 		marca("pulso | %s" % _estado())
-		_copiar_fora(SESSAO, "sessao.txt")
+		_copiar_fora_sem_esperar([[SESSAO, "sessao.txt"]])
 
 
 ## A pasta do app em cada pendrive/cartão: o Android só a cria quando o app
@@ -312,9 +318,7 @@ func _pasta_do_pendrive() -> void:
 			marca("cópia da caixa-preta em " + caminho)
 			novas += 1
 	if novas > 0:
-		_copiar_fora(ANTERIOR, "anterior.txt")
-		_copiar_fora(QUEDA, "queda.txt")
-		_copiar_fora(SESSAO, "sessao.txt")
+		_copiar_fora_sem_esperar([[ANTERIOR, "anterior.txt"], [QUEDA, "queda.txt"], [SESSAO, "sessao.txt"]])
 
 
 ## Android/data/<app>/files/caixa_preta na memória da TV Box (pedida ao
@@ -345,14 +349,39 @@ func _pastas_externas() -> Array[String]:
 	return r
 
 
+## Na partida do app (como na 1.24.0): cópia na hora.
 func _copiar_fora(origem: String, nome: String) -> void:
-	if _externas.is_empty() or not FileAccess.file_exists(origem):
+	_copiar([[origem, nome]], _externas)
+
+
+## Depois (a cada troca de tela, no pulso de 30 s e com o pendrive novo): a
+## cópia vai numa thread. No pendrive gravar a sessão inteira leva de dezenas
+## a centenas de ms, e isso era um tranco no meio da partida a cada 30 s
+## (Rodada 29). Se a cópia anterior ainda não acabou, esta fica para a
+## próxima vez (o arquivo de dentro do app continua completo).
+func _copiar_fora_sem_esperar(arquivos: Array) -> void:
+	if _externas.is_empty():
 		return
-	var texto := FileAccess.get_file_as_string(origem)
-	for pasta in _externas:
-		var f := FileAccess.open(pasta.path_join(nome), FileAccess.WRITE)
-		if f != null:
-			f.store_string(texto)
+	if _copia >= 0:
+		if not WorkerThreadPool.is_task_completed(_copia):
+			return
+		WorkerThreadPool.wait_for_task_completion(_copia)
+		_copia = -1
+	_copia = WorkerThreadPool.add_task(_copiar.bind(arquivos.duplicate(true), _externas.duplicate()), false, "caixa-preta")
+
+
+## [[origem, nome], ...] -> cada pasta de fora (roda na thread: não mexe em
+## nada do jogo).
+static func _copiar(arquivos: Array, pastas: Array) -> void:
+	for par in arquivos:
+		var origem: String = par[0]
+		if pastas.is_empty() or not FileAccess.file_exists(origem):
+			continue
+		var texto := FileAccess.get_file_as_string(origem)
+		for pasta in pastas:
+			var f := FileAccess.open(str(pasta).path_join(par[1]), FileAccess.WRITE)
+			if f != null:
+				f.store_string(texto)
 
 
 func _estado() -> String:

@@ -42,6 +42,8 @@ func _ready() -> void:
 		feixe.uv = PackedVector2Array(CONTORNO_FEIXE)
 		var mat := ShaderMaterial.new()
 		mat.shader = load(SHADER_FEIXE)
+		# TV Box mais fraca (Maquina.qualidade_leve): o feixe sem as listras
+		mat.set_shader_parameter("listras_ligadas", not Maquina.qualidade_leve())
 		feixe.material = mat
 		add_child(feixe)
 

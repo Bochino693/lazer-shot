@@ -72,7 +72,9 @@ vec3 luz_do_mar(vec3 col, vec2 uv, vec4 onda_t, vec4 cau_t) {
 		float raio = r * m.a * onda_t.w;
 		col = 1.0 - (1.0 - col) * (1.0 - vec3(0.80, 0.95, 1.0) * raio);
 	}
-	if (m.g > 0.06) {
+	// forca_caustica 0 (qualidade leve, TV Box mais fraca): sem cáustica e sem
+	// as leituras dela (a condição é igual na tela toda: a placa pula inteira)
+	if (forca_caustica > 0.001 && m.g > 0.06) {
 		float c;
 		if (uv.y <= horizonte || m.b > 0.99) {
 			c = cau_parede(uv, cau_t);

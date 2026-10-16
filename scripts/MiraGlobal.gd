@@ -162,9 +162,12 @@ func _ritmo() -> void:
 	var id := cena.get_instance_id() if cena != null else 0
 	if id != _ritmo_cena:
 		# tela nova: abre em 30 se ela já não segurou 60 antes; senão tenta
-		# 60 e espera ela assentar antes de medir
+		# 60 e espera ela assentar antes de medir. Na qualidade leve (TV Box
+		# mais fraca, Maquina.qualidade_leve) toda tela abre em 30 e já sem
+		# os enfeites opcionais.
 		_ritmo_cena = id
-		_cravar(30 if cena != null and _ritmo_lento.has(cena.scene_file_path) else 0)
+		var leve: bool = Maquina.qualidade_leve()
+		_cravar(30 if cena != null and (leve or _ritmo_lento.has(cena.scene_file_path)) else 0)
 		_ritmo_t = -1.5
 		_ritmo_quadros = 0
 		_ritmo_lentos = 0
@@ -172,7 +175,7 @@ func _ritmo() -> void:
 		_leve_t = -2.0
 		_leve_quadros = 0
 		_leve_lentos = 0
-		if cena != null and _telas_leves.has(cena.scene_file_path):
+		if cena != null and (leve or _telas_leves.has(cena.scene_file_path)):
 			_deixar_leve.call_deferred(cena)
 		return
 	var quadro := (agora - _ritmo_ultimo) / 1000.0
