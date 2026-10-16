@@ -16,6 +16,7 @@ extends Node2D
 ## `k` é a escala pela distância (1 = plano dos alvos; menor = mais longe).
 ## Um nó por explosão, no máximo 3 ao mesmo tempo; some sozinho.
 
+const Pincel := preload("res://scripts/pincel.gd")
 const MAX_VIVAS := 3
 const GRUPO := "fx_mar_explosao"
 const DURACAO := 3.2
@@ -59,6 +60,7 @@ static func criar(pai: Node, pos: Vector2, k: float, no_chao: bool, tex: Diction
 	fx.top_level = true
 	fx.z_as_relative = false
 	fx.z_index = z_desenho
+	fx.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS   # pincel
 	pai.add_child(fx)
 	fx._montar(pos, clampf(k, 0.25, 1.3), no_chao)
 
@@ -214,12 +216,13 @@ func _draw() -> void:
 			Color(cor, 0.95 * minf(1.0, kf * 7.0) * (1.0 - kf * kf)))
 	draw_set_transform(Vector2.ZERO)
 
-	# bolha de gás (translúcida, com a borda clara e um reflexo)
+	# bolha de gás (translúcida, com a borda clara e um reflexo), pelo pincel:
+	# círculos e arcos de verdade eram 7 desenhos novos na placa a cada quadro
 	var r := _raio_bolha()
 	if r > 1.0:
-		draw_circle(_pos, r, Color(0.70, 0.88, 1.0, 0.16))
-		draw_arc(_pos, r, 0.0, TAU, 48, Color(0.92, 0.98, 1.0, 0.55), maxf(1.5, 3.5 * _k), true)
-		draw_arc(_pos, r * 0.72, deg_to_rad(200), deg_to_rad(250), 12, Color(1, 1, 1, 0.6), maxf(1.0, 3.0 * _k), true)
+		Pincel.circulo(self, _pos, r, Color(0.70, 0.88, 1.0, 0.16))
+		Pincel.anel(self, _pos, r, maxf(1.5, 3.5 * _k), Color(0.92, 0.98, 1.0, 0.55))
+		Pincel.arco(self, _pos, r * 0.72, deg_to_rad(200), deg_to_rad(250), Color(1, 1, 1, 0.6), maxf(1.0, 3.0 * _k))
 
 	# água espalhando: bolhas jogadas para fora
 	for b in _bolhas:

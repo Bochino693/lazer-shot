@@ -745,16 +745,20 @@ func _draw() -> void:
 
 
 ## Cerâmica: as trincas no vaso ainda inteiro e, nos cacos soltos, a borda
-## quebrada com a espessura do barro (linha escura e fina).
+## quebrada com a espessura do barro (linha escura e fina). Tudo num arranjo
+## de triângulos só: cada draw_polyline com antialias eram 3 desenhos novos
+## na placa, refeitos a cada quadro (dezenas por quadro com o vaso partido),
+## e era aí que a TV Box engasgava e caía.
 func _desenhar_ceramica() -> void:
+	var tri := Triangulos.new()
 	if _t < TRINCA_ABRE + 0.05 and not _trincas.is_empty():
 		var a := clampf(1.0 - (_t - TRINCA_ABRE) / 0.05, 0.0, 1.0)
 		var corre := clampf(_t / (TRINCA_ABRE * 0.7), 0.15, 1.0)
 		for linha in _trincas:
 			var n := maxi(2, int(ceil(linha.size() * corre)))
 			var parte := linha.slice(0, n)
-			draw_polyline(parte, Color(0.18, 0.12, 0.08, 0.85 * a), 2.6 * _k, true)
-			draw_polyline(parte, Color(1.0, 0.97, 0.88, 0.6 * a), 0.9 * _k, true)
+			tri.linha(parte, Color(0.18, 0.12, 0.08, 0.85 * a), 2.6 * _k)
+			tri.linha(parte, Color(1.0, 0.97, 0.88, 0.6 * a), 0.9 * _k)
 	for c in _cacos:
 		if not c.has("tomba") or _t < float(c["solta"]):
 			continue
@@ -768,7 +772,8 @@ func _desenhar_ceramica() -> void:
 		for v in rel:
 			borda.append(c["pos"] + (Vector2(v.x * maxf(0.18, absf(face)), v.y)).rotated(c["ang"]))
 		borda.append(borda[0])
-		draw_polyline(borda, Color(0.26, 0.17, 0.11, 0.45 * al), 1.5 * _k, true)
+		tri.linha(borda, Color(0.26, 0.17, 0.11, 0.45 * al), 1.5 * _k)
+	tri.desenhar(self)
 
 
 ## Cavalo-marinho espírito: sai do vaso num clarão, sobe nadando em S com a

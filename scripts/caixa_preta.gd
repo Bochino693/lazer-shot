@@ -50,7 +50,7 @@ extends Node
 ## Criada pela Tela (o primeiro autoload) no _init, antes de qualquer cena.
 ## Outros scripts marcam etapas com Tela.marca("texto").
 
-const VERSAO := "1.27.0"
+const VERSAO := "1.28.0"
 const PASTA := "user://caixa_preta"
 const SESSAO := PASTA + "/sessao.txt"
 const ANTERIOR := PASTA + "/anterior.txt"

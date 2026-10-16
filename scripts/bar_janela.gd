@@ -422,15 +422,20 @@ func _ajustar_feixe() -> void:
 
 
 # ───────────────────────────────────────────── desenho
+## O que não tem textura (degradês, bordas cortadas, trincas) sai em arranjos
+## de triângulos (Triangulos), um por camada: cada draw_line/draw_polyline
+## com antialias eram vários desenhos novos na placa a cada quadro.
 func _draw() -> void:
 	# buracos: a luz de fora, bem mais clara que o vidro fosco
+	var luz_buracos := Triangulos.new()
 	for i in VIDRACAS.size():
 		if _estado[i] != QUEBRADA:
 			continue
 		var r: Rect2 = VIDRACAS[i]
 		draw_texture_rect_region(_tex, r, r, Color(1.32, 1.27, 1.18))
-		draw_polygon(PackedVector2Array([r.position, Vector2(r.end.x, r.position.y), r.end, Vector2(r.position.x, r.end.y)]),
+		luz_buracos.poligono_cores(PackedVector2Array([r.position, Vector2(r.end.x, r.position.y), r.end, Vector2(r.position.x, r.end.y)]),
 			PackedColorArray([Color(1, 0.99, 0.95, 0.45), Color(1, 0.99, 0.95, 0.45), Color(1, 0.9, 0.7, 0.2), Color(1, 0.9, 0.7, 0.2)]))
+	luz_buracos.desenhar(self)
 	# pontas de vidro presas na moldura (o próprio vidro) e as bordas cortadas
 	var pontos := PackedVector2Array()
 	var cores := PackedColorArray()
@@ -450,21 +455,23 @@ func _draw() -> void:
 	if not idx.is_empty():
 		RenderingServer.canvas_item_add_triangle_array(get_canvas_item(), idx, pontos, cores, uvs,
 			PackedInt32Array(), PackedFloat32Array(), _tex.get_rid())
+	var riscos := Triangulos.new()
 	for i in VIDRACAS.size():
 		for pt: Dictionary in _pontas[i]:
 			var q: PackedVector2Array = pt["poly"]
 			for k: int in pt["livres"]:
 				var a := q[k]
 				var b := q[(k + 1) % q.size()]
-				draw_line(a, b, Color(0.42, 0.26, 0.12, 0.5), 1.6, true)
-				draw_line(a, b, Color(1.0, 1.0, 0.96, 0.95), 0.9, true)
+				riscos.reta(a, b, Color(0.42, 0.26, 0.12, 0.5), 1.6)
+				riscos.reta(a, b, Color(1.0, 1.0, 0.96, 0.95), 0.9)
 	# trincas nas vizinhas
 	for i in VIDRACAS.size():
 		if _estado[i] != TRINCADA:
 			continue
 		for linha: PackedVector2Array in _trincas[i]:
-			draw_polyline(linha, Color(0.45, 0.3, 0.15, 0.22), 1.1, true)
-			draw_polyline(linha, Color(1.0, 1.0, 0.97, 0.7), 0.5, true)
+			riscos.linha(linha, Color(0.45, 0.3, 0.15, 0.22), 1.1)
+			riscos.linha(linha, Color(1.0, 1.0, 0.97, 0.7), 0.6)
+	riscos.desenhar(self)
 	# pó de vidro no ar
 	for p in _po:
 		var k: float = p["t"] / p["vida"]
@@ -515,8 +522,10 @@ func _draw() -> void:
 	if not idx.is_empty():
 		RenderingServer.canvas_item_add_triangle_array(get_canvas_item(), idx, pontos, cores, uvs,
 			PackedInt32Array(), PackedFloat32Array(), _tex.get_rid())
+	var contornos := Triangulos.new()
 	for b in bordas:
-		draw_polyline(b, Color(1.0, 1.0, 0.95, 0.75), 0.9, true)
+		contornos.linha(b, Color(1.0, 1.0, 0.95, 0.75), 0.9)
+	contornos.desenhar(self)
 	# lascas de madeira do caixilho
 	for l in _lascas:
 		var k2: float = l["t"] / l["vida"]

@@ -348,7 +348,7 @@ func _desenhar_efeitos() -> void:
 		var c := r.get_center() + Vector2(-4.0, 1.0) * esc
 		for k in 5:
 			var ang := k * 1.3 + 0.4
-			_efeitos.draw_line(c, c + Vector2(cos(ang), sin(ang) * 0.5) * r.size.x * 0.42, Color(0.75, 0.62, 0.62, 0.55), 1.0)
+			Pincel.linha(_efeitos, c, c + Vector2(cos(ang), sin(ang) * 0.5) * r.size.x * 0.42, Color(0.75, 0.62, 0.62, 0.55), 1.0)
 	for b in _baforadas:
 		var t: float = b["t"]
 		if t <= 0.0:
@@ -363,6 +363,8 @@ func _desenhar_luz() -> void:
 	var som := Maquina.pulso_vivo()
 
 	# fachos das arandelas (a luz desce pela parede) e a poeira dentro deles
+	# (os dois fachos num desenho só)
+	var fachos := Triangulos.new()
 	for i in 2:
 		var a: Vector2 = _px(ARANDELAS[i])
 		var dir := 1.0 if i == 0 else -1.0
@@ -371,7 +373,8 @@ func _desenhar_luz() -> void:
 		var pts := PackedVector2Array([a + Vector2(-8 * esc, 4), a + Vector2(8 * esc, 4),
 			a + Vector2(dir * 210.0 * esc + 90.0 * esc, comp), a + Vector2(dir * 210.0 * esc - 90.0 * esc, comp)])
 		var cores := PackedColorArray([cor_facho, cor_facho, Color(cor_facho, 0.0), Color(cor_facho, 0.0)])
-		_luz.draw_polygon(pts, cores)
+		fachos.poligono_cores(pts, cores)
+	fachos.desenhar(_luz)
 	for p in _poeira:
 		var i: int = p["i"]
 		var a2: Vector2 = _px(ARANDELAS[i])
@@ -400,6 +403,7 @@ func _desenhar_luz() -> void:
 		Pincel.linha(_luz, c4["pos"] - dc, c4["pos"] + dc, Color(1.0, 0.25, 0.18, 0.9 * (1.0 - kk)), 2.0)
 	if _giro > 0.0 and aceso > 0.0:
 		var forca := minf(1.0, _giro / 0.4)
+		var feixes := Triangulos.new()
 		for k in 2:
 			var ang := _t * 7.5 + k * PI
 			var c := _giro_cor
@@ -408,9 +412,9 @@ func _desenhar_luz() -> void:
 			var dir3 := Vector2(cos(ang), sin(ang) * 0.45 + 0.35)
 			var ponta := g + dir3 * 900.0 * esc
 			var lado := Vector2(-dir3.y, dir3.x) * 170.0 * esc
-			var pts2 := PackedVector2Array([g, ponta + lado, ponta - lado])
 			var cc := Color(c, 0.20 * forca)
-			_luz.draw_polygon(pts2, PackedColorArray([cc, Color(c, 0.0), Color(c, 0.0)]))
+			feixes.triangulo(g, ponta + lado, ponta - lado, cc, Color(c, 0.0), Color(c, 0.0))
+		feixes.desenhar(_luz)
 		Pincel.brilho(_luz, g, 70.0 * esc, Color(_giro_cor if not _giro_arco else Color.WHITE, 0.4 * forca))
 
 	# luz das lanternas quebrando na parede

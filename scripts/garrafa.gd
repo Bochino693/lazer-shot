@@ -272,12 +272,18 @@ func _desenhar_sombra_base() -> void:
 		var ang: float = (float(i) / float(passos)) * TAU
 		pontos_sombra.append(centro + Vector2(cos(ang) * rx, sin(ang) * ry))
 
-	draw_colored_polygon(pontos_sombra, Color(0.0, 0.0, 0.0, sombra_alpha_base * 1.12))
-	draw_polyline(pontos_sombra, Color(0.0, 0.0, 0.0, sombra_alpha_base * 0.26), 1.0, true)
+	# a sombra inteira num desenho só (eram 5 desenhos na placa por garrafa,
+	# em todo quadro)
+	var tri := Triangulos.new()
+	tri.poligono(pontos_sombra, Color(0.0, 0.0, 0.0, sombra_alpha_base * 1.12))
+	var borda := pontos_sombra.duplicate()
+	borda.append(pontos_sombra[0])
+	tri.linha(borda, Color(0.0, 0.0, 0.0, sombra_alpha_base * 0.26), 1.0)
 
 	var pontos_sombra2 := PackedVector2Array()
 	for i in range(passos):
 		var ang2: float = (float(i) / float(passos)) * TAU
 		pontos_sombra2.append(centro + Vector2(cos(ang2) * rx * 0.62, sin(ang2) * ry * 0.58))
 
-	draw_colored_polygon(pontos_sombra2, Color(0.0, 0.0, 0.0, sombra_alpha_base * 0.34))
+	tri.poligono(pontos_sombra2, Color(0.0, 0.0, 0.0, sombra_alpha_base * 0.34))
+	tri.desenhar(self)

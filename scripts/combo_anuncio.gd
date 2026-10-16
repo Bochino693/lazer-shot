@@ -410,14 +410,19 @@ func _desenhar_raios() -> void:
 			_raios.draw_set_transform(Vector2.ZERO)
 		"saloon":
 			# estouro de pólvora: estrela de pontas curtas e grossas
+			# (todas as pontas num desenho só: cada draw_polygon era um
+			# desenho novo na placa a cada quadro)
 			var r2 := (150.0 + 300.0 * abre) * _forca
-			var cores2 := PackedColorArray([Color(1.0, 0.9, 0.6, a * 1.4), Color(_cores[2], 0.0), Color(_cores[2], 0.0)])
+			var forte2 := Color(1.0, 0.9, 0.6, a * 1.4)
+			var some2 := Color(_cores[2], 0.0)
+			var tri2 := Triangulos.new()
 			for i in 10:
 				var ang := TAU * i / 10.0 + 0.3
 				var comp := r2 * (1.0 if i % 2 == 0 else 0.62)
 				var p0 := Vector2.from_angle(ang - 0.13) * comp * 0.35
 				var p1 := Vector2.from_angle(ang + 0.13) * comp * 0.35
-				_raios.draw_polygon(PackedVector2Array([p0, Vector2.from_angle(ang) * comp, p1]), cores2)
+				tri2.triangulo(p0, Vector2.from_angle(ang) * comp, p1, forte2, some2, some2)
+			tri2.desenhar(_raios)
 		"neon":
 			# duas linhas de laser abrindo para os lados, acima e abaixo do texto
 			var meia := (200.0 + 520.0 * abre) * _forca
@@ -428,16 +433,19 @@ func _desenhar_raios() -> void:
 		_:
 			# sol: raios de luz girando
 			var r := (160.0 + 520.0 * abre) * _forca
-			var cores := PackedColorArray([Color(_cores[2], a), Color(_cores[2], 0.0), Color(_cores[2], 0.0)])
+			var forte := Color(_cores[2], a)
+			var some := Color(_cores[2], 0.0)
 			var n := 14
 			var giro := _t * 0.9
+			var tri := Triangulos.new()
 			for i in n:
 				var ang := giro + TAU * i / n
 				var larg := 0.06 if i % 2 == 0 else 0.035
 				var comp := r if i % 2 == 0 else r * 0.7
 				var p0 := Vector2.from_angle(ang - larg) * comp
 				var p1 := Vector2.from_angle(ang + larg) * comp
-				_raios.draw_polygon(PackedVector2Array([Vector2.ZERO, p0, p1]), cores)
+				tri.triangulo(Vector2.ZERO, p0, p1, forte, some, some)
+			tri.desenhar(_raios)
 
 
 ## A placa do saloon: tábua de madeira com veios, borda escura, dois pregos
@@ -446,26 +454,38 @@ func _desenhar_placa() -> void:
 	var w := _placa_larg
 	var h := 136.0
 	var r := Rect2(-w * 0.5, -h * 0.5, w, h)
+	# tudo num arranjo de triângulos só (eram ~40 desenhos na placa de vídeo)
+	var tri := Triangulos.new()
 	# correntes até o alto
 	for x in [-w * 0.34, w * 0.34]:
 		for i in 4:
 			var y := -h * 0.5 - 14.0 - i * 18.0
-			_placa.draw_rect(Rect2(x - 4.0, y - 8.0, 8.0, 14.0), Color(0.22, 0.18, 0.14, 0.9), false, 2.5)
-	_placa.draw_rect(Rect2(r.position + Vector2(6, 8), r.size), Color(0, 0, 0, 0.35))       # sombra
-	_placa.draw_rect(r, Color(0.36, 0.20, 0.09, 0.96))
+			_contorno(tri, Rect2(x - 4.0, y - 8.0, 8.0, 14.0), Color(0.22, 0.18, 0.14, 0.9), 2.5)
+	tri.retangulo(Rect2(r.position + Vector2(6, 8), r.size), Color(0, 0, 0, 0.35))       # sombra
+	tri.retangulo(r, Color(0.36, 0.20, 0.09, 0.96))
 	# tábuas e veios
 	var faixa := h / 3.0
 	for i in 3:
 		var y0 := -h * 0.5 + i * faixa
 		var tom := 0.92 + 0.08 * float(i % 2)
-		_placa.draw_rect(Rect2(-w * 0.5, y0, w, faixa - 2.0), Color(0.42 * tom, 0.24 * tom, 0.11 * tom, 0.96))
+		tri.retangulo(Rect2(-w * 0.5, y0, w, faixa - 2.0), Color(0.42 * tom, 0.24 * tom, 0.11 * tom, 0.96))
 		for v in 3:
 			var yy := y0 + faixa * (0.25 + 0.25 * v)
-			_placa.draw_line(Vector2(-w * 0.5 + 10.0, yy), Vector2(w * 0.5 - 10.0, yy + sin(v * 1.7 + i) * 3.0),
+			tri.reta(Vector2(-w * 0.5 + 10.0, yy), Vector2(w * 0.5 - 10.0, yy + sin(v * 1.7 + i) * 3.0),
 				Color(0.22, 0.11, 0.04, 0.35), 1.5)
-	_placa.draw_rect(r, Color(0.14, 0.06, 0.02, 1.0), false, 5.0)
-	_placa.draw_rect(r.grow(-7.0), Color(0.62, 0.42, 0.22, 0.45), false, 2.0)
+	_contorno(tri, r, Color(0.14, 0.06, 0.02, 1.0), 5.0)
+	_contorno(tri, r.grow(-7.0), Color(0.62, 0.42, 0.22, 0.45), 2.0)
 	for x in [-w * 0.5 + 18.0, w * 0.5 - 18.0]:
 		for y in [-h * 0.5 + 16.0, h * 0.5 - 16.0]:
-			_placa.draw_circle(Vector2(x, y), 6.0, Color(0.30, 0.28, 0.26))
-			_placa.draw_circle(Vector2(x - 1.5, y - 1.5), 2.5, Color(0.75, 0.70, 0.62))
+			tri.circulo(Vector2(x, y), 6.0, Color(0.30, 0.28, 0.26), 10)
+			tri.circulo(Vector2(x - 1.5, y - 1.5), 2.5, Color(0.75, 0.70, 0.62), 8)
+	tri.desenhar(_placa)
+
+
+## Borda de um retângulo (draw_rect sem preencher) nos triângulos.
+static func _contorno(tri: Triangulos, r: Rect2, cor: Color, largura: float) -> void:
+	var m := largura * 0.5
+	tri.retangulo(Rect2(r.position.x - m, r.position.y - m, r.size.x + largura, largura), cor)
+	tri.retangulo(Rect2(r.position.x - m, r.end.y - m, r.size.x + largura, largura), cor)
+	tri.retangulo(Rect2(r.position.x - m, r.position.y + m, largura, r.size.y - largura), cor)
+	tri.retangulo(Rect2(r.end.x - m, r.position.y + m, largura, r.size.y - largura), cor)

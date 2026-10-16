@@ -8,15 +8,19 @@ extends SceneTree
 ## jogo continua vendo 1024x1536 e todas as coordenadas em px continuam
 ## valendo.
 ##
-##     godot --headless --path . -s tools/gerar_hd.gd
+##     godot --headless --path . -s tools/gerar_hd.gd [-- nome ...]
 
 func _initialize() -> void:
 	DirAccess.make_dir_recursive_absolute("res://sprites/hd")
 	var pasta := ProjectSettings.globalize_path("res://tools/hd")
+	# com nomes depois de "--", só esses (os outros .res ficam como estão)
+	var so := OS.get_cmdline_user_args()
 	for f in DirAccess.get_files_at(pasta):
 		if not f.ends_with("@hd.png"):
 			continue
 		var nome := f.trim_suffix("@hd.png")
+		if not so.is_empty() and not nome in so:
+			continue
 		var original := Image.load_from_file(ProjectSettings.globalize_path("res://sprites/%s.png" % nome))
 		var img := Image.load_from_file(pasta.path_join(f))
 		if original == null or img == null:
