@@ -1773,8 +1773,8 @@ APK 1.29.0 (código 31).
 O que a 1.29.0 fez na TV Box: a tela preta voltou na abertura e, no Mar,
 acertar um baú fechou o app.
 
-**A tela preta da abertura.** Duas coisas novas da 1.29.0 aconteciam logo
-na abertura:
+**A tela preta da abertura.** Duas coisas aconteciam logo na abertura da
+1.29.0:
 - **A página de queda.** Desde a 1.27.0, quando o app fechava sozinho
   (como no baú), a abertura seguinte mostrava o fim da caixa-preta num fundo
   quase preto, por até 30 s, antes da apresentação. Depois de uma queda no
@@ -1804,8 +1804,9 @@ na abertura:
 
 No PC, o som do baú tocado do meio do arquivo passou sem nenhum erro pelo
 verificador de memória (valgrind, 30 toques com o tom variando). Mesmo
-assim ele não toca mais do meio. No Mar com acertos no baú, a memória do
-jogo fica em ~400 MB e sobe ~3 MB por acerto: não é falta de memória.
+assim ele não toca mais do meio. No PC, no Mar com acertos no baú, a
+memória do jogo fica em ~400 MB e sobe ~3 MB por acerto: não é falta de
+memória.
 
 **O jogo se protege no Mar** (`scripts/mar.gd`, `_vigiar_acerto`): o
 acerto de cada tipo de alvo (baú, vaso, água-viva, bomba) virou um trecho
@@ -1825,7 +1826,10 @@ depois vêm `efeito do acerto montado` e, dois quadros depois,
 - com o "montado" e sem o "ok", caiu desenhando;
 - com o "ok", caiu depois do acerto.
 
-Abra a CONFIGURAÇÃO > CAIXA-PRETA > VER e mande a foto.
+Abra a CONFIGURAÇÃO > CAIXA-PRETA > VER e mande a foto. Logo depois de
+instalar a 1.30.0 por cima da 1.29.0 (sem desinstalar), o VER deve mostrar
+a última queda da 1.29.0 ("ÚLTIMA QUEDA GUARDADA", com a versão na primeira
+linha): essa foto diz onde a 1.29.0 parou.
 
 **Caixa-preta mais limpa:** o aviso de layout que as fases davam ao montar
 o placar não vai mais para ela.
