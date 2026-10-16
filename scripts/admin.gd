@@ -31,8 +31,15 @@ var _aprender_t := 0.0
 var _rotulos_botao := {}
 var _confirmar := {}
 var _saindo := false
-var _painel: Control = null   # CAIXA-PRETA aberta por cima de tudo (ou null)
+var _painel: Control = null   # CAIXA-PRETA ou CÂMERA aberta por cima de tudo (ou null)
 var _botao_ver: Button = null
+var _botao_testar: Button = null
+# TESTAR CÂMERA (painel): a imagem ao vivo, a foto de teste e o estado
+var _cam_previa: TextureRect = null
+var _cam_foto: TextureRect = null
+var _cam_estado: Label = null
+var _cam_t := 0.0
+var _cam_foto_t := 0.0
 
 
 func _ready() -> void:
@@ -79,7 +86,7 @@ func _criar_interface() -> void:
 	if ResourceLoader.exists(FONTE_TITULO):
 		titulo.add_theme_font_override("font", load(FONTE_TITULO))
 	titulos.add_child(titulo)
-	titulos.add_child(_rotulo("LAZER SHOT  ·  aponte a arma e atire nos botões", 20, COR_APAGADO))
+	titulos.add_child(_rotulo("LAZER SHOT %s  ·  aponte a arma e atire nos botões" % Maquina.nome_da_versao(), 20, COR_APAGADO))
 	var direita := VBoxContainer.new()
 	direita.alignment = BoxContainer.ALIGNMENT_CENTER
 	topo.add_child(direita)
@@ -117,7 +124,7 @@ func _criar_interface() -> void:
 	_opcoes(coluna, "Vídeo pelo hardware", "decodificador da TV Box (desligado: player interno do jogo)", "video/nativo", [[true, "LIGADO"], [false, "DESLIGADO"]])
 	_opcoes(coluna, "Imagem do vídeo", "se o vídeo aparecer de cabeça para baixo", "video/virar", [[false, "NORMAL"], [true, "VIRADA"]])
 	# leve: a TV Box mais fraca (Maquina.qualidade_leve)
-	_opcoes(coluna, "Qualidade da imagem", "automática: leve na TV Box", "video/qualidade", [["auto", "AUTOMÁTICA"], ["leve", "LEVE"], ["completa", "COMPLETA"]])
+	_opcoes(coluna, "Qualidade da imagem", "automática: a da versão do APK (leve ou avançada)", "video/qualidade", [["auto", "AUTOMÁTICA"], ["leve", "LEVE"], ["completa", "COMPLETA"]])
 
 	# SOM
 	_secao(coluna, "SOM")
@@ -133,6 +140,12 @@ func _criar_interface() -> void:
 	_ultimo_botao = _rotulo("Último botão recebido: —", 18, COR_APAGADO)
 	_ultimo_botao.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	coluna.add_child(_ultimo_botao)
+
+	# CÂMERA: a foto antes da partida (scripts/webcam.gd, scripts/pose.gd).
+	_secao(coluna, "CÂMERA")
+	var linha_cam := _opcoes(coluna, "Foto antes da partida", "webcam do gabinete: a foto vai para o ranking", "camera/ativa", [[true, "LIGADA"], [false, "DESLIGADA"]])
+	_botao_testar = _botao("TESTAR", _ver_camera, 22, COR_BOTAO, Vector2(150, 50))
+	linha_cam.add_child(_botao_testar)
 
 	# CAIXA-PRETA: o que o jogo fazia quando parou (scripts/caixa_preta.gd).
 	# Fica só aqui: nada técnico aparece na tela do jogo.
@@ -473,7 +486,7 @@ func _input(event: InputEvent) -> void:
 		var k := event as InputEventKey
 		if k.pressed and not k.echo and (k.keycode == KEY_F10 or k.keycode == KEY_ESCAPE):
 			if _painel != null:
-				_fechar_caixa_preta()
+				_fechar_painel()
 			else:
 				_salvar_e_sair()
 			get_viewport().set_input_as_handled()
@@ -495,6 +508,8 @@ func _input(event: InputEvent) -> void:
 
 
 func _process(delta: float) -> void:
+	if _cam_previa != null and is_instance_valid(_cam_previa):
+		_atualizar_camera(delta)
 	if _aprendendo != "":
 		_aprender_t -= delta
 		var r: Label = _rotulos_botao.get(_aprendendo)
@@ -541,7 +556,7 @@ func _ver_caixa_preta() -> void:
 		titulo.add_theme_font_override("font", load(FONTE_TITULO))
 	titulo.position = Vector2(36, 22)
 	_painel.add_child(titulo)
-	var fechar := _botao("FECHAR", _fechar_caixa_preta, 26, COR_OK, Vector2(220, 64))
+	var fechar := _botao("FECHAR", _fechar_painel, 26, COR_OK, Vector2(220, 64))
 	fechar.position = Vector2(tela.x - 36.0 - 220.0, 24)
 	_painel.add_child(fechar)
 	var dica := _rotulo("Tire uma foto desta tela e mande para o suporte: a última linha diz onde o jogo estava.", 19, COR_APAGADO)
@@ -569,13 +584,174 @@ func _mostrar_fim(texto: Label) -> void:
 		texto.lines_skipped = total - cabe
 
 
-func _fechar_caixa_preta() -> void:
+func _fechar_painel() -> void:
 	if _painel == null:
 		return
+	var era_camera := _painel.name == "Camera"
 	for b in _botoes.duplicate():
 		if _painel.is_ancestor_of(b):
 			_botoes.erase(b)
 	_painel.queue_free()
 	_painel = null
-	if is_instance_valid(_botao_ver):
+	_cam_previa = null
+	_cam_foto = null
+	_cam_estado = null
+	if era_camera:
+		Maquina.webcam.soltar()
+		Maquina.webcam.janelas_liberadas = false
+		if is_instance_valid(_botao_testar):
+			_botao_testar.grab_focus()
+	elif is_instance_valid(_botao_ver):
 		_botao_ver.grab_focus()
+
+
+# ================================================================ câmera
+## TESTAR CÂMERA: a imagem da webcam ao vivo, do jeito que sai na pose
+## (espelho e giro), uma foto de teste no tamanho do ranking e, embaixo, o
+## estado técnico (por onde ela abriu, permissões, o que o Android vê). É
+## aqui, e só aqui, que aparece o porquê de não haver imagem.
+func _ver_camera() -> void:
+	if _painel != null:
+		return
+	var w: Webcam = Maquina.webcam
+	if not bool(Maquina.valor("camera/ativa")):
+		_mostrar_aviso("A foto antes da partida está DESLIGADA: ligue para testar", COR_DESTAQUE)
+		return
+	if Tela.contorna("camera"):
+		_mostrar_aviso("A câmera foi desligada pela caixa-preta nesta versão (o app caiu com ela aberta)", COR_DESTAQUE)
+	w.janelas_liberadas = true
+	w.ligar()
+	w.definir_ritmo(100)
+	var tela := get_viewport_rect().size
+	_painel = Control.new()
+	_painel.name = "Camera"
+	_painel.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_painel.mouse_filter = Control.MOUSE_FILTER_STOP
+	add_child(_painel)
+	var fundo := ColorRect.new()
+	fundo.color = COR_FUNDO
+	fundo.set_anchors_preset(Control.PRESET_FULL_RECT)
+	fundo.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_painel.add_child(fundo)
+	var faixa := ColorRect.new()
+	faixa.color = COR_DESTAQUE
+	faixa.anchor_right = 1.0
+	faixa.offset_bottom = 6.0
+	faixa.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_painel.add_child(faixa)
+	var titulo := _rotulo("CÂMERA", 46, COR_TEXTO)
+	if ResourceLoader.exists(FONTE_TITULO):
+		titulo.add_theme_font_override("font", load(FONTE_TITULO))
+	titulo.position = Vector2(36, 22)
+	_painel.add_child(titulo)
+	var fechar := _botao("FECHAR", _fechar_painel, 26, COR_OK, Vector2(220, 64))
+	fechar.position = Vector2(tela.x - 36.0 - 220.0, 24)
+	_painel.add_child(fechar)
+	var dica := _rotulo("A imagem como aparece na pose. Ajuste o espelho e o giro até a pessoa aparecer de pé; a FOTO TESTE mostra o recorte que vai para o ranking.", 19, COR_APAGADO)
+	dica.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	dica.position = Vector2(36, 100)
+	dica.size = Vector2(tela.x - 72.0, 52)
+	_painel.add_child(dica)
+	# a imagem ao vivo (quadrada, como na pose) e a foto de teste ao lado
+	var lado := minf(560.0, tela.x - 72.0 - 280.0)
+	var caixa := Control.new()
+	caixa.clip_contents = true
+	caixa.position = Vector2(36, 170)
+	caixa.size = Vector2(lado, lado)
+	caixa.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_painel.add_child(caixa)
+	var preto := ColorRect.new()
+	preto.color = Color(0.02, 0.02, 0.03)
+	preto.size = caixa.size
+	preto.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	caixa.add_child(preto)
+	_cam_previa = TextureRect.new()
+	_cam_previa.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_cam_previa.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	_cam_previa.size = caixa.size
+	_cam_previa.pivot_offset = caixa.size * 0.5
+	_cam_previa.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	caixa.add_child(_cam_previa)
+	var x2 := 36.0 + lado + 24.0
+	var foto_rotulo := _rotulo("FOTO TESTE", 20, COR_APAGADO)
+	foto_rotulo.position = Vector2(x2, 170)
+	_painel.add_child(foto_rotulo)
+	_cam_foto = TextureRect.new()
+	_cam_foto.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_cam_foto.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	_cam_foto.position = Vector2(x2, 200)
+	_cam_foto.size = Vector2(220, 220)
+	_cam_foto.texture = FotosRanking.vazia()
+	_cam_foto.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_painel.add_child(_cam_foto)
+	var botoes := VBoxContainer.new()
+	botoes.position = Vector2(x2, 440)
+	botoes.add_theme_constant_override("separation", 12)
+	_painel.add_child(botoes)
+	var espelho := _botao("", func():
+		Maquina.definir("camera/espelhar", not bool(Maquina.valor("camera/espelhar")))
+		Maquina.aplicar()
+		_atualizar_tudo(), 22, COR_BOTAO, Vector2(260, 56))
+	botoes.add_child(espelho)
+	var giro := _botao("", func():
+		Maquina.definir("camera/girar", (int(Maquina.valor("camera/girar")) + 90) % 360)
+		Maquina.aplicar()
+		_atualizar_tudo(), 22, COR_BOTAO, Vector2(260, 56))
+	botoes.add_child(giro)
+	botoes.add_child(_botao("FOTO TESTE", _foto_teste, 22, COR_BOTAO, Vector2(260, 56)))
+	if OS.get_name() == "Android":
+		# a janela de permissão da câmera do Android de novo (se ela foi
+		# negada sem querer na primeira abertura)
+		botoes.add_child(_botao("PERMISSÃO", func():
+			OS.request_permission("CAMERA")
+			_mostrar_aviso("Toque em PERMITIR na janela do Android", COR_TEXTO), 22, COR_BOTAO, Vector2(260, 56)))
+	_atualizadores.append(func():
+		if is_instance_valid(espelho):
+			espelho.text = "ESPELHO: %s" % ("SIM" if bool(Maquina.valor("camera/espelhar")) else "NÃO")
+		if is_instance_valid(giro):
+			giro.text = "GIRAR: %d°" % int(Maquina.valor("camera/girar")))
+	_cam_estado = _rotulo("", 16, COR_TEXTO)
+	_cam_estado.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_cam_estado.clip_text = true
+	_cam_estado.position = Vector2(36, 170 + lado + 24)
+	_cam_estado.size = Vector2(tela.x - 72.0, tela.y - (170 + lado + 24) - 24.0)
+	_painel.add_child(_cam_estado)
+	_cam_t = 0.0
+	_cam_foto_t = 0.0
+	_atualizar_tudo()
+	fechar.grab_focus()
+
+
+func _atualizar_camera(delta: float) -> void:
+	var w: Webcam = Maquina.webcam
+	_cam_previa.texture = w.textura() if w.ao_vivo() else null
+	_cam_previa.flip_h = bool(Maquina.valor("camera/espelhar"))
+	_cam_previa.rotation_degrees = float(int(Maquina.valor("camera/girar")))
+	if _cam_foto_t > 0.0:
+		_cam_foto_t -= delta
+	_cam_t -= delta
+	if _cam_t <= 0.0:
+		_cam_t = 0.5
+		_cam_estado.text = "\n".join(w.relatorio())
+
+
+func _foto_teste() -> void:
+	var w: Webcam = Maquina.webcam
+	if not w.ao_vivo():
+		_mostrar_aviso("Sem imagem da câmera agora", COR_DESTAQUE)
+		return
+	w.abrir_obturador(300)
+	await get_tree().create_timer(0.35).timeout
+	if _cam_foto == null or not is_instance_valid(_cam_foto):
+		return
+	var caminho := w.tirar_foto()
+	if caminho == "" or w.ultima_foto == null:
+		_mostrar_aviso("A foto saiu sem imagem", COR_DESTAQUE)
+		return
+	var r := Webcam.recortar(w.ultima_foto, w.espelhar, w.girar, Webcam.LADO_FOTO)
+	_cam_foto.texture = ImageTexture.create_from_image(r)
+	# a foto de teste não fica guardada (não é de ninguém)
+	var apagar := func(c: String) -> void:
+		if c == caminho:
+			DirAccess.remove_absolute(caminho)
+	w.foto_gravada.connect(apagar, CONNECT_ONE_SHOT)

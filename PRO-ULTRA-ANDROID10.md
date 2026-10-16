@@ -4,18 +4,38 @@ Esta branch (`tvbox-ultra-pro`) deixa o Lazer Shot leve o bastante para a TV Box
 Pro Ultra e gera o APK. As fases, regras, sons e efeitos são os mesmos do PC.
 O projeto continua no Godot 4.6.1 (renderizador Compatibility).
 
+Desde a Rodada 31 o jogo sai em **duas versões** (dois APKs do mesmo jogo):
+
+| Versão | Para | Qualidade de fábrica |
+|---|---|---|
+| **LEVE** (`LazerShot-Leve-PROSB3000.apk`) | a TV Box PROSB-3000 (H313, Mali-G31, 2 GB) | leve: 30 quadros/s, sem os enfeites opcionais |
+| **AVANÇADA** (`LazerShot-Avancada.apk`) | a TV Box mais forte | completa: tudo ligado, 60 quadros/s quando a TV Box segura |
+
+As duas têm a **foto antes da partida** (webcam do gabinete), como no Super
+Boxing.
+
 ## Gerar o APK (sempre assim)
 
-1. Extraia a pasta inteira num lugar novo do PC.
-2. Dê dois cliques em `GERAR_APK_PRO_ULTRA.bat`.
-   Precisa do Godot 4.6.1 (em Downloads), do JDK 17 e do Android SDK, igual ao
-   Dragon Bowling da Ultra Pro. Os Export Templates 4.6.1 são baixados na
-   primeira vez, se faltarem.
-3. O APK sai em `APK-Pronto/LazerShot-Pro-Ultra-Android10.apk`. Copie-o para o
-   pendrive e instale na TV Box.
+1. Extraia a pasta inteira num lugar novo do PC, de caminho curto (por
+   exemplo `C:\LazerShot`): o Gradle cria pastas fundas dentro dela.
+2. Dê dois cliques em `GERAR_APK_PRO_ULTRA.bat`: ele gera **as duas
+   versões**. Para gerar só uma: `GERAR_APK_LEVE.bat` (TV Box PROSB-3000) ou
+   `GERAR_APK_AVANCADA.bat` (TV Box mais forte).
+   Precisa do Godot 4.6.1 (em Downloads), do JDK 17, do Android SDK e de
+   internet, como o Super Boxing PRO: desde a Rodada 31 o APK é compilado com
+   o **Gradle**, porque a webcam vem num plugin Android (o mesmo do Super
+   Boxing), e plugin só entra no APK assim. Na primeira vez ele baixa os
+   Export Templates 4.6.1 (se faltarem), instala o modelo Android em
+   `android/build` e o Gradle baixa as bibliotecas; isso demora alguns
+   minutos. As próximas vezes são mais rápidas.
+3. Os APKs saem em `APK-Pronto`: `LazerShot-Leve-PROSB3000.apk` e
+   `LazerShot-Avancada.apk`. Copie o da TV Box para o pendrive e instale.
+   Os dois instalam **por cima** da versão anterior (mesmo app, mesma
+   assinatura): ranking e configuração continuam.
 
 A janela fica aberta e o histórico completo vai para
-`build/android/GERACAO-COMPLETA.log`.
+`build/android/GERACAO-COMPLETA.log` (e o de cada versão em
+`build/android/exportacao-godot-Leve.log` / `-Avancada.log`).
 
 ### Se a imagem ou a mira saírem erradas
 
@@ -48,6 +68,8 @@ O jogo não mostra nada técnico na tela. Por trás, ele tem estas proteções:
   contornado nas próximas aberturas desta versão: a apresentação é pulada,
   os vídeos passam a tocar pelo player do Godot, o shader vira imagem
   simples, o alvo do Mar é acertado sem o efeito especial e sem o som dele.
+  A webcam tem marca própria: se o app cair **duas vezes** com ela aberta,
+  a foto antes da partida é desligada nesta versão (o jogo segue sem foto).
   Todo o resto do jogo continua igual. Instalar uma versão nova zera tudo.
 
 **Instale sempre por cima** (sem desinstalar a versão anterior): a
@@ -75,7 +97,8 @@ Configurações > Preferências do dispositivo > Opções do desenvolvedor >
 Depuração USB/ADB (as opções do desenvolvedor aparecem depois de clicar 7
 vezes em "Versão" ou "Build" em Sobre).
 
-A versão do APK aparece em Configurações > Apps da TV Box (1.30.0, código 32).
+A versão do APK aparece em Configurações > Apps da TV Box (1.31.0-leve ou
+1.31.0-avancada, código 33) e no alto da CONFIGURAÇÃO do jogo.
 
 ## Tela em pé na TV Box
 
@@ -1842,6 +1865,83 @@ CAIXA-PRETA aberta e fechada pela arma.
 
 APK 1.30.0 (código 32).
 
+## Rodada 31: duas versões e a foto antes da partida
+
+**Duas versões, o mesmo jogo** (`export_presets.cfg`, `scripts/Maquina.gd`
+`versao_do_apk`). Cada APK leva uma etiqueta (`versao_leve` ou
+`versao_avancada`) e a QUALIDADE DA IMAGEM "automática" segue a etiqueta:
+- **LEVE**, para a PROSB-3000: a qualidade leve da Rodada 29 (30 quadros
+  cravados, fundos sem as contas pesadas, sem os enfeites opcionais) e a
+  webcam acordando mais tarde no menu (15 s). É a versão de hoje.
+- **AVANÇADA**, para a TV Box mais forte que chega: a qualidade completa, a
+  mesma do PC (tudo ligado; cada tela tenta 60 quadros e só trava em 30 se a
+  TV Box não segurar).
+
+A CONFIGURAÇÃO continua podendo trocar (QUALIDADE DA IMAGEM: LEVE /
+COMPLETA) em qualquer uma das duas, e mostra no alto qual versão está
+instalada. Se a TV Box nova não segurar a COMPLETA, é só escolher LEVE lá.
+
+**A foto antes da partida** (`scripts/pose.gd`, `scenes/pose.tscn`), como no
+Super Boxing: depois do START e da escolha do cenário entra a tela **FAÇA SUA
+POSE!**, com a capa do cenário em cima e a webcam **ao vivo** num visor de
+máquina fotográfica. Conta 3-2-1, pisca, faz o som do obturador e mostra a
+foto ("PREPARE A MIRA!"); aí entra a fase. O JOGAR DE NOVO do resultado
+também passa por ela.
+- **A foto vai para o recorde e para o ranking**: em cima do NOVO RECORDE
+  (`scripts/nome_ranking.gd`) e numa coluna FOTO do ranking dos 20 melhores
+  (`scripts/ranking.gd`). Recorde sem foto (os antigos, ou partida sem
+  webcam) mostra uma silhueta. As fotos (320x320) ficam na memória do app e
+  só as do ranking são guardadas: as outras são apagadas a cada partida
+  nova. No ranking elas abrem em segundo plano (`scripts/fotos_ranking.gd`),
+  sem travar a tabela.
+- **A foto é da pose final**: o obturador só abre no último meio segundo da
+  contagem e fica com o quadro mais nítido desse meio segundo. Se a imagem
+  parar no meio da contagem, a contagem para junto.
+- **A webcam nunca segura a máquina.** Sem webcam no aparelho, a pose nem
+  aparece. Com webcam ainda abrindo, a tela mostra "PREPARANDO A CÂMERA"
+  por alguns segundos e, se a imagem não vier, segue sem foto ("VAMOS
+  JOGAR!"). Nada técnico aparece na tela do jogo.
+
+**A webcam** (`scripts/webcam.gd`) é o serviço de câmera do Super Boxing, com
+o mesmo plugin Android (`tools/webcam_android`, o PunchUsbSerial): pela
+câmera do sistema (é assim que as TV Boxes mostram a webcam USB), pela
+webcam direto no USB, ou pela Camera2 do Godot, um caminho de cada vez. Ela
+**só fica aberta quando alguém precisa**: abre quando a partida é paga
+(START), mostra a imagem na pose e é solta assim que a foto sai. Durante a
+partida e no menu ela fica desligada (não gasta processador nem memória).
+Uma vez por abertura do jogo ela abre sozinha no menu, só para descobrir se
+existe, e fecha logo depois.
+
+**A permissão da câmera** é pedida uma vez, na primeira abertura, com a tela
+ainda preta antes da apresentação: toque em **PERMITIR**. Se a webcam for do
+tipo que o Android não mostra como câmera, a janela "Permitir acesso ao
+aparelho USB" aparece no menu: marque **Usar por padrão** e OK.
+
+**Na CONFIGURAÇÃO**, seção **CÂMERA**:
+- **Foto antes da partida: LIGADA / DESLIGADA.** Sem webcam no gabinete,
+  desligue: a pose some e a permissão não é mais pedida.
+- **TESTAR**: a imagem ao vivo como sai na pose, **ESPELHO** (sim/não),
+  **GIRAR** (0°, 90°, 180°, 270°, para webcam montada de lado ou de cabeça
+  para baixo) e **FOTO TESTE** (o recorte que vai para o ranking). Embaixo, o
+  estado técnico: por onde ela abriu, a permissão, o que o Android vê de
+  câmera e de USB. Salve na saída para valer.
+
+**O plugin entra no APK pelo gerador**, e não pelo `project.godot`: o
+`GERAR_APK_PRO_ULTRA.ps1` instala o modelo Android em `android/build` (como
+o botão "Instalar modelo de compilação Android" do editor) e põe nele o
+plugin e as bibliotecas (marca `LAZER_SHOT_WEBCAM_V1` no `build.gradle`).
+No fim ele confere se o plugin está dentro de cada APK.
+
+Testado no PC com uma câmera de teste (`LAZER_CAMERA_FALSA=1`): START,
+cenários, pose com contagem e foto, a fase com a webcam já solta, o NOVO
+RECORDE com a foto, o ranking com foto e com silhueta, e a CONFIGURAÇÃO com
+o TESTAR (giro, espelho, foto teste). Sem câmera, a pose espera e segue
+sem foto. A exportação com o Gradle foi conferida até a compilação (preset,
+modelo Android e permissão da câmera no APK); a compilação em si roda no
+PC, como a do Super Boxing PRO.
+
+APK 1.31.0 (código 33): `1.31.0-leve` e `1.31.0-avancada`.
+
 ## Para testar no PC como se fosse a TV Box
 
 ```
@@ -1852,3 +1952,7 @@ LAZER_GIRO=1 godot --path . --resolution 1920x1080
 quadros cravados e sem os enfeites opcionais), como na TV Box.
 
 `LAZER_MIRA_DIRETA=0` testa a mira girada.
+
+`LAZER_CAMERA_FALSA=1` põe uma imagem de teste no lugar da webcam (para ver a
+pose e a foto no ranking); `LAZER_CAMERA_FALSA=lenta` faz a imagem demorar
+9 s (a pose segue sem foto).

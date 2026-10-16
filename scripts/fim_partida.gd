@@ -7,7 +7,8 @@ extends CanvasLayer
 ##   cima e um tiro leva para a escolha de cenário.
 ## - A contagem do resultado, quando acaba, volta para a ABERTURA (a
 ##   apresentação Lazer & Sport e depois o vídeo da abertura).
-## - JOGAR DE NOVO (START) recomeça a fase recarregando a tela inteira:
+## - JOGAR DE NOVO (START) recomeça a fase recarregando a tela inteira
+##   (passando antes pela foto da webcam, scripts/pose.gd):
 ##   nada da partida anterior continua rodando por baixo. Antes a fase se
 ##   "zerava" por dentro, e apertar START várias vezes deixava partidas e
 ##   laços duplicados rodando juntos (o jogo travava e podia fechar).
@@ -78,7 +79,8 @@ static func jogar_de_novo(fase: Node) -> void:
 	if not Maquina.cobrar():
 		return
 	fase.set_meta("_jogar_de_novo", true)
-	tg.trocar_cena(fase.scene_file_path)
+	# a partida nova também começa com a foto (scripts/pose.gd)
+	Pose.ir(fase.scene_file_path)
 
 
 func _ready() -> void:

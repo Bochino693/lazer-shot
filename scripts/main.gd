@@ -63,6 +63,12 @@ var teaser_atual: String = ""
 
 func _ready() -> void:
 	_ocultar_ponteiro_mouse()
+	# A WEBCAM (foto antes da partida, scripts/webcam.gd): solta aqui; uma
+	# vez por sessão ela abre sozinha, com o menu já assentado, só para
+	# descobrir se existe. Na versão leve, mais tarde (longe do começo).
+	Maquina.webcam.soltar()
+	Maquina.webcam.janelas_liberadas = true
+	Maquina.webcam.descobrir(15000 if Maquina.qualidade_leve() else 8000)
 	_configurar_fundos()
 	_configurar_canvas()
 	_configurar_audio()
@@ -599,6 +605,7 @@ func _reposicionar_canvas() -> void:
 #  LIMPEZA
 # ─────────────────────────────────────────────
 func _exit_tree() -> void:
+	Maquina.webcam.janelas_liberadas = false
 	if tween_pressione != null:
 		tween_pressione.kill()
 	if tween_fx != null:

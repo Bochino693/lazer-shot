@@ -74,6 +74,15 @@ const QUENTE := [Color(1.0, 0.95, 0.7, 1.0), Color(1.0, 0.55, 0.15, 1.0), Color(
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# A PERMISSÃO DA CÂMERA (foto antes da partida) é pedida aqui, antes de
+	# tudo, com a tela ainda preta: a janela do Android não aparece no meio
+	# de nada. Só na primeira vez (dada, o Android guarda); desligando a
+	# câmera na CONFIGURAÇÃO ela não é mais pedida.
+	if Maquina.webcam.precisa_permissao():
+		visible = false
+		set_process(false)
+		set_process_input(false)
+		await _pedir_permissao_da_camera()
 	if Tela.contorna("abertura"):
 		# já derrubou o app nesta versão: parada e escondida, sem montar
 		# nada, direto para o menu
@@ -84,6 +93,34 @@ func _ready() -> void:
 		TransicaoGlobal.trocar_cena(PROXIMA, 0.0, 0.3)
 		return
 	_iniciar()
+
+
+var _saiu_de_foco := false
+var _voltou_ao_foco := false
+
+
+func _notification(what: int) -> void:
+	match what:
+		NOTIFICATION_APPLICATION_FOCUS_OUT, NOTIFICATION_APPLICATION_PAUSED:
+			_saiu_de_foco = true
+		NOTIFICATION_APPLICATION_FOCUS_IN, NOTIFICATION_APPLICATION_RESUMED:
+			if _saiu_de_foco:
+				_voltou_ao_foco = true
+
+
+## Pede a permissão e espera a janela ser respondida (o jogo sai de foco e
+## volta), ou 3 s sem janela nenhuma (já decidida antes), ou 45 s no máximo.
+func _pedir_permissao_da_camera() -> void:
+	Tela.marca("webcam: pedindo a permissão da câmera")
+	Maquina.webcam.pedindo_permissao()
+	OS.request_permission("CAMERA")
+	var t0 := Time.get_ticks_msec()
+	while true:
+		await get_tree().process_frame
+		var passou := (Time.get_ticks_msec() - t0) / 1000.0
+		if (_voltou_ao_foco and passou > 0.6) or (not _saiu_de_foco and passou > 3.0) or passou > 45.0:
+			break
+	Tela.marca("webcam: permissão %s" % ("dada" if not Maquina.webcam.precisa_permissao() else "NÃO dada"))
 
 
 func _iniciar() -> void:

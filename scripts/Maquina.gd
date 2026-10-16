@@ -56,6 +56,10 @@ const PADRAO := {
 	"video/virar": false,
 	# QUALIDADE DA IMAGEM (ver qualidade_leve): "auto", "leve" ou "completa"
 	"video/qualidade": "auto",
+	# FOTO ANTES DA PARTIDA (scripts/webcam.gd, scenes/pose.tscn)
+	"camera/ativa": true,
+	"camera/espelhar": false,
+	"camera/girar": 0,
 	"audio/volume_musica": -5.0,
 	"audio/volume_fx": 0.0,
 	"sistema/idioma": "pt_br",
@@ -78,6 +82,10 @@ var _aviso_t := 0.0
 var _som_ficha: AudioStreamPlayer
 var _bus_musica := -1
 var _bus_efeitos := -1
+
+## A webcam do gabinete (foto antes da partida). Criada aqui, junto com a
+## máquina: ela vive o jogo inteiro e só abre quando alguém precisa.
+var webcam: Webcam
 
 const FONTE_PADRAO := "res://fonts/Exo2-Bold.ttf"
 
@@ -210,6 +218,9 @@ func _ready() -> void:
 	_migrar_config()
 	_criar_barramentos_de_audio()
 	_criar_rotulo()
+	webcam = Webcam.new()
+	webcam.name = "Webcam"
+	add_child(webcam)
 	aplicar()
 	get_tree().node_added.connect(_ao_entrar_no)
 	# (Os vídeos são copiados para a memória interna só quando vão tocar, como
@@ -276,6 +287,32 @@ func modo_credito() -> bool:
 	return modo == "credito"
 
 
+## AS DUAS VERSÕES DO APK (Rodada 31). O mesmo jogo sai em dois APKs
+## (export_presets.cfg, GERAR_APK_PRO_ULTRA.bat):
+##   LEVE      para a TV Box PROSB-3000 (H313, Mali-G31, 2 GB): qualidade
+##             leve de fábrica (abaixo) e a webcam descobrindo mais tarde.
+##   AVANÇADA  para a TV Box mais forte: qualidade completa de fábrica.
+## A versão vem da etiqueta do APK ("versao_leve" / "versao_avancada"). Fora
+## dos dois APKs (PC, editor) vale o "auto" de antes.
+func versao_do_apk() -> String:
+	if OS.has_feature("versao_leve"):
+		return "leve"
+	if OS.has_feature("versao_avancada"):
+		return "avancada"
+	return ""
+
+
+## Nome da versão para a CONFIGURAÇÃO.
+func nome_da_versao() -> String:
+	var numero: String = preload("res://scripts/caixa_preta.gd").VERSAO
+	match versao_do_apk():
+		"leve":
+			return "%s · VERSÃO LEVE (PROSB-3000)" % numero
+		"avancada":
+			return "%s · VERSÃO AVANÇADA" % numero
+	return numero
+
+
 ## QUALIDADE LEVE (Rodada 29): a imagem para a TV Box mais fraca
 ## (PROSB-3000: Allwinner H313, Mali-G31 MP2, 2 GB). Na placa dela o
 ## que pesa é pintar a tela de 1920x1080 várias vezes por quadro com contas
@@ -288,8 +325,9 @@ func modo_credito() -> bool:
 ##   - os enfeites opcionais de cada fase (grupo "efeito_opcional") desde o
 ##     começo, sem esperar a calibragem.
 ## Alvos, acertos, placar, mira e o cenário continuam iguais.
-## "auto" = leve no Android (a TV Box), completa no PC. A TV Box mais forte
-## escolhe COMPLETA na configuração. Para testar no PC: LAZER_QUALIDADE.
+## "auto" = a da versão do APK (leve na LEVE, completa na AVANÇADA); fora
+## dos APKs, leve no Android e completa no PC. A CONFIGURAÇÃO pode trocar
+## (LEVE / COMPLETA) em qualquer versão. Para testar no PC: LAZER_QUALIDADE.
 func qualidade_leve() -> bool:
 	return _qualidade_leve
 
@@ -302,7 +340,15 @@ func _decidir_qualidade() -> void:
 	var q := str(valor("video/qualidade"))
 	if OS.has_environment("LAZER_QUALIDADE"):
 		q = OS.get_environment("LAZER_QUALIDADE")
-	var leve := OS.get_name() == "Android" if q == "auto" else q == "leve"
+	var leve := q == "leve"
+	if q == "auto":
+		match versao_do_apk():
+			"leve":
+				leve = true
+			"avancada":
+				leve = false
+			_:
+				leve = OS.get_name() == "Android"
 	if leve != _qualidade_leve or not _qualidade_anotada:
 		_qualidade_leve = leve
 		_qualidade_anotada = true
@@ -324,6 +370,9 @@ func aplicar() -> void:
 	t.set_meta("modo_dificuldade", "facil")   # só existe o jogo com a mira
 	t.set_meta("admin_idioma", str(valor("sistema/idioma")))
 	_decidir_qualidade()
+	if webcam != null:
+		webcam.configurar(bool(valor("camera/ativa")) and not Tela.contorna("camera"),
+			bool(valor("camera/espelhar")), int(valor("camera/girar")))
 
 	_mapear_botao(ACAO_START, int(valor("botoes/start")))
 	_mapear_botao(ACAO_SELECT, int(valor("botoes/select")))
@@ -438,16 +487,26 @@ func e_recarga_arma(me: InputEventMouseButton) -> bool:
 func cobrar() -> bool:
 	if not modo_credito():
 		_contar_partida()
+		_camera_para_a_foto()
 		return true
 	if creditos >= creditos_por_partida:
 		definir("maquina/creditos", creditos - creditos_por_partida)
 		_contar_partida()
 		_atualizar_rotulo()
 		creditos_mudaram.emit(creditos)
+		_camera_para_a_foto()
 		return true
 	sem_credito.emit()
 	_mostrar_aviso("INSIRA CRÉDITO", true)
 	return false
+
+
+## A partida foi paga: a webcam abre agora, para a imagem estar viva quando
+## a tela da pose entrar (depois da escolha do cenário). 1,5 s depois, para
+## não pesar no meio da troca de tela.
+func _camera_para_a_foto() -> void:
+	if webcam != null:
+		webcam.ligar(1500)
 
 
 func pode_jogar() -> bool:

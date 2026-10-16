@@ -132,6 +132,13 @@ func risco(trecho: String) -> void:
 		_caixa.risco(trecho)
 
 
+## A webcam abriu (true) ou foi solta (false): marca própria na caixa-preta,
+## porque ela fica aberta junto com outros trechos (scripts/webcam.gd).
+func risco_camera(aberta: bool) -> void:
+	if _caixa != null:
+		_caixa.risco_camera(aberta)
+
+
 ## O trecho arriscado em que o jogo está agora ("" = nenhum).
 func risco_atual() -> String:
 	return _caixa.risco_atual() if _caixa != null else ""
