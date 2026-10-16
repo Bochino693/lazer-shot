@@ -27,40 +27,38 @@ A janela fica aberta e o histórico completo vai para
 
 ### Se o jogo não abrir ou fechar sozinho na TV Box
 
-O jogo não mostra nada técnico na tela, com uma exceção: a **página de
-queda** (abaixo). Por trás, ele tem estas proteções:
+O jogo não mostra nada técnico na tela. Por trás, ele tem estas proteções:
 
 - **Caixa-preta** (`scripts/caixa_preta.gd`): grava em silêncio o aparelho,
   a placa de vídeo, a memória, os primeiros quadros desenhados (com a
-  memória livre do aparelho), cada troca de tela, cada erro e um pulso a
-  cada 30 s. Cada linha vai para o disco na hora. A última sessão que parou
-  sozinha em menos de 10 min fica guardada como `queda.txt`.
-- **Página de queda** (desde a 1.27.0, `scripts/pagina_queda.gd`): se o app
-  fechou sozinho na última vez (em menos de 10 min, sem ter ido para a tela
-  inicial da TV Box), a abertura seguinte mostra, antes de tudo, o começo e
-  o fim da caixa-preta daquela sessão, em letras simples. **Tire uma foto
-  da tela inteira e mande.** A última linha diz onde o jogo estava. Ela
-  fecha com um tiro, com START ou sozinha em 30 s, e o jogo segue.
+  memória livre do aparelho), cada troca de tela, cada erro, cada acerto do
+  Mar e um pulso a cada 30 s. Cada linha vai para o disco na hora. A última
+  sessão que parou sozinha em menos de 10 min fica guardada como `queda.txt`.
+- **Para ver a caixa-preta** (desde a 1.30.0): abra a CONFIGURAÇÃO (F10 ou
+  SELECT segurado 3 s na abertura) > **CAIXA-PRETA** > **VER**. A linha
+  "Última sessão" já diz se a anterior parou sozinha. O VER mostra como ela
+  terminou, os contornos ativos e o começo e o fim da última queda. **Tire
+  uma foto da tela inteira e mande.** A última linha diz onde o jogo estava.
+  (Até a 1.29.0 isso aparecia sozinho na abertura seguinte, a "página de
+  queda", num fundo quase preto: parecia tela preta. Saiu.)
 - **Contorno pontual** (só na TV Box): o jogo avisa quando entra num trecho
   que depende do aparelho (a apresentação Lazer & Sport, um vídeo começando
-  pelo decodificador da TV Box, um shader de fase sendo montado, a pasta do
-  pendrive). Se o app morrer **dentro** desse trecho, só ele é contornado
-  nas próximas aberturas desta versão: a apresentação é pulada, os vídeos
-  passam a tocar pelo player do Godot, o shader vira imagem simples, a
-  pasta do pendrive não é mais pedida. Todo o resto do jogo continua igual.
-  Instalar uma versão nova zera tudo.
+  pelo decodificador da TV Box, um shader de fase sendo montado, o acerto
+  de um alvo do Mar). Se o app morrer **dentro** desse trecho, só ele é
+  contornado nas próximas aberturas desta versão: a apresentação é pulada,
+  os vídeos passam a tocar pelo player do Godot, o shader vira imagem
+  simples, o alvo do Mar é acertado sem o efeito especial e sem o som dele.
+  Todo o resto do jogo continua igual. Instalar uma versão nova zera tudo.
 
 **Instale sempre por cima** (sem desinstalar a versão anterior): a
-caixa-preta da versão anterior continua lá e a página de queda mostra onde
-ela parou.
+caixa-preta da versão anterior continua lá.
 
-Para ver tudo o que aconteceu, sem cabo: deixe o **pendrive espetado na TV
-Box**. Quando o menu aparece pela primeira vez, o jogo pede ao Android a
-pasta dele no pendrive e copia a caixa-preta para lá; daí em diante a cópia
-vai também a cada abertura. No PC, ela fica na pasta
-`Android\data\com.lazersport.lazershot\files\caixa_preta` do pendrive:
-`queda.txt`, `anterior.txt` e `sessao.txt`. A mesma pasta também fica na
-memória da TV Box (gerenciador de arquivos > `Android/data/...`).
+Os arquivos também ficam na memória da TV Box, na pasta
+`Android/data/com.lazersport.lazershot/files/caixa_preta` (`queda.txt`,
+`anterior.txt`, `sessao.txt`), copiados a cada abertura do jogo. Pelo
+gerenciador de arquivos da TV Box dá para copiar essa pasta para um
+pendrive. O jogo não grava direto no pendrive: no Android 10 o Godot só
+grava nas pastas do próprio app.
 
 Com adb (TV Box com a depuração ligada, no cabo ou pela rede):
 
@@ -77,7 +75,7 @@ Configurações > Preferências do dispositivo > Opções do desenvolvedor >
 Depuração USB/ADB (as opções do desenvolvedor aparecem depois de clicar 7
 vezes em "Versão" ou "Build" em Sobre).
 
-A versão do APK aparece em Configurações > Apps da TV Box (1.27.0, código 29).
+A versão do APK aparece em Configurações > Apps da TV Box (1.30.0, código 32).
 
 ## Tela em pé na TV Box
 
@@ -1769,6 +1767,74 @@ erro e sem quadro acima de 80 ms. Fluxo completo (abertura, menu, as 4 fases,
 cenários) nas duas qualidades sem erro.
 
 APK 1.29.0 (código 31).
+
+## Rodada 30: a tela preta da abertura e o baú do Mar
+
+O que a 1.29.0 fez na TV Box: a tela preta voltou na abertura e, no Mar,
+acertar um baú fechou o app.
+
+**A tela preta da abertura.** Duas coisas novas da 1.29.0 aconteciam logo
+na abertura:
+- **A página de queda.** Desde a 1.27.0, quando o app fechava sozinho
+  (como no baú), a abertura seguinte mostrava o fim da caixa-preta num fundo
+  quase preto, por até 30 s, antes da apresentação. Depois de uma queda no
+  Mar, era essa a "tela preta". Ela saiu da abertura: o jogo sempre começa
+  direto pela apresentação, e o mesmo resumo fica na CONFIGURAÇÃO >
+  CAIXA-PRETA > VER, só quando alguém pede (`scripts/admin.gd`).
+- **A cópia da caixa-preta numa thread.** Na 1.29.0 a cópia para a pasta
+  que o gerenciador de arquivos enxerga passou para uma thread do motor, a
+  cada troca de tela (a primeira logo na abertura) e a cada 30 s no meio da
+  partida. O Godot grava nessa pasta pelo Java da TV Box. Fazer isso de uma
+  thread do motor era novo e nunca tinha rodado na TV Box, e uma queda ali
+  acontece em qualquer momento, inclusive no meio de uma partida. Saiu tudo:
+  - a caixa-preta volta a ser copiada só na partida do app, na hora, como
+    da 1.24.0 à 1.28.0. A sessão que caiu chega inteira na abertura
+    seguinte (`anterior.txt`);
+  - o pedido da pasta do pendrive ao Android também saiu. Ao conferir o
+    código do Godot 4.6, vi que ele não grava no pendrive no Android 10: a
+    cópia lá nunca funcionou.
+
+**O baú.** O efeito do baú usa o mesmo desenho do vaso e da água-viva
+(pedaços do próprio alvo, brilhos pelo pincel). Duas coisas eram só dele:
+- **O som começava no meio do arquivo.** O som do baú tocava a partir dos
+  2 s de um arquivo comprimido (QOA), o único do jogo assim. Agora o trecho
+  do golpe é um arquivo próprio (`songs/bau_hit_corte.wav`, recortado dos
+  2 s em diante), que toca do começo. O som é o mesmo.
+- **As moedas** (pincel, iguais às do resto do Mar).
+
+No PC, o som do baú tocado do meio do arquivo passou sem nenhum erro pelo
+verificador de memória (valgrind, 30 toques com o tom variando). Mesmo
+assim ele não toca mais do meio. No Mar com acertos no baú, a memória do
+jogo fica em ~400 MB e sobe ~3 MB por acerto: não é falta de memória.
+
+**O jogo se protege no Mar** (`scripts/mar.gd`, `_vigiar_acerto`): o
+acerto de cada tipo de alvo (baú, vaso, água-viva, bomba) virou um trecho
+vigiado por meio segundo, como a apresentação e os shaders. Se o app
+morrer ali, nas próximas aberturas desta versão aquele alvo é acertado de
+um jeito simples: os pontos, a animação, o clarão e o tremor ficam; saem os
+pedaços do alvo, o som dele e as moedas. A CONFIGURAÇÃO > CAIXA-PRETA
+mostra "Contornando nesta versão: acerto:bau". Testado no PC com uma queda
+simulada no acerto do baú: na abertura seguinte o baú veio simples e o vaso
+continuou com o efeito inteiro.
+
+**Se o app ainda fechar**, a caixa-preta agora diz exatamente onde. Cada
+acerto do Mar vira uma linha, `acerto bau (7 acertos, 520 pontos)`. Logo
+depois vêm `efeito do acerto montado` e, dois quadros depois,
+`ok, desenhado depois de: ...`:
+- sem o "montado", caiu montando o efeito;
+- com o "montado" e sem o "ok", caiu desenhando;
+- com o "ok", caiu depois do acerto.
+
+Abra a CONFIGURAÇÃO > CAIXA-PRETA > VER e mande a foto.
+
+**Caixa-preta mais limpa:** o aviso de layout que as fases davam ao montar
+o placar não vai mais para ela.
+
+Fluxo completo (abertura, menu, as 4 fases, cenários) nas qualidades leve
+e completa sem erro, Mar com acertos em baús e vaso, e a CONFIGURAÇÃO com a
+CAIXA-PRETA aberta e fechada pela arma.
+
+APK 1.30.0 (código 32).
 
 ## Para testar no PC como se fosse a TV Box
 

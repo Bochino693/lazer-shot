@@ -90,9 +90,17 @@ static func shaders(caminhos: Array, onde: Node) -> Aquecedor:
 		if not _pronto(c) and ResourceLoader.exists(c):
 			a._fila.append(c)
 	a._total = a._fila.size()
-	a._risco_antes = Tela.risco_atual()
+	a._risco_antes = _risco_de_fora()
 	a._pendurar(onde)
 	return a
+
+
+## O trecho vigiado de antes, para devolver no fim. O acerto de um alvo do
+## Mar (scripts/mar.gd, "acerto:<alvo>") vale só meio segundo: não volta
+## depois da troca de tela.
+static func _risco_de_fora() -> String:
+	var r := Tela.risco_atual()
+	return "" if r.begins_with("acerto:") else r
 
 
 static func _pronto(caminho: String) -> bool:
@@ -111,7 +119,7 @@ static func cena(raiz: Node, onde: Node) -> Aquecedor:
 		a._quadros = 0
 		a._pendurar(onde)
 		return a
-	a._risco_antes = Tela.risco_atual()
+	a._risco_antes = _risco_de_fora()
 	a._trecho = "desenho:cena"
 	Tela.risco(a._trecho)
 	a._passo = "desenho:cena " + raiz.name

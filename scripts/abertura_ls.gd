@@ -15,8 +15,8 @@ extends Control
 ## a placa da TV Box conhece: nada de linhas, polígonos ou sistema de
 ## partículas (faíscas, estouro e brasas são pontos de luz desenhados aqui)
 ## e, na TV Box, sem luz somada. Começa no primeiro quadro, como na 1.24.0
-## (a última que mostrou a apresentação na TV Box); se o app fechou sozinho
-## na última vez, espera a página de queda (scripts/pagina_queda.gd).
+## (a última que mostrou a apresentação na TV Box), sempre: desde a Rodada 30
+## a página de queda não aparece mais antes dela.
 
 const Pincel := preload("res://scripts/pincel.gd")
 const LOGO := preload("res://sprites/logo_lazer_sport.png")
@@ -74,23 +74,14 @@ const QUENTE := [Color(1.0, 0.95, 0.7, 1.0), Color(1.0, 0.55, 0.15, 1.0), Color(
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	if Tela.contorna("abertura") or Tela.pagina_aberta():
-		# parada e escondida, sem montar nada
+	if Tela.contorna("abertura"):
+		# já derrubou o app nesta versão: parada e escondida, sem montar
+		# nada, direto para o menu
 		visible = false
 		set_process(false)
 		set_process_input(false)
-		if Tela.contorna("abertura"):
-			# já derrubou o app nesta versão: direto para o menu (depois da
-			# página de queda, se ela estiver na tela)
-			if Tela.pagina_aberta():
-				await Tela.pagina_fechou
-			Tela.marca("contorno: pulando a apresentação")
-			TransicaoGlobal.trocar_cena(PROXIMA, 0.0, 0.3)
-			return
-		# o app fechou sozinho na última vez: a página da caixa-preta fica na
-		# tela primeiro (scripts/pagina_queda.gd) e a apresentação começa
-		# quando ela fecha
-		Tela.pagina_fechou.connect(_iniciar, CONNECT_ONE_SHOT)
+		Tela.marca("contorno: pulando a apresentação")
+		TransicaoGlobal.trocar_cena(PROXIMA, 0.0, 0.3)
 		return
 	_iniciar()
 
