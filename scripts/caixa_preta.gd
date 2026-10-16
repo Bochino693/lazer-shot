@@ -1,8 +1,8 @@
 extends Node
 
 ## CAIXA-PRETA: o que o jogo estava fazendo quando parou na TV Box. Grava
-## em silêncio; só aparece na tela quando o app fechou sozinho na última vez
-## (a página de queda, scripts/pagina_queda.gd).
+## em silêncio; nada aparece na tela do jogo. Para ver: CONFIGURAÇÕES (F10 ou
+## SELECT segurado 3 s) > CAIXA-PRETA > VER (scripts/admin.gd).
 ##
 ## Grava em user://caixa_preta/ (memória interna do app, sem permissão):
 ##   sessao.txt    esta sessão: aparelho, placa de vídeo, memória, cada troca
@@ -18,20 +18,17 @@ extends Node
 ## desenhar.
 ## Na abertura seguinte, as últimas linhas da sessão anterior também saem no
 ## registro do Android (GERAR_APK_PRO_ULTRA.bat -Registro as puxa pelo adb).
-## Na TV Box, uma cópia fica também na pasta do app que o gerenciador de
-## arquivos enxerga (Android/data/com.lazersport.lazershot/files/caixa_preta),
-## desde a partida do app (como na 1.24.0), e, com um pendrive espetado, no
-## próprio pendrive (a mesma pasta Android/data/... dentro dele): é só levar
-## o pendrive ao PC. A pasta do pendrive é pedida ao Android quando o menu
-## aparece pela primeira vez (trecho vigiado "pasta"); dali em diante a
-## cópia vai para ela logo na partida. Depois da partida do app, as cópias
-## (a cada troca de tela e a cada 30 s) vão numa thread: gravar no pendrive
-## no meio da partida era um tranco a cada 30 s (Rodada 29).
 ##
-## PÁGINA DE QUEDA (só na TV Box): se a sessão anterior parou sozinha em
-## menos de 10 min, sem ter ido para segundo plano, a abertura seguinte
-## mostra as últimas linhas dela numa página simples, antes de tudo
-## (scripts/pagina_queda.gd). É para tirar uma foto.
+## CÓPIA FORA DO APP (só na TV Box): na partida do app, e só nela, como na
+## 1.24.0, anterior.txt, queda.txt e o começo de sessao.txt são copiados
+## para Android/data/com.lazersport.lazershot/files/caixa_preta, a pasta do
+## app que o gerenciador de arquivos da TV Box enxerga. Desde a Rodada 30
+## nada mais é copiado durante o jogo: a cópia em thread da 1.29.0 (o Godot
+## grava nessa pasta pelo Java, e de uma thread do motor isso era novo) é a
+## principal suspeita da tela preta que voltou na abertura. A sessão que
+## caiu chega inteira lá na abertura seguinte (anterior.txt). O pendrive não
+## recebe cópia: no Android 10 o Godot só grava nas pastas do próprio app na
+## memória da TV Box.
 ##
 ## PROTEÇÃO PONTUAL (só na TV Box): o jogo avisa quando entra num trecho que
 ## depende do aparelho (Tela.risco("abertura"), Tela.risco("video")) e
@@ -45,14 +42,15 @@ extends Node
 ##   "shader:<nome>"    aquele shader vira um desenho simples
 ##   "som"              efeitos sonoros desligados
 ##   "arma"             a mira segue o ponteiro sem capturá-lo
-##   "pasta"            sem pedir a pasta do pendrive ao Android
+##   "acerto:<alvo>"    no Mar, aquele alvo (bau, vaso, aguaviva, bomba) é
+##                      acertado sem o efeito especial e sem o som dele
 ## (scripts/contorno_desenho.gd aplica). Todo o resto continua igual.
 ## Instalar uma versão nova zera tudo.
 ##
 ## Criada pela Tela (o primeiro autoload) no _init, antes de qualquer cena.
 ## Outros scripts marcam etapas com Tela.marca("texto").
 
-const VERSAO := "1.29.0"
+const VERSAO := "1.30.0"
 const PASTA := "user://caixa_preta"
 const SESSAO := PASTA + "/sessao.txt"
 const ANTERIOR := PASTA + "/anterior.txt"
@@ -62,12 +60,10 @@ const QUASE := PASTA + "/quase.txt"           # "versão|trecho" da 1ª queda nu
 const RISCO := PASTA + "/risco.txt"           # "versão|trecho" enquanto está nele
 const QUEDA := PASTA + "/queda.txt"
 const QUEDA_ATE := 600.0       # s: parou sozinha antes disso = provável queda
-const CENA_MENU := "res://scenes/main.tscn"
 const MAX_LINHAS := 2500      # depois disso o arquivo recomeça (fica o cabeçalho)
 const LINHAS_NO_REGISTRO := 40
-const LINHAS_NA_PAGINA := 26  # últimas linhas da sessão anterior na página de queda
+const LINHAS_NA_TELA := 48    # últimas linhas mostradas na configuração (resumo)
 const QUADROS_MARCADOS := [1, 2, 3, 10, 60, 300]
-const PACOTE := "com.lazersport.lazershot"
 
 
 ## Escreve no arquivo; o motor chama de qualquer thread.
@@ -125,7 +121,8 @@ class Registro extends Logger:
 
 	func _log_error(function: String, file: String, line: int, code: String, rationale: String, _editor_notify: bool, error_type: int, script_backtraces: Array[ScriptBacktrace]) -> void:
 		# aviso de layout que as fases dão ao montar o HUD: não diz nada aqui
-		if rationale.begins_with("Nodes with non-equal opposite anchors"):
+		# (vem no código quando não há explicação)
+		if rationale.begins_with("Nodes with non-equal opposite anchors") or code.begins_with("Nodes with non-equal opposite anchors"):
 			return
 		var tipo := "AVISO" if error_type == 1 else "ERRO"
 		var onde := "%s:%d %s" % [file.get_file(), line, function]
@@ -150,19 +147,15 @@ var _risco := ""
 var _gravador := Gravador.new()
 var _registro: Registro
 var _duracao_anterior := -1.0
+var _anterior_caiu := false   # a sessão anterior parou sozinha (TV Box)
 var _t := 0.0
 var _vivo_t := 0.0
 var _pulso_t := 0.0
 var _cena_id := 0
-var _externas: Array[String] = []   # pastas visíveis fora do app (interna e pendrive)
+var _externas: Array[String] = []   # pasta do app que o gerenciador de arquivos enxerga
 var _conferir := 0     # quadros que faltam para anotar o "ok" de marca_quadro
 var _conferir_txt := ""
 var _quadros := 0
-var _pendrive := false  # a pasta do pendrive já foi pedida nesta sessão
-var _copia := -1        # cópia para fora em andamento (WorkerThreadPool)
-## Página de queda: [cabeçalho da sessão anterior, últimas linhas dela];
-## vazia = a sessão anterior terminou bem (ou não é TV Box).
-var pagina: Array[PackedStringArray] = []
 
 
 func _init() -> void:
@@ -185,7 +178,7 @@ func _init() -> void:
 
 func _ready() -> void:
 	# como na 1.24.0: a pasta do app que o gerenciador de arquivos enxerga
-	# (e a do pendrive, se ela já existir) recebe a caixa-preta já na partida
+	# recebe a caixa-preta na partida (e só nela: ver o começo do arquivo)
 	_externas = _pastas_externas()
 	for caminho in _externas:
 		marca("cópia da caixa-preta em " + caminho)
@@ -239,9 +232,6 @@ func _ler_contornos() -> void:
 
 func _exit_tree() -> void:
 	marca("fim da sessão (o jogo fechou normalmente)")
-	if _copia >= 0:
-		WorkerThreadPool.wait_for_task_completion(_copia)
-		_copia = -1
 	OS.remove_logger(_registro)
 
 
@@ -274,10 +264,6 @@ func _process(delta: float) -> void:
 		_cena_id = id
 		if cena != null:
 			marca("TELA %s (%s) | %s" % [cena.name, cena.scene_file_path.get_file(), _estado()])
-			_copiar_fora_sem_esperar([[SESSAO, "sessao.txt"]])
-			if cena.scene_file_path == CENA_MENU and not _pendrive:
-				_pendrive = true
-				get_tree().create_timer(3.0).timeout.connect(_pasta_do_pendrive)
 	_vivo_t -= delta
 	if _vivo_t <= 0.0:
 		_vivo_t = 2.0
@@ -288,42 +274,11 @@ func _process(delta: float) -> void:
 	if _pulso_t >= 30.0:
 		_pulso_t = 0.0
 		marca("pulso | %s" % _estado())
-		_copiar_fora_sem_esperar([[SESSAO, "sessao.txt"]])
-
-
-## A pasta do app em cada pendrive/cartão: o Android só a cria quando o app
-## pede a lista (getExternalFilesDirs). Uma vez por sessão, com o menu na
-## tela, num trecho vigiado: se o app cair aqui, da próxima vez não pede.
-func _pasta_do_pendrive() -> void:
-	if OS.get_name() != "Android" or contorna("pasta") or not Engine.has_singleton("AndroidRuntime"):
-		return
-	var antes := _risco
-	risco("pasta")
-	var achadas: Array[String] = []
-	var rt = Engine.get_singleton("AndroidRuntime")
-	var ctx = rt.getApplicationContext() if rt != null else null
-	var todas = ctx.getExternalFilesDirs(null) if ctx != null else null
-	if todas is Array:
-		for d in todas:
-			if d != null:
-				achadas.append(str(d.getAbsolutePath()))
-	risco(antes)
-	var novas := 0
-	for p in achadas:
-		var caminho := p.path_join("caixa_preta")
-		if caminho in _externas:
-			continue
-		if DirAccess.make_dir_recursive_absolute(caminho) == OK or DirAccess.dir_exists_absolute(caminho):
-			_externas.append(caminho)
-			marca("cópia da caixa-preta em " + caminho)
-			novas += 1
-	if novas > 0:
-		_copiar_fora_sem_esperar([[ANTERIOR, "anterior.txt"], [QUEDA, "queda.txt"], [SESSAO, "sessao.txt"]])
 
 
 ## Android/data/<app>/files/caixa_preta na memória da TV Box (pedida ao
-## Android, como na 1.24.0) e em cada pendrive onde a pasta do app já existe
-## (criada numa sessão anterior por _pasta_do_pendrive).
+## Android, como na 1.24.0). É a única pasta fora do app em que o Godot
+## grava no Android 10 (a do pendrive fica fora do alcance dele).
 func _pastas_externas() -> Array[String]:
 	var r: Array[String] = []
 	if OS.get_name() != "Android" or not Engine.has_singleton("AndroidRuntime"):
@@ -331,57 +286,50 @@ func _pastas_externas() -> Array[String]:
 	var rt = Engine.get_singleton("AndroidRuntime")
 	var ctx = rt.getApplicationContext() if rt != null else null
 	var dir = ctx.getExternalFilesDir(null) if ctx != null else null
-	var candidatas: Array[String] = []
-	if dir != null:
-		candidatas.append(str(dir.getAbsolutePath()))
-	var vols := DirAccess.open("/storage")
-	if vols != null:
-		for v in vols.get_directories():
-			if v == "emulated" or v == "self":
-				continue
-			var c := "/storage/%s/Android/data/%s/files" % [v, PACOTE]
-			if DirAccess.dir_exists_absolute(c) and not (c in candidatas):
-				candidatas.append(c)
-	for p in candidatas:
-		var caminho := p.path_join("caixa_preta")
-		if DirAccess.make_dir_recursive_absolute(caminho) == OK or DirAccess.dir_exists_absolute(caminho):
-			r.append(caminho)
+	if dir == null:
+		return r
+	var caminho := str(dir.getAbsolutePath()).path_join("caixa_preta")
+	if DirAccess.make_dir_recursive_absolute(caminho) == OK or DirAccess.dir_exists_absolute(caminho):
+		r.append(caminho)
 	return r
 
 
-## Na partida do app (como na 1.24.0): cópia na hora.
+## Só na partida do app, na hora (como na 1.24.0).
 func _copiar_fora(origem: String, nome: String) -> void:
-	_copiar([[origem, nome]], _externas)
-
-
-## Depois (a cada troca de tela, no pulso de 30 s e com o pendrive novo): a
-## cópia vai numa thread. No pendrive gravar a sessão inteira leva de dezenas
-## a centenas de ms, e isso era um tranco no meio da partida a cada 30 s
-## (Rodada 29). Se a cópia anterior ainda não acabou, esta fica para a
-## próxima vez (o arquivo de dentro do app continua completo).
-func _copiar_fora_sem_esperar(arquivos: Array) -> void:
-	if _externas.is_empty():
+	if _externas.is_empty() or not FileAccess.file_exists(origem):
 		return
-	if _copia >= 0:
-		if not WorkerThreadPool.is_task_completed(_copia):
-			return
-		WorkerThreadPool.wait_for_task_completion(_copia)
-		_copia = -1
-	_copia = WorkerThreadPool.add_task(_copiar.bind(arquivos.duplicate(true), _externas.duplicate()), false, "caixa-preta")
+	var texto := FileAccess.get_file_as_string(origem)
+	for pasta in _externas:
+		var f := FileAccess.open(pasta.path_join(nome), FileAccess.WRITE)
+		if f != null:
+			f.store_string(texto)
 
 
-## [[origem, nome], ...] -> cada pasta de fora (roda na thread: não mexe em
-## nada do jogo).
-static func _copiar(arquivos: Array, pastas: Array) -> void:
-	for par in arquivos:
-		var origem: String = par[0]
-		if pastas.is_empty() or not FileAccess.file_exists(origem):
-			continue
-		var texto := FileAccess.get_file_as_string(origem)
-		for pasta in pastas:
-			var f := FileAccess.open(str(pasta).path_join(par[1]), FileAccess.WRITE)
-			if f != null:
-				f.store_string(texto)
+## O que a CONFIGURAÇÃO mostra (scripts/admin.gd, CAIXA-PRETA > VER): como
+## a sessão anterior terminou, os contornos desta versão e o começo e o fim
+## da última queda guardada (ou da sessão anterior, se não houver queda).
+## Para uma foto: a última linha diz onde o jogo estava.
+func resumo() -> PackedStringArray:
+	var r := PackedStringArray()
+	r.append("Lazer Shot %s  |  agora: %s" % [VERSAO, Time.get_datetime_string_from_system(false, true)])
+	if _duracao_anterior < 0.0:
+		r.append("Sessão anterior: não há registro")
+	elif _anterior_caiu:
+		r.append("Sessão anterior: PAROU SOZINHA aos %.0f s" % _duracao_anterior)
+	else:
+		r.append("Sessão anterior: terminou bem (%.0f s)" % _duracao_anterior)
+	r.append("Contornando nesta versão: " + (", ".join(contornos) if not contornos.is_empty() else "nada"))
+	var arquivo := QUEDA if FileAccess.file_exists(QUEDA) else ANTERIOR
+	if not FileAccess.file_exists(arquivo):
+		return r
+	var linhas := FileAccess.get_file_as_string(arquivo).strip_edges(false, true).split("\n")
+	r.append("")
+	r.append("%s (%d linhas): começo e fim" % ["ÚLTIMA QUEDA GUARDADA" if arquivo == QUEDA else "SESSÃO ANTERIOR", linhas.size()])
+	r.append_array(linhas.slice(0, mini(5, linhas.size())))
+	if linhas.size() > 5 + LINHAS_NA_TELA:
+		r.append("        ...")
+	r.append_array(linhas.slice(maxi(5, linhas.size() - LINHAS_NA_TELA)))
+	return r
 
 
 func _estado() -> String:
@@ -436,16 +384,13 @@ func _guardar_sessao_anterior() -> void:
 		return   # no PC o jogo é parado pelo editor a toda hora: não é falha
 	if _em_segundo_plano(anterior):
 		return   # foi fechado pelo Android lá atrás (HOME, outro app): não é queda
-	if _duracao_anterior < QUEDA_ATE:
-		# a página de queda mostra o começo (aparelho, placa) e o fim
-		pagina = [anterior.slice(0, mini(5, anterior.size())),
-			anterior.slice(maxi(5, anterior.size() - LINHAS_NA_PAGINA))]
+	_anterior_caiu = true
 	# morreu dentro de um trecho arriscado desta mesma versão: contorna só ele
 	var r := risco_anterior.split("|")
 	if r.size() == 2 and r[0] == VERSAO and r[1] != "" and not (r[1] in contornos):
 		# primeira queda neste trecho: só anota; na segunda, contorna (os
 		# passos da preparação da placa já na primeira)
-		var na_hora := r[1].begins_with("desenho:") or r[1].begins_with("shader:") or r[1] in ["som", "arma", "pasta", "abertura"]
+		var na_hora := r[1].begins_with("desenho:") or r[1].begins_with("shader:") or r[1].begins_with("acerto:") or r[1] in ["som", "arma", "abertura"]
 		var quase := FileAccess.get_file_as_string(QUASE).strip_edges() if FileAccess.file_exists(QUASE) else ""
 		if quase != risco_anterior and not na_hora:
 			var q := FileAccess.open(QUASE, FileAccess.WRITE)

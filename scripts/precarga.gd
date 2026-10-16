@@ -174,7 +174,7 @@ const LISTA := {
 		"res://songs/end_game.mp3",
 		"res://songs/tiro_mar.wav",
 		"res://songs/vaso_hit.wav",
-		"res://songs/bau_hit.wav",
+		"res://songs/bau_hit_corte.wav",
 		"res://songs/pirate.mp3",
 		"res://songs/ouro_ping.wav",
 		"res://sprites/mar_cavalo.png",

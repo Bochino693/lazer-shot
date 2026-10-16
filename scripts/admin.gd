@@ -31,6 +31,8 @@ var _aprender_t := 0.0
 var _rotulos_botao := {}
 var _confirmar := {}
 var _saindo := false
+var _painel: Control = null   # CAIXA-PRETA aberta por cima de tudo (ou null)
+var _botao_ver: Button = null
 
 
 func _ready() -> void:
@@ -131,6 +133,14 @@ func _criar_interface() -> void:
 	_ultimo_botao = _rotulo("Último botão recebido: —", 18, COR_APAGADO)
 	_ultimo_botao.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	coluna.add_child(_ultimo_botao)
+
+	# CAIXA-PRETA: o que o jogo fazia quando parou (scripts/caixa_preta.gd).
+	# Fica só aqui: nada técnico aparece na tela do jogo.
+	_secao(coluna, "CAIXA-PRETA")
+	var resumo := Tela.resumo_caixa_preta()
+	var linha_caixa := _linha(coluna, "Última sessão", resumo[1] if resumo.size() > 1 else "")
+	_botao_ver = _botao("VER", _ver_caixa_preta, 24, COR_BOTAO, Vector2(160, 50))
+	linha_caixa.add_child(_botao_ver)
 
 	# Rodapé
 	var espaco := Control.new()
@@ -462,7 +472,10 @@ func _input(event: InputEvent) -> void:
 	if event is InputEventKey:
 		var k := event as InputEventKey
 		if k.pressed and not k.echo and (k.keycode == KEY_F10 or k.keycode == KEY_ESCAPE):
-			_salvar_e_sair()
+			if _painel != null:
+				_fechar_caixa_preta()
+			else:
+				_salvar_e_sair()
 			get_viewport().set_input_as_handled()
 			return
 
@@ -473,6 +486,8 @@ func _input(event: InputEvent) -> void:
 	if gatilho or (InputMap.has_action("input_shot") and event.is_action_pressed("input_shot")):
 		var p := MiraGlobal.pos
 		for b in _botoes:
+			if _painel != null and not _painel.is_ancestor_of(b):
+				continue
 			if b.is_visible_in_tree() and b.get_global_rect().has_point(p):
 				b.pressed.emit()
 				break
@@ -494,3 +509,73 @@ func _process(delta: float) -> void:
 
 func _desenhar_mira() -> void:
 	Pincel.mira(_mira, MiraGlobal.pos, 18.0, 8.0, COR_DESTAQUE, Color(1, 1, 1, 0.85))
+
+
+# ================================================================ caixa-preta
+## A caixa-preta por cima da configuração: como a sessão anterior terminou,
+## os contornos e o começo e o fim da última queda. É para uma foto quando o
+## jogo fechar sozinho na TV Box (antes da Rodada 30 isso aparecia sozinho
+## na abertura, num fundo escuro que parecia tela preta).
+func _ver_caixa_preta() -> void:
+	if _painel != null:
+		return
+	var tela := get_viewport_rect().size
+	_painel = Control.new()
+	_painel.name = "CaixaPreta"
+	_painel.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_painel.mouse_filter = Control.MOUSE_FILTER_STOP
+	add_child(_painel)
+	var fundo := ColorRect.new()
+	fundo.color = COR_FUNDO
+	fundo.set_anchors_preset(Control.PRESET_FULL_RECT)
+	fundo.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_painel.add_child(fundo)
+	var faixa := ColorRect.new()
+	faixa.color = COR_DESTAQUE
+	faixa.anchor_right = 1.0
+	faixa.offset_bottom = 6.0
+	faixa.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_painel.add_child(faixa)
+	var titulo := _rotulo("CAIXA-PRETA", 46, COR_TEXTO)
+	if ResourceLoader.exists(FONTE_TITULO):
+		titulo.add_theme_font_override("font", load(FONTE_TITULO))
+	titulo.position = Vector2(36, 22)
+	_painel.add_child(titulo)
+	var fechar := _botao("FECHAR", _fechar_caixa_preta, 26, COR_OK, Vector2(220, 64))
+	fechar.position = Vector2(tela.x - 36.0 - 220.0, 24)
+	_painel.add_child(fechar)
+	var dica := _rotulo("Tire uma foto desta tela e mande para o suporte: a última linha diz onde o jogo estava.", 19, COR_APAGADO)
+	dica.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	dica.position = Vector2(36, 100)
+	dica.size = Vector2(tela.x - 72.0, 52)
+	_painel.add_child(dica)
+	var texto := _rotulo("\n".join(Tela.resumo_caixa_preta()), 16, COR_TEXTO)
+	texto.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	texto.clip_text = true
+	texto.position = Vector2(36, 160)
+	texto.size = Vector2(tela.x - 72.0, tela.y - 160.0 - 24.0)
+	_painel.add_child(texto)
+	fechar.grab_focus()
+	_mostrar_fim.call_deferred(texto)
+
+
+## Se não couber tudo, some o começo: o fim (onde o jogo parou) fica.
+func _mostrar_fim(texto: Label) -> void:
+	if not is_instance_valid(texto):
+		return
+	var total := texto.get_line_count()
+	var cabe := texto.get_visible_line_count()
+	if total > cabe:
+		texto.lines_skipped = total - cabe
+
+
+func _fechar_caixa_preta() -> void:
+	if _painel == null:
+		return
+	for b in _botoes.duplicate():
+		if _painel.is_ancestor_of(b):
+			_botoes.erase(b)
+	_painel.queue_free()
+	_painel = null
+	if is_instance_valid(_botao_ver):
+		_botao_ver.grab_focus()

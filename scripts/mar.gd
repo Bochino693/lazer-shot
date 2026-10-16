@@ -202,7 +202,10 @@ var mira_desvio_bomba: Vector2 = Vector2.ZERO
 # tiro debaixo d'água (arpão abafado e bolhas); a pistola é do Bar
 @export var som_tiro_path: String = "res://songs/tiro_mar.wav"
 @export var som_vaso_hit_path: String = "res://songs/vaso_hit.wav"
-@export var som_bau_hit_path: String = "res://songs/bau_hit.wav"
+## O trecho do golpe já recortado (bau_hit.wav a partir dos 2 s): até a
+## 1.29.0 o som tocava do meio do arquivo comprimido (QOA), o único do jogo
+## assim, e na 1.29.0 o app caiu na TV Box ao acertar o baú (Rodada 30).
+@export var som_bau_hit_path: String = "res://songs/bau_hit_corte.wav"
 @export var som_pirate_path: String = "res://songs/pirate.mp3"
 var ultimo_tiro_ms: int = -1000
 var ultimo_hit_ms: int = -1000
@@ -227,7 +230,7 @@ var ultimo_hit_ms: int = -1000
 @export var atraso_bomba_hit_seg: float = 0.000
 @export var atraso_bomba_explode_seg: float = 0.000
 
-@export var inicio_bau_hit_seg: float = 2.0
+@export var inicio_bau_hit_seg: float = 0.0
 @export var inicio_vaso_hit_seg: float = 0.0
 @export var inicio_bomba_hit_seg: float = 0.0
 @export var inicio_bomba_explode_seg: float = 0.0
@@ -591,6 +594,9 @@ func _exit_tree() -> void:
 	_parar_musica_pirate()
 	_parar_musica_fim()
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
+	# o trecho vigiado de um acerto (_vigiar_acerto) não passa da fase
+	if Tela.risco_atual().begins_with("acerto:"):
+		Tela.risco("")
 
 
 
@@ -4235,11 +4241,13 @@ func _bater_no_chao(alvo: Area2D) -> void:
 	var volume := linear_to_db(clampf(k, 0.25, 1.0))
 	match tipo:
 		"vaso":
-			MarAcerto.criar(self, alvo, chao, tipo, chao.y)
-			_tocar_som(som_vaso_hit_stream, -6.0 + volume, randf_range(0.92, 1.05), inicio_vaso_hit_seg)
+			if not Tela.contorna("acerto:vaso"):
+				MarAcerto.criar(self, alvo, chao, tipo, chao.y)
+				_tocar_som(som_vaso_hit_stream, -6.0 + volume, randf_range(0.92, 1.05), inicio_vaso_hit_seg)
 		"bau":
-			MarAcerto.criar(self, alvo, chao, tipo, chao.y)
-			_tocar_som(som_bau_hit_stream, -5.0 + volume, randf_range(0.92, 1.0), inicio_bau_hit_seg)
+			if not Tela.contorna("acerto:bau"):
+				MarAcerto.criar(self, alvo, chao, tipo, chao.y)
+				_tocar_som(som_bau_hit_stream, -5.0 + volume, randf_range(0.92, 1.0), inicio_bau_hit_seg)
 	if _furos != null:
 		_furos.poeira(_furos.to_local(chao), k)
 	alvo.visible = false
@@ -4991,6 +4999,17 @@ func _aplicar_animacao_hit(alvo: Area2D) -> float:
 
 
 
+## O acerto de um tipo de alvo é um trecho vigiado por meio segundo (o
+## efeito monta e os primeiros quadros dele saem). Um acerto novo assume o
+## trecho; o anterior só é fechado se ainda for o dele.
+func _vigiar_acerto(tipo: String) -> void:
+	var trecho := "acerto:" + tipo
+	Tela.risco(trecho)
+	get_tree().create_timer(0.5).timeout.connect(func() -> void:
+		if Tela.risco_atual() == trecho:
+			Tela.risco(""))
+
+
 func _acertar_alvo(alvo: Area2D, pos_impacto: Vector2 = Vector2.ZERO) -> void:
 	if alvo == null or not is_instance_valid(alvo):
 		return
@@ -5005,6 +5024,16 @@ func _acertar_alvo(alvo: Area2D, pos_impacto: Vector2 = Vector2.ZERO) -> void:
 	var pontos: int = int(alvo.get_meta("pontos_alvo", 0))
 	var escala_base: float = float(alvo.get_meta("escala_base", 1.0))
 	var impacto: Vector2 = pos_impacto if pos_impacto != Vector2.ZERO else alvo.global_position
+	# caixa-preta: cada acerto do Mar (o baú derrubou o app na 1.29.0); se
+	# o app cair, a última linha diz se foi no próprio acerto ("ok" não
+	# chega) e em qual alvo
+	Tela.marca_quadro("acerto %s (%d acertos, %d pontos)" % [tipo, total_acertos + 1, pontuacao_total])
+	# trecho vigiado: se o app morrer no acerto deste tipo de alvo, nas
+	# próximas aberturas desta versão ele é acertado sem o efeito especial
+	# e sem o som próprio (contorno "acerto:<tipo>", scripts/caixa_preta.gd)
+	var simples: bool = Tela.contorna("acerto:" + tipo)
+	if not simples:
+		_vigiar_acerto(tipo)
 
 	if tipo == "bomba":
 		bombas_erros_atual += 1
@@ -5025,7 +5054,9 @@ func _acertar_alvo(alvo: Area2D, pos_impacto: Vector2 = Vector2.ZERO) -> void:
 
 		_atualizar_bombas_hud()
 
-		if som_bomba_xploit_stream != null:
+		if simples:
+			pass
+		elif som_bomba_xploit_stream != null:
 			_tocar_som(som_bomba_xploit_stream, -0.1, randf_range(0.97, 1.0), 0.0)
 		elif som_bomba_explode_stream != null:
 			_tocar_som(som_bomba_explode_stream, -0.1, randf_range(0.97, 1.0), 0.0)
@@ -5039,7 +5070,8 @@ func _acertar_alvo(alvo: Area2D, pos_impacto: Vector2 = Vector2.ZERO) -> void:
 		_aplicar_animacao_hit(alvo)
 		# explosão debaixo d'água: clarão, anéis de choque, bolha de gás,
 		# água espalhando, fumaça e estilhaços (scripts/mar_explosao.gd)
-		MarExplosao.criar(self, impacto, _perto_do_alvo(alvo), false, _texturas_fx(), alvo.z_index + 2)
+		if not simples:
+			MarExplosao.criar(self, impacto, _perto_do_alvo(alvo), false, _texturas_fx(), alvo.z_index + 2)
 
 		var tw_bomba: Tween = alvo.create_tween()   # do próprio alvo (some junto com ele)
 		tw_bomba.set_parallel(true)
@@ -5091,7 +5123,7 @@ func _acertar_alvo(alvo: Area2D, pos_impacto: Vector2 = Vector2.ZERO) -> void:
 	_atualizar_dificuldade_progressiva()
 
 	var agora_ms := Time.get_ticks_msec()
-	if agora_ms - ultimo_hit_ms >= cooldown_hit_ms:
+	if agora_ms - ultimo_hit_ms >= cooldown_hit_ms and not simples:
 		ultimo_hit_ms = agora_ms
 
 		match tipo:
@@ -5119,9 +5151,11 @@ func _acertar_alvo(alvo: Area2D, pos_impacto: Vector2 = Vector2.ZERO) -> void:
 	# água-viva e vaso: o efeito é todo nosso (pedaços da própria imagem, a
 	# nuvem de luz da água-viva, o cavalo-marinho saindo do vaso); o baú
 	# ainda abre com a animação dele
-	MarAcerto.criar(self, alvo, impacto, tipo, INF, TEX_CAVALO if tipo == "vaso" else null)
+	if not simples:
+		MarAcerto.criar(self, alvo, impacto, tipo, INF, TEX_CAVALO if tipo == "vaso" else null)
+		Tela.marca("  efeito do acerto montado")
 	var duracao_hit_anim := 0.2
-	if tipo == "aguaviva" or tipo == "vaso":
+	if (tipo == "aguaviva" or tipo == "vaso") and not simples:
 		var anim_h := _obter_animated_do_alvo(alvo)
 		if anim_h != null:
 			anim_h.visible = false
@@ -5140,7 +5174,8 @@ func _acertar_alvo(alvo: Area2D, pos_impacto: Vector2 = Vector2.ZERO) -> void:
 				_registrar_fx_agua(impacto + Vector2(randf_range(-14.0, 14.0), randf_range(-14.0, 14.0)))
 
 		"bau":
-			_registrar_fx_moedas(impacto)
+			if not simples:
+				_registrar_fx_moedas(impacto)
 
 	var tw: Tween = alvo.create_tween()   # do próprio alvo: se ele sair antes, o tween (e o callback) vão junto
 	tw.set_parallel(true)
