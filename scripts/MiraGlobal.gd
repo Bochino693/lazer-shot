@@ -88,6 +88,17 @@ var _ritmo_lento: Dictionary = {}   # cena -> true (abre direto em 30)
 const LEVE_JANELA := 3.0
 const LEVE_LENTO_MS := 45.0
 var _telas_leves: Dictionary = {}   # cena -> true
+# A QUALIDADE COMPLETA QUE NÃO CABE (Rodada 33). A AVANÇADA (TX9) abre na
+# qualidade completa. Se uma FASE (deserto, mar, bar, arena), já em 30 e sem
+# os enfeites opcionais, ainda não segura (mais de um quarto dos quadros de
+# 5 s passando de 45 ms), esta TV Box não aguenta a completa: a partir da
+# próxima troca de tela o jogo fica na qualidade leve, a mesma da Pro Ultra
+# (Maquina.qualidade_leve). Menu e abertura não contam (um tranco de vídeo
+# ali não diz nada da partida).
+# A TV Box lembra (user://ritmo.cfg, por versão). Só vale com a qualidade
+# AUTOMÁTICA; COMPLETA na CONFIGURAÇÃO fica completa.
+const COMPLETA_JANELA := 5.0
+var completa_nao_cabe := false
 var _leve_t := 0.0
 var _leve_quadros := 0
 var _leve_lentos := 0
@@ -210,9 +221,13 @@ func _cravar(fps: int) -> void:
 	Engine.max_physics_steps_per_frame = 2 if fps == 30 else 4
 
 
-## Em 30: mede se a tela segura; se não, fica leve (uma vez por tela).
+## Em 30: mede se a tela segura; se não, fica leve (uma vez por tela). Já
+## leve e ainda sem segurar, na qualidade completa: a completa não cabe.
 func _medir_leve(quadro: float, cena: Node) -> void:
-	if cena == null or cena.scene_file_path == "" or _telas_leves.has(cena.scene_file_path):
+	if cena == null or cena.scene_file_path == "":
+		return
+	var ja_leve := _telas_leves.has(cena.scene_file_path)
+	if ja_leve and not (_pode_largar_a_completa() and TransicaoGlobal.FASES.has(cena.scene_file_path)):
 		return
 	_leve_t += quadro / 1000.0
 	if _leve_t < 0.0 or TransicaoGlobal.em_transicao:
@@ -220,15 +235,26 @@ func _medir_leve(quadro: float, cena: Node) -> void:
 	_leve_quadros += 1
 	if quadro > LEVE_LENTO_MS:
 		_leve_lentos += 1
-	if _leve_t >= LEVE_JANELA:
+	if _leve_t >= (COMPLETA_JANELA if ja_leve else LEVE_JANELA):
 		if _leve_quadros > 20 and float(_leve_lentos) / _leve_quadros > RITMO_FRACAO:
-			Tela.marca("calibragem: %s leve (%d de %d quadros passavam de %d ms)" % [cena.name, _leve_lentos, _leve_quadros, int(LEVE_LENTO_MS)])
-			_telas_leves[cena.scene_file_path] = true
-			_ritmo_salvar()
-			_deixar_leve(cena)
+			if ja_leve:
+				completa_nao_cabe = true
+				Tela.marca("calibragem: a qualidade completa não cabe nesta TV Box (%s: %d de %d quadros passavam de %d ms); leve a partir da próxima tela" % [cena.name, _leve_lentos, _leve_quadros, int(LEVE_LENTO_MS)])
+				_ritmo_salvar()
+			else:
+				Tela.marca("calibragem: %s leve (%d de %d quadros passavam de %d ms)" % [cena.name, _leve_lentos, _leve_quadros, int(LEVE_LENTO_MS)])
+				_telas_leves[cena.scene_file_path] = true
+				_ritmo_salvar()
+				_deixar_leve(cena)
 		_leve_t = 0.0
 		_leve_quadros = 0
 		_leve_lentos = 0
+
+
+## A completa ainda pode virar leve sozinha: está na completa, pela
+## qualidade AUTOMÁTICA, e ainda não largou.
+func _pode_largar_a_completa() -> bool:
+	return not completa_nao_cabe and not Maquina.qualidade_leve() and Maquina.qualidade_automatica()
 
 
 ## Para e esconde os enfeites opcionais da tela.
@@ -251,6 +277,7 @@ func _ritmo_carregar() -> void:
 		_ritmo_lento[str(c)] = true
 	for c in cfg.get_value("ritmo", "telas_leves", []):
 		_telas_leves[str(c)] = true
+	completa_nao_cabe = bool(cfg.get_value("ritmo", "completa_nao_cabe", false))
 
 
 func _ritmo_salvar() -> void:
@@ -258,6 +285,7 @@ func _ritmo_salvar() -> void:
 	cfg.set_value("ritmo", "versao", VERSAO_JOGO)
 	cfg.set_value("ritmo", "telas_30", _ritmo_lento.keys())
 	cfg.set_value("ritmo", "telas_leves", _telas_leves.keys())
+	cfg.set_value("ritmo", "completa_nao_cabe", completa_nao_cabe)
 	cfg.save(RITMO_ARQUIVO)
 
 

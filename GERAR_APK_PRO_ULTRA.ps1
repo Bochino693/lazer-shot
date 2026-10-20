@@ -3,8 +3,8 @@ param(
     [ValidateSet(1, -1, 0)][int]$Giro = 1,
     # A mira anda de lado quando a arma sobe? Gere de novo com -MiraGirada.
     [switch]$MiraGirada,
-    # Qual APK gerar (Rodada 31): as duas versoes (padrao), so a LEVE (TV Box
-    # PROSB-3000, a mais fraca) ou so a AVANCADA (TV Box mais forte).
+    # Qual APK gerar (Rodada 31): as duas versoes (padrao), so a LEVE (Pro
+    # Ultra, a mais fraca) ou so a AVANCADA (TX9, a mais forte).
     [ValidateSet("Ambas", "Leve", "Avancada")][string]$Versao = "Ambas",
     # RESERVA (Rodada 32): os APKs sem o Gradle e sem o plugin da webcam, do
     # jeito da 1.30. O jogo funciona inteiro; so a foto antes da partida fica
@@ -252,11 +252,12 @@ function Dar-Dica([string]$Texto) {
 
 # AS DUAS VERSOES DO APK (export_presets.cfg). O mesmo jogo; muda a qualidade
 # de fabrica (scripts/Maquina.gd, versao_do_apk):
-#   LEVE      TV Box PROSB-3000 (H313, Mali-G31, 2 GB): qualidade leve
-#   AVANCADA  TV Box mais forte: qualidade completa
+#   LEVE      Pro Ultra (PROSB-3000: H313, Mali-G31, 2 GB): qualidade leve
+#   AVANCADA  TX9 (a mais forte): qualidade completa, que vira leve sozinha
+#             se a TV Box nao segurar
 $TodasAsVersoes = @(
-    @{ Nome = "Leve"; Preset = "Lazer Shot Leve"; Arquivo = "LazerShot-Leve-PROSB3000.apk"; Rotulo = "LEVE (TV Box PROSB-3000)" },
-    @{ Nome = "Avancada"; Preset = "Lazer Shot Avancada"; Arquivo = "LazerShot-Avancada.apk"; Rotulo = "AVANCADA (TV Box mais forte)" }
+    @{ Nome = "Leve"; Preset = "Lazer Shot Leve"; Arquivo = "LazerShot-Leve-ProUltra.apk"; Rotulo = "LEVE (Pro Ultra)" },
+    @{ Nome = "Avancada"; Preset = "Lazer Shot Avancada"; Arquivo = "LazerShot-Avancada-TX9.apk"; Rotulo = "AVANCADA (TX9)" }
 )
 $Versoes = @($TodasAsVersoes | Where-Object { $Versao -eq "Ambas" -or $_.Nome -eq $Versao })
 
@@ -674,7 +675,7 @@ Get-ChildItem -LiteralPath $PastaApk -Force | Where-Object { $Gerados -notcontai
 Diz ""
 Diz ("APK GERADO COM SUCESSO em {0}" -f (Tempo $Relogio.Elapsed.TotalSeconds)) "Green"
 foreach ($A in $Gerados) { Diz "  $A" }
-Diz "LEVE: TV Box PROSB-3000. AVANCADA: TV Box mais forte. As duas instalam por cima da versao anterior."
+Diz "LEVE: instale na Pro Ultra. AVANCADA: instale na TX9. Cada uma instala por cima da versao anterior."
 if ($SemCamera) {
     Diz "MODO RESERVA: estes APKs NAO tiram a foto antes da partida. Para a foto, gere com GERAR_APK_PRO_ULTRA.bat." "Yellow"
 }

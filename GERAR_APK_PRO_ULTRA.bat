@@ -3,7 +3,7 @@ setlocal
 title Lazer Shot - Gerar APK
 cd /d "%~dp0"
 echo ============================================================
-echo   LAZER SHOT - GERAR APK (LEVE para a PROSB-3000 e AVANCADA)
+echo   LAZER SHOT - GERAR APK (LEVE: Pro Ultra / AVANCADA: TX9)
 echo   So uma versao: GERAR_APK_LEVE.bat ou GERAR_APK_AVANCADA.bat
 echo   Tudo aparece aqui na hora e fica gravado em
 echo   build\android\GERACAO-COMPLETA.log

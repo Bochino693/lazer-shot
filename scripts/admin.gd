@@ -86,7 +86,12 @@ func _criar_interface() -> void:
 	if ResourceLoader.exists(FONTE_TITULO):
 		titulo.add_theme_font_override("font", load(FONTE_TITULO))
 	titulos.add_child(titulo)
-	titulos.add_child(_rotulo("LAZER SHOT %s  ·  aponte a arma e atire nos botões" % Maquina.nome_da_versao(), 20, COR_APAGADO))
+	# A versão com o nome da TV Box (LEVE / AVANÇADA) deixa a linha comprida:
+	# ela corta no fim em vez de empurrar os contadores para fora da tela.
+	var subtitulo := _rotulo("LAZER SHOT %s  ·  aponte e atire nos botões" % Maquina.nome_da_versao(), 20, COR_APAGADO)
+	subtitulo.clip_text = true
+	subtitulo.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	titulos.add_child(subtitulo)
 	var direita := VBoxContainer.new()
 	direita.alignment = BoxContainer.ALIGNMENT_CENTER
 	topo.add_child(direita)
@@ -123,8 +128,11 @@ func _criar_interface() -> void:
 	_opcoes(coluna, "Ranking na abertura", "", "ranking/ranking_ativo", [[true, "LIGADO"], [false, "DESLIGADO"]])
 	_opcoes(coluna, "Vídeo pelo hardware", "decodificador da TV Box (desligado: player interno do jogo)", "video/nativo", [[true, "LIGADO"], [false, "DESLIGADO"]])
 	_opcoes(coluna, "Imagem do vídeo", "se o vídeo aparecer de cabeça para baixo", "video/virar", [[false, "NORMAL"], [true, "VIRADA"]])
-	# leve: a TV Box mais fraca (Maquina.qualidade_leve)
-	_opcoes(coluna, "Qualidade da imagem", "automática: a da versão do APK (leve ou avançada)", "video/qualidade", [["auto", "AUTOMÁTICA"], ["leve", "LEVE"], ["completa", "COMPLETA"]])
+	# leve: a Pro Ultra; completa: a TX9 (Maquina.qualidade_leve). Se a TX9
+	# não segurar a completa, a automática vira leve sozinha e a dica avisa.
+	var linha_qualidade := _opcoes(coluna, "Qualidade da imagem", "automática: LEVE na Pro Ultra, COMPLETA na TX9", "video/qualidade", [["auto", "AUTOMÁTICA"], ["leve", "LEVE"], ["completa", "COMPLETA"]])
+	var dica_qualidade := (linha_qualidade.get_child(0) as VBoxContainer).get_child(1) as Label
+	_atualizadores.append(func(): dica_qualidade.text = "agora LEVE: esta TV Box não segurou a completa" if Maquina.completa_largada() else "automática: LEVE na Pro Ultra, COMPLETA na TX9")
 
 	# SOM
 	_secao(coluna, "SOM")

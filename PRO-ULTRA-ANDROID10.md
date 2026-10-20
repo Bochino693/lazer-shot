@@ -4,12 +4,13 @@ Esta branch (`tvbox-ultra-pro`) deixa o Lazer Shot leve o bastante para a TV Box
 Pro Ultra e gera o APK. As fases, regras, sons e efeitos são os mesmos do PC.
 O projeto continua no Godot 4.6.1 (renderizador Compatibility).
 
-Desde a Rodada 31 o jogo sai em **duas versões** (dois APKs do mesmo jogo):
+Desde a Rodada 31 o jogo sai em **duas versões** (dois APKs do mesmo jogo),
+uma para cada TV Box:
 
 | Versão | Para | Qualidade de fábrica |
 |---|---|---|
-| **LEVE** (`LazerShot-Leve-PROSB3000.apk`) | a TV Box PROSB-3000 (H313, Mali-G31, 2 GB) | leve: 30 quadros/s, sem os enfeites opcionais |
-| **AVANÇADA** (`LazerShot-Avancada.apk`) | a TV Box mais forte | completa: tudo ligado, 60 quadros/s quando a TV Box segura |
+| **LEVE** (`LazerShot-Leve-ProUltra.apk`) | a **Pro Ultra** (PROSB-3000: H313, Mali-G31, 2 GB), a mais fraca | leve: 30 quadros/s, sem os enfeites opcionais |
+| **AVANÇADA** (`LazerShot-Avancada-TX9.apk`) | a **TX9**, a mais forte | completa: tudo ligado, 60 quadros/s quando a TV Box segura; se a TX9 não segurar, vira leve sozinha |
 
 As duas têm a **foto antes da partida** (webcam do gabinete), como no Super
 Boxing.
@@ -19,8 +20,8 @@ Boxing.
 1. Extraia a pasta inteira num lugar novo do PC, de caminho curto (por
    exemplo `C:\LazerShot`): o Gradle cria pastas fundas dentro dela.
 2. Dê dois cliques em `GERAR_APK_PRO_ULTRA.bat`: ele gera **as duas
-   versões**. Para gerar só uma: `GERAR_APK_LEVE.bat` (TV Box PROSB-3000) ou
-   `GERAR_APK_AVANCADA.bat` (TV Box mais forte).
+   versões**. Para gerar só uma: `GERAR_APK_LEVE.bat` (Pro Ultra) ou
+   `GERAR_APK_AVANCADA.bat` (TX9).
    Precisa do Godot 4.6.1 (em Downloads), do JDK 17, do Android SDK e de
    internet, como o Super Boxing PRO: desde a Rodada 31 o APK é compilado com
    o **Gradle**, porque a webcam vem num plugin Android (o mesmo do Super
@@ -28,10 +29,10 @@ Boxing.
    Export Templates 4.6.1 (se faltarem), instala o modelo Android em
    `android/build` e o Gradle baixa as bibliotecas; isso demora alguns
    minutos. As próximas vezes são mais rápidas.
-3. Os APKs saem em `APK-Pronto`: `LazerShot-Leve-PROSB3000.apk` e
-   `LazerShot-Avancada.apk`. Copie o da TV Box para o pendrive e instale.
-   Os dois instalam **por cima** da versão anterior (mesmo app, mesma
-   assinatura): ranking e configuração continuam.
+3. Os APKs saem em `APK-Pronto`: `LazerShot-Leve-ProUltra.apk` (instale na
+   Pro Ultra) e `LazerShot-Avancada-TX9.apk` (instale na TX9). Cada um
+   instala **por cima** da versão anterior (mesmo app, mesma assinatura):
+   ranking e configuração continuam.
 
 Tudo aparece na janela **na hora** (desde a Rodada 32). Enquanto o Gradle
 compila, ele não mostra nada; a cada 30 s a janela escreve
@@ -1996,6 +1997,73 @@ Testado no Linux com o PowerShell 7 e o Godot 4.6.1, imitando o Windows:
 - um sucesso completo com APK conferido (motor e plugin da webcam).
 
 O APK do jogo não mudou: continua 1.31.0 (código 33).
+
+## Rodada 33: a AVANÇADA na TX9 e a LEVE na Pro Ultra
+
+Cada versão agora tem o nome da sua TV Box:
+
+| Versão | TV Box | APK |
+|---|---|---|
+| **LEVE** | **Pro Ultra** (a mais fraca) | `LazerShot-Leve-ProUltra.apk` |
+| **AVANÇADA** | **TX9** (a mais forte) | `LazerShot-Avancada-TX9.apk` |
+
+O mesmo nome aparece no gerador, nos `.bat` e no topo da CONFIGURAÇÃO
+(`LAZER SHOT 1.32.0 · AVANÇADA (TX9)` ou `· LEVE (PRO ULTRA)`).
+
+**A TX9 roda o jogo.** Existem duas TX9 à venda:
+
+- a Tanix TX9 Pro (Amlogic S912, Mali-T820, 3 GB, Android 7.1);
+- uma TX9 Pro mais barata com o mesmo processador da Pro Ultra (Allwinner
+  H313, Mali-G31).
+
+O jogo (Godot 4.6) pede Android 7.0 ou mais novo e OpenGL ES 3.0, e as duas
+atendem. Qual delas é a sua fica escrito na caixa-preta (CONFIGURAÇÃO →
+CAIXA-PRETA → VER), nas linhas `aparelho:` (modelo e processador) e `vídeo:`
+(placa de vídeo).
+
+**A completa que não cabe vira leve sozinha.** A AVANÇADA abre na qualidade
+completa. A calibragem da tela já tinha dois degraus:
+
+1. a tela que não segura 60 quadros por segundo fica em 30 cravados;
+2. a que não segura nem 30 perde os enfeites opcionais.
+
+Agora tem um terceiro. Se uma **fase** (deserto, mar, bar ou arena) continua
+lenta mesmo assim por 5 s, esta TV Box não aguenta a completa. A partir da
+próxima troca de tela, o jogo inteiro fica na qualidade leve, a mesma da Pro
+Ultra.
+
+- **Nunca no meio de uma partida.** A troca acontece entre uma tela e outra.
+- **Fica lembrado.** A TV Box guarda a decisão em `ritmo.cfg`, por versão do
+  jogo. Na próxima abertura o jogo já começa leve.
+- **Menu e abertura não contam.** Um tranco de vídeo no menu não tira a TX9
+  da completa.
+- **Fica avisado.** A caixa-preta anota `calibragem: a qualidade completa não
+  cabe nesta TV Box (...)`. Na CONFIGURAÇÃO, a dica da qualidade muda para
+  `agora LEVE: esta TV Box não segurou a completa`.
+- **COMPLETA na CONFIGURAÇÃO força a completa** e desliga essa troca. LEVE
+  força a leve.
+
+Se a TX9 segurar a completa, nada disso acontece e ela fica com tudo ligado.
+
+**A linha do topo da CONFIGURAÇÃO não empurra mais os contadores.** Com o nome
+da versão, ela ficava comprida e jogava FICHAS e PARTIDAS para fora da tela.
+Agora ela é mais curta e, se ainda não couber, corta no fim.
+
+Testado no PC com o ritmo da TV Box (`LAZER_RITMO=1`) e quadros de 60 ms de
+propósito no Bar:
+
+- ele foi para 30, depois perdeu os enfeites e, ainda lento, largou a
+  completa, sem mudar no meio da tela;
+- a Arena, aberta em seguida, já veio leve;
+- ao reabrir o jogo, ele já começou leve;
+- com o menu lento a completa ficou, e com COMPLETA escolhida na
+  CONFIGURAÇÃO ela também ficou;
+- os dois pacotes (com as etiquetas `versao_leve` e `versao_avancada`)
+  mostraram o nome certo e a qualidade certa ao abrir;
+- o caminho inteiro, da abertura ao menu, START, cenários, pose com foto e
+  Mar, continuou funcionando.
+
+APK 1.32.0 (código 34): `1.32.0-leve` e `1.32.0-avancada`.
 
 ## Para testar no PC como se fosse a TV Box
 

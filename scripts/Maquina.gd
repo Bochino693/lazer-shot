@@ -287,11 +287,13 @@ func modo_credito() -> bool:
 	return modo == "credito"
 
 
-## AS DUAS VERSÕES DO APK (Rodada 31). O mesmo jogo sai em dois APKs
-## (export_presets.cfg, GERAR_APK_PRO_ULTRA.bat):
-##   LEVE      para a TV Box PROSB-3000 (H313, Mali-G31, 2 GB): qualidade
+## AS DUAS VERSÕES DO APK (Rodada 31; TV Box de cada uma na Rodada 33). O
+## mesmo jogo sai em dois APKs (export_presets.cfg, GERAR_APK_PRO_ULTRA.bat):
+##   LEVE      para a Pro Ultra (PROSB-3000: H313, Mali-G31, 2 GB): qualidade
 ##             leve de fábrica (abaixo) e a webcam descobrindo mais tarde.
-##   AVANÇADA  para a TV Box mais forte: qualidade completa de fábrica.
+##   AVANÇADA  para a TX9 (a mais forte): qualidade completa de fábrica, que
+##             desce sozinha para a leve se a TV Box não segurar
+##             (MiraGlobal.completa_nao_cabe).
 ## A versão vem da etiqueta do APK ("versao_leve" / "versao_avancada"). Fora
 ## dos dois APKs (PC, editor) vale o "auto" de antes.
 func versao_do_apk() -> String:
@@ -307,9 +309,9 @@ func nome_da_versao() -> String:
 	var numero: String = preload("res://scripts/caixa_preta.gd").VERSAO
 	match versao_do_apk():
 		"leve":
-			return "%s · VERSÃO LEVE (PROSB-3000)" % numero
+			return "%s · LEVE (PRO ULTRA)" % numero
 		"avancada":
-			return "%s · VERSÃO AVANÇADA" % numero
+			return "%s · AVANÇADA (TX9)" % numero
 	return numero
 
 
@@ -326,33 +328,57 @@ func nome_da_versao() -> String:
 ##     começo, sem esperar a calibragem.
 ## Alvos, acertos, placar, mira e o cenário continuam iguais.
 ## "auto" = a da versão do APK (leve na LEVE, completa na AVANÇADA); fora
-## dos APKs, leve no Android e completa no PC. A CONFIGURAÇÃO pode trocar
-## (LEVE / COMPLETA) em qualquer versão. Para testar no PC: LAZER_QUALIDADE.
+## dos APKs, leve no Android e completa no PC. Na completa automática, se a
+## TV Box não segurar nem com a calibragem, ela vira leve sozinha (Rodada 33,
+## MiraGlobal.completa_nao_cabe). A CONFIGURAÇÃO pode trocar (LEVE /
+## COMPLETA) em qualquer versão. Para testar no PC: LAZER_QUALIDADE.
 func qualidade_leve() -> bool:
 	return _qualidade_leve
+
+
+## A qualidade está na AUTOMÁTICA (a da versão do APK).
+func qualidade_automatica() -> bool:
+	return _qualidade_pedida() == "auto"
+
+
+## Revê a qualidade (a calibragem pode ter largado a completa). Chamada a
+## cada troca de tela (TransicaoGlobal): uma tela nunca muda no meio.
+func atualizar_qualidade() -> void:
+	_decidir_qualidade()
+
+
+## Para a CONFIGURAÇÃO: a automática largou a completa (esta TV Box não
+## segurou) e está na leve.
+func completa_largada() -> bool:
+	return qualidade_automatica() and MiraGlobal.completa_nao_cabe and versao_do_apk() != "leve"
 
 
 var _qualidade_leve := false
 var _qualidade_anotada := false
 
 
-func _decidir_qualidade() -> void:
-	var q := str(valor("video/qualidade"))
+func _qualidade_pedida() -> String:
 	if OS.has_environment("LAZER_QUALIDADE"):
-		q = OS.get_environment("LAZER_QUALIDADE")
+		return OS.get_environment("LAZER_QUALIDADE")
+	return str(valor("video/qualidade"))
+
+
+func _decidir_qualidade() -> void:
+	var q := _qualidade_pedida()
 	var leve := q == "leve"
 	if q == "auto":
 		match versao_do_apk():
 			"leve":
 				leve = true
 			"avancada":
-				leve = false
+				leve = MiraGlobal.completa_nao_cabe
 			_:
-				leve = OS.get_name() == "Android"
+				leve = OS.get_name() == "Android" or MiraGlobal.completa_nao_cabe
 	if leve != _qualidade_leve or not _qualidade_anotada:
 		_qualidade_leve = leve
 		_qualidade_anotada = true
-		Tela.marca("qualidade da imagem: %s (%s)" % ["leve" if leve else "completa", q])
+		var porque := " (esta TV Box não segurou a completa)" if q == "auto" and leve and MiraGlobal.completa_nao_cabe else ""
+		Tela.marca("qualidade da imagem: %s (%s)%s" % ["leve" if leve else "completa", q, porque])
 
 
 ## Aplica tudo no jogo: metas lidas pelas cenas, botões e volumes.
