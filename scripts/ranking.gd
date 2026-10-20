@@ -14,8 +14,10 @@ const FONTE_FORTE := preload("res://fonts/Exo2-ExtraBold.ttf")
 const FONTE := preload("res://fonts/Exo2-Bold.ttf")
 
 ## Colunas da tabela (largura em proporção). Letras grandes: os nomes e os
-## pontos são lidos de longe, do outro lado do salão.
-const COLUNAS := [["POS", 0.13], ["JOGADOR", 0.35], ["CENÁRIO", 0.18], ["PONTOS", 0.21], ["ACERTO", 0.13]]
+## pontos são lidos de longe, do outro lado do salão. A FOTO (Rodada 31) é a
+## da webcam antes da partida (scripts/pose.gd); sem foto, a silhueta.
+const COLUNAS := [["POS", 0.11], ["FOTO", 0.12], ["JOGADOR", 0.31], ["CENÁRIO", 0.15], ["PONTOS", 0.19], ["ACERTO", 0.12]]
+const LADO_FOTO := 96
 const ALTURA_LINHA := 116.0
 const ALTURA_CABECALHO := 50.0
 var RankingManager := RankingManagerScript.new()
@@ -29,6 +31,8 @@ var video_fundo: VideoNativo = null
 var audio_ranking: AudioStreamPlayer = null
 
 var dados_ranking: Array[Dictionary] = []
+## Fotos ainda abrindo (scripts/fotos_ranking.gd): [TextureRect, caminho].
+var _fotos_pendentes: Array = []
 var modal_limpar_layer: CanvasLayer = null
 var modal_limpar_root: Control = null
 
@@ -79,6 +83,7 @@ var xbox_mira_iniciada: bool = false
 
 
 func _ready() -> void:
+	Maquina.webcam.soltar()   # fora da partida a webcam fica solta
 	var origem: String = "cenarios"
 	if get_tree().has_meta("ranking_origem"):
 		origem = str(get_tree().get_meta("ranking_origem"))
@@ -221,6 +226,7 @@ func _auto_voltar_atrativo() -> void:
 
 
 func _process(delta: float) -> void:
+	_colher_fotos()
 	if modo_atrativo:
 		return
 
@@ -432,7 +438,8 @@ func _criar_ranking() -> void:
 			cenario_original,
 			str(dados.get("modo", "FACIL")),
 			int(dados.get("pontos", 0)),
-			int(dados.get("precisao", 0))
+			int(dados.get("precisao", 0)),
+			str(dados.get("foto", ""))
 		)
 		lista.add_child(linha)
 		
@@ -606,7 +613,7 @@ func _desenhar_alvo_overlay() -> void:
 	Pincel.linha(alvo_overlay, alvo_pos + Vector2(0, -l - e), alvo_pos + Vector2(0, -e), Color.WHITE, 2.2)
 	Pincel.linha(alvo_overlay, alvo_pos + Vector2(0, e), alvo_pos + Vector2(0, l + e), Color.WHITE, 2.2)
 	Pincel.mira_fim(alvo_overlay)
-func _criar_linha_ranking(posicao: int, nome: String, cenario: String, _modo: String, pontos: int, precisao: int) -> Panel:
+func _criar_linha_ranking(posicao: int, nome: String, cenario: String, _modo: String, pontos: int, precisao: int, foto: String = "") -> Panel:
 	var linha := Panel.new()
 	linha.custom_minimum_size = Vector2(scroll.size.x - 20, ALTURA_LINHA)
 
@@ -650,12 +657,66 @@ func _criar_linha_ranking(posicao: int, nome: String, cenario: String, _modo: St
 
 	var largura_util: float = linha.custom_minimum_size.x
 	_adicionar_campo(hbox, (medalha + " " if medalha != "" else "") + str(posicao), largura_util * float(COLUNAS[0][1]), 46, Color.WHITE, FONTE_FORTE)
-	_adicionar_campo(hbox, nome_final, largura_util * float(COLUNAS[1][1]), 52, Color.WHITE, FONTE_FORTE)
-	_adicionar_campo(hbox, cenario_final, largura_util * float(COLUNAS[2][1]), 30, Color(0.82, 0.90, 1.0), FONTE)
-	_adicionar_campo(hbox, _milhar(pontos), largura_util * float(COLUNAS[3][1]), 56, cor_pontos, FONTE_FORTE)
-	_adicionar_campo(hbox, str(precisao) + "%", largura_util * float(COLUNAS[4][1]), 36, Color.WHITE, FONTE)
+	_adicionar_foto(hbox, foto, largura_util * float(COLUNAS[1][1]), estilo.border_color)
+	_adicionar_campo(hbox, nome_final, largura_util * float(COLUNAS[2][1]), 52, Color.WHITE, FONTE_FORTE)
+	_adicionar_campo(hbox, cenario_final, largura_util * float(COLUNAS[3][1]), 30, Color(0.82, 0.90, 1.0), FONTE)
+	_adicionar_campo(hbox, _milhar(pontos), largura_util * float(COLUNAS[4][1]), 56, cor_pontos, FONTE_FORTE)
+	_adicionar_campo(hbox, str(precisao) + "%", largura_util * float(COLUNAS[5][1]), 36, Color.WHITE, FONTE)
 
 	return linha
+
+
+## A foto do jogador (ou a silhueta), com a borda da cor da linha. A foto
+## abre em segundo plano: até ficar pronta aparece a silhueta.
+func _adicionar_foto(pai: HBoxContainer, foto: String, largura: float, cor_borda: Color) -> void:
+	var celula := Control.new()
+	celula.custom_minimum_size = Vector2(largura, ALTURA_LINHA)
+	celula.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	celula.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	pai.add_child(celula)
+	var lado := minf(float(LADO_FOTO), largura - 8.0)
+	var pos := Vector2((largura - lado) * 0.5, (ALTURA_LINHA - lado) * 0.5)
+	var img := TextureRect.new()
+	img.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	img.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	img.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	img.position = pos
+	img.size = Vector2(lado, lado)
+	var tex := FotosRanking.textura(foto, LADO_FOTO + 16)
+	img.texture = tex if tex != null else FotosRanking.vazia()
+	if tex == null:
+		_fotos_pendentes.append([img, foto])
+	celula.add_child(img)
+	var moldura := Panel.new()
+	moldura.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	moldura.position = pos - Vector2(3, 3)
+	moldura.size = Vector2(lado + 6, lado + 6)
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0, 0, 0, 0)
+	sb.border_color = Color(cor_borda, maxf(cor_borda.a, 0.7))
+	sb.set_border_width_all(3)
+	sb.set_corner_radius_all(6)
+	Leve.stylebox(moldura, "panel", sb)
+	celula.add_child(moldura)
+
+
+## Até duas fotos prontas por quadro entram na tabela.
+func _colher_fotos() -> void:
+	var entraram := 0
+	var i := 0
+	while i < _fotos_pendentes.size() and entraram < 2:
+		var par: Array = _fotos_pendentes[i]
+		var img: TextureRect = par[0]
+		if not is_instance_valid(img):
+			_fotos_pendentes.remove_at(i)
+			continue
+		var tex := FotosRanking.textura(str(par[1]), LADO_FOTO + 16)
+		if tex != null:
+			img.texture = tex
+			_fotos_pendentes.remove_at(i)
+			entraram += 1
+			continue
+		i += 1
 
 
 func _adicionar_campo(pai: HBoxContainer, texto: String, largura: float, fonte: int, cor: Color, tipo: Font = null) -> void:

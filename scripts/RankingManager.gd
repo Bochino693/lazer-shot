@@ -7,6 +7,11 @@ const PONTOS_MINIMOS: int = 4000
 
 var ranking: Array[Dictionary] = []
 
+## A FOTO DESTA PARTIDA (Rodada 31): tirada na tela da pose antes da fase
+## (scripts/pose.gd). Vai junto com o recorde, se a partida entrar no
+## ranking ("foto" na entrada), e é zerada a cada partida nova.
+var foto_da_partida := ""
+
 
 func _ready() -> void:
 	carregar()
@@ -85,12 +90,31 @@ func adicionar_resultado(nome: String, pontos: int, cenario: String, precisao: i
 		"modo": _normalizar_modo(modo),
 		"data": Time.get_datetime_string_from_system(false, true)
 	}
+	if foto_da_partida != "":
+		entrada["foto"] = foto_da_partida
 
 	ranking.append(entrada)
 	_ordenar_e_limitar()
 	salvar()
+	faxina_fotos()
 
 	return true
+
+
+## As fotos que não estão em nenhum recorde (nem são da partida de agora)
+## são apagadas: só as do Top 20 ficam guardadas na TV Box.
+func faxina_fotos() -> void:
+	var pasta := "user://ranking_photos"
+	var dir := DirAccess.open(pasta)
+	if dir == null:
+		return
+	var usadas := {}
+	for e in ranking:
+		usadas[str(e.get("foto", "")).get_file()] = true
+	usadas[foto_da_partida.get_file()] = true
+	for arq in dir.get_files():
+		if arq.begins_with("foto_") and arq.ends_with(".jpg") and not usadas.has(arq):
+			dir.remove(arq)
 
 
 func limpar() -> void:

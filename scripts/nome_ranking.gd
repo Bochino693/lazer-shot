@@ -18,6 +18,8 @@ const LETRAS := "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 const COLUNAS := 9
 const TRAVA_TIRO := 0.12
 const FONTE_TITULO := "res://fonts/Exo2-ExtraBold.ttf"
+## A foto da partida (webcam antes da fase, Rodada 31) em cima do recorde.
+const LADO_FOTO := 220
 
 var ativo := false
 var nome := ""
@@ -42,6 +44,10 @@ var _valores: Array[String] = []        # letra, "<" (apagar) ou "OK"
 var _tempo_rotulo: Label
 var _tempo_barra_fundo: Panel
 var _tempo_barra: Panel
+var _foto: TextureRect
+var _foto_moldura: Panel
+var _foto_caminho := ""
+var _foto_esperando := false
 
 var _sb_tecla: StyleBoxFlat
 var _sb_tecla_mira: StyleBoxFlat
@@ -71,6 +77,7 @@ func abrir(cor: Color, pontos: int = -1, precisao: int = -1) -> void:
 	_t = 0.0
 	_sob_mira = -1
 	_aplicar_cores()
+	_preparar_foto()
 	_placar.text = ""
 	if pontos >= 0:
 		_placar.text = "%s PONTOS" % _milhar(pontos)
@@ -140,6 +147,11 @@ func tiro(pos: Vector2) -> bool:
 
 func _process(delta: float) -> void:
 	_t += delta
+	if _foto_esperando:
+		var tex := FotosRanking.textura(_foto_caminho, LADO_FOTO)
+		if tex != null:
+			_foto.texture = tex
+			_foto_esperando = false
 	_trava = maxf(0.0, _trava - delta)
 	_restante = maxf(0.0, _restante - delta)
 	_atualizar_tempo()
@@ -210,6 +222,38 @@ func _montar() -> void:
 	_tempo_barra.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_tempo_barra_fundo.add_child(_tempo_barra)
 
+	# a moldura (com a sombra da cor da fase) fica ATRÁS da foto: na frente,
+	# a sombra aparecia por dentro do quadro e tingia a foto
+	_foto_moldura = Panel.new()
+	_foto_moldura.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_foto_moldura.visible = false
+	_painel.add_child(_foto_moldura)
+	_foto = TextureRect.new()
+	_foto.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_foto.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_foto.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	_foto.visible = false
+	_painel.add_child(_foto)
+
+
+## A foto desta partida, se houve (RankingManager.foto_da_partida). A que
+## acabou de ser tirada já está na memória (scripts/webcam.gd); senão abre
+## do arquivo em segundo plano.
+func _preparar_foto() -> void:
+	_foto_caminho = str(RankingManager.foto_da_partida) if RankingManager != null else ""
+	_foto_esperando = false
+	var tem := _foto_caminho != ""
+	_foto.visible = tem
+	_foto_moldura.visible = tem
+	if not tem:
+		return
+	var w: Webcam = Maquina.webcam
+	if w != null and w.ultima_foto_caminho == _foto_caminho and w.ultima_foto_quadrada != null:
+		FotosRanking.guardar_imagem(_foto_caminho, w.ultima_foto_quadrada, LADO_FOTO)
+	var tex := FotosRanking.textura(_foto_caminho, LADO_FOTO)
+	_foto.texture = tex if tex != null else FotosRanking.vazia()
+	_foto_esperando = tex == null
+
 
 func _nova_tecla(texto: String, valor: String) -> void:
 	var p := Panel.new()
@@ -265,6 +309,10 @@ func _aplicar_cores() -> void:
 
 	_tempo_barra_fundo.add_theme_stylebox_override("panel", _caixa(Color(1, 1, 1, 0.10), Color.TRANSPARENT, 0, 6))
 	_tempo_barra.add_theme_stylebox_override("panel", _caixa(_cor, Color.TRANSPARENT, 0, 6))
+	var sb_foto := _caixa(Color(0, 0, 0, 1), _cor, 5, 16)
+	sb_foto.shadow_color = Color(_cor.r, _cor.g, _cor.b, 0.45)
+	sb_foto.shadow_size = 16
+	_foto_moldura.add_theme_stylebox_override("panel", sb_foto)
 
 
 func _estilo_tecla(i: int, sob_mira: bool) -> StyleBoxFlat:
@@ -291,6 +339,13 @@ func _layout() -> void:
 	_painel.pivot_offset = _painel.size * 0.5
 
 	var y := 26.0
+	if _foto.visible:
+		y += 8.0
+		_foto.position = Vector2((pw - LADO_FOTO) * 0.5, y)
+		_foto.size = Vector2(LADO_FOTO, LADO_FOTO)
+		_foto_moldura.position = _foto.position - Vector2(5, 5)
+		_foto_moldura.size = _foto.size + Vector2(10, 10)
+		y += LADO_FOTO + 18.0
 	_titulo.position = Vector2(0, y); _titulo.size = Vector2(pw, 70); y += 72
 	_placar.position = Vector2(0, y); _placar.size = Vector2(pw, 40); y += 44
 	_sub.position = Vector2(0, y); _sub.size = Vector2(pw, 36); y += 54

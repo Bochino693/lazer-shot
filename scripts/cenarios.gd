@@ -2170,7 +2170,7 @@ func _abrir_cena_suave_com_tiro_async(caminho: String) -> void:
 
 	await get_tree().create_timer(0.10).timeout
 
-	TransicaoGlobal.trocar_cena(caminho)
+	_ir(caminho)
 
 
 func _call_abrir_cena_suave_async(caminho: String) -> void:
@@ -2185,7 +2185,15 @@ func _abrir_cena_suave_async(caminho: String) -> void:
 	entrada_bloqueada = true
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 
-	TransicaoGlobal.trocar_cena(caminho)
+	_ir(caminho)
+
+
+## As fases passam antes pela foto (scripts/pose.gd); o resto vai direto.
+func _ir(caminho: String) -> void:
+	if TransicaoGlobal.FASES.has(caminho):
+		Pose.ir(caminho)
+	else:
+		TransicaoGlobal.trocar_cena(caminho)
 
 
 var _shader_arredondado: Shader = null

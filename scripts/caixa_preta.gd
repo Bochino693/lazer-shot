@@ -44,13 +44,19 @@ extends Node
 ##   "arma"             a mira segue o ponteiro sem capturá-lo
 ##   "acerto:<alvo>"    no Mar, aquele alvo (bau, vaso, aguaviva, bomba) é
 ##                      acertado sem o efeito especial e sem o som dele
+##   "camera"           sem a foto antes da partida (a webcam não abre mais)
 ## (scripts/contorno_desenho.gd aplica). Todo o resto continua igual.
 ## Instalar uma versão nova zera tudo.
+##
+## A WEBCAM TEM MARCA PRÓPRIA (Rodada 31): ela fica aberta enquanto a tela da
+## pose mostra a imagem, e a tela pode ter outro trecho arriscado ao mesmo
+## tempo (o vídeo do menu, por exemplo). camera.txt existe enquanto ela está
+## aberta; duas quedas com ela aberta, nesta versão, contornam "camera".
 ##
 ## Criada pela Tela (o primeiro autoload) no _init, antes de qualquer cena.
 ## Outros scripts marcam etapas com Tela.marca("texto").
 
-const VERSAO := "1.30.0"
+const VERSAO := "1.31.0"
 const PASTA := "user://caixa_preta"
 const SESSAO := PASTA + "/sessao.txt"
 const ANTERIOR := PASTA + "/anterior.txt"
@@ -58,6 +64,8 @@ const VIVO := PASTA + "/vivo.txt"
 const SEGURANCA := PASTA + "/contornos.txt"   # "versão|trecho|trecho..."
 const QUASE := PASTA + "/quase.txt"           # "versão|trecho" da 1ª queda num trecho
 const RISCO := PASTA + "/risco.txt"           # "versão|trecho" enquanto está nele
+const CAMERA := PASTA + "/camera.txt"         # "versão" enquanto a webcam está aberta
+const CAMERA_QUASE := PASTA + "/camera_quase.txt"   # "versão" da 1ª queda com ela aberta
 const QUEDA := PASTA + "/queda.txt"
 const QUEDA_ATE := 600.0       # s: parou sozinha antes disso = provável queda
 const MAX_LINHAS := 2500      # depois disso o arquivo recomeça (fica o cabeçalho)
@@ -143,6 +151,7 @@ class Registro extends Logger:
 ## trechos contornados nesta versão (ver o começo do arquivo)
 var contornos: PackedStringArray = []
 var _risco := ""
+var _camera_aberta := false
 
 var _gravador := Gravador.new()
 var _registro: Registro
@@ -217,6 +226,20 @@ func risco(trecho: String) -> void:
 	var f := FileAccess.open(RISCO, FileAccess.WRITE)
 	if f != null:
 		f.store_string("%s|%s" % [VERSAO, trecho])
+		f.close()
+
+
+## A webcam abriu (true) ou foi solta (false). Ver o começo do arquivo.
+func risco_camera(aberta: bool) -> void:
+	if aberta == _camera_aberta:
+		return
+	_camera_aberta = aberta
+	if not aberta:
+		DirAccess.remove_absolute(CAMERA)
+		return
+	var f := FileAccess.open(CAMERA, FileAccess.WRITE)
+	if f != null:
+		f.store_string(VERSAO)
 		f.close()
 
 
@@ -305,6 +328,24 @@ func _copiar_fora(origem: String, nome: String) -> void:
 			f.store_string(texto)
 
 
+## Parou sozinha com a webcam aberta: na segunda vez nesta versão, a foto
+## antes da partida é desligada (contorno "camera").
+func _caiu_com_a_camera() -> void:
+	if "camera" in contornos:
+		return
+	var quase := FileAccess.get_file_as_string(CAMERA_QUASE).strip_edges() if FileAccess.file_exists(CAMERA_QUASE) else ""
+	if quase != VERSAO:
+		var q := FileAccess.open(CAMERA_QUASE, FileAccess.WRITE)
+		if q != null:
+			q.store_string(VERSAO)
+		return
+	DirAccess.remove_absolute(CAMERA_QUASE)
+	contornos.append("camera")
+	var f := FileAccess.open(SEGURANCA, FileAccess.WRITE)
+	if f != null:
+		f.store_string(VERSAO + "|" + "|".join(contornos))
+
+
 ## O que a CONFIGURAÇÃO mostra (scripts/admin.gd, CAIXA-PRETA > VER): como
 ## a sessão anterior terminou, os contornos desta versão e o começo e o fim
 ## da última queda guardada (ou da sessão anterior, se não houver queda).
@@ -366,6 +407,8 @@ func _guardar_sessao_anterior() -> void:
 	_duracao_anterior = FileAccess.get_file_as_string(VIVO).to_float() if FileAccess.file_exists(VIVO) else 0.0
 	var risco_anterior := FileAccess.get_file_as_string(RISCO).strip_edges() if FileAccess.file_exists(RISCO) else ""
 	DirAccess.remove_absolute(RISCO)
+	var camera_anterior := FileAccess.get_file_as_string(CAMERA).strip_edges() if FileAccess.file_exists(CAMERA) else ""
+	DirAccess.remove_absolute(CAMERA)
 	DirAccess.remove_absolute(ANTERIOR)
 	DirAccess.rename_absolute(SESSAO, ANTERIOR)
 	DirAccess.remove_absolute(VIVO)
@@ -385,6 +428,8 @@ func _guardar_sessao_anterior() -> void:
 	if _em_segundo_plano(anterior):
 		return   # foi fechado pelo Android lá atrás (HOME, outro app): não é queda
 	_anterior_caiu = true
+	if camera_anterior == VERSAO:
+		_caiu_com_a_camera()
 	# morreu dentro de um trecho arriscado desta mesma versão: contorna só ele
 	var r := risco_anterior.split("|")
 	if r.size() == 2 and r[0] == VERSAO and r[1] != "" and not (r[1] in contornos):
