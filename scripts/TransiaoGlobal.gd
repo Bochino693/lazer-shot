@@ -137,6 +137,9 @@ func trocar_cena(caminho: String, tempo_saida: float = TEMPO_SAIDA, tempo_entrad
 	em_transicao = true
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 	Tela.marca("troca para " + caminho.get_file())
+	# Se a calibragem viu que esta TV Box não segura a qualidade completa, a
+	# leve começa aqui, entre uma tela e outra (Maquina.atualizar_qualidade).
+	Maquina.atualizar_qualidade()
 
 	# Começa a carregar já, em paralelo com o escurecer: a cena e o que ela
 	# lê no _ready (cada arquivo numa thread do pool). Na TV Box, a cena vem
