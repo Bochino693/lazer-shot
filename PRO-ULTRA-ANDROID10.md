@@ -33,9 +33,17 @@ Boxing.
    Os dois instalam **por cima** da versão anterior (mesmo app, mesma
    assinatura): ranking e configuração continuam.
 
-A janela fica aberta e o histórico completo vai para
-`build/android/GERACAO-COMPLETA.log` (e o de cada versão em
-`build/android/exportacao-godot-Leve.log` / `-Avancada.log`).
+Tudo aparece na janela **na hora** (desde a Rodada 32). Enquanto o Gradle
+compila, ele não mostra nada; a cada 30 s a janela escreve
+`... ainda trabalhando (3 min 30 s)`, para mostrar que não travou. No fim ela
+diz `APK GERADO COM SUCESSO` ou `ERRO: ...` com a causa e espera uma tecla.
+O mesmo texto fica gravado em `build/android/GERACAO-COMPLETA.log` (e o de
+cada versão em `build/android/exportacao-godot-Leve.log` / `-Avancada.log`).
+
+**Se o Gradle falhar no seu PC**, `GERAR_APK_SEM_CAMERA.bat` gera as duas
+versões do jeito da 1.30 (sem Gradle, em cerca de 1 minuto), com
+`-SEM-CAMERA` no nome: o jogo funciona inteiro, só não tira a foto antes da
+partida. Serve para testar na TV Box enquanto o Gradle não é resolvido.
 
 ### Se a imagem ou a mira saírem erradas
 
@@ -1941,6 +1949,53 @@ modelo Android e permissão da câmera no APK); a compilação em si roda no
 PC, como a do Super Boxing PRO.
 
 APK 1.31.0 (código 33): `1.31.0-leve` e `1.31.0-avancada`.
+
+## Rodada 32: o gerador que mostra tudo e termina sozinho
+
+Com a 1.31.0 os `.bat` ficavam parados, sem mensagem, e não terminavam.
+
+- **Não terminava** porque o gerador esperava o Godot com
+  `Start-Process -Wait`. No Windows isso espera também tudo o que o programa
+  abriu, e o Gradle deixa um processo rodando em segundo plano por até
+  3 horas depois de compilar. Agora o gerador espera **só o Godot**. Quando o
+  Godot termina, ele segue em 3 s, mesmo que algum processo do Gradle ainda
+  esteja aberto. E o Gradle roda sem esse processo
+  (`-Dorg.gradle.daemon=false`): cada APK usa um Gradle só dele, que termina
+  junto com a compilação. O que as gerações da 1.31.0 deixaram rodando é
+  encerrado no começo (`gradlew --stop`).
+- **Não mostrava nada** porque o `.bat` mandava tudo para o
+  `GERACAO-COMPLETA.log` e só mostrava no fim. Agora cada linha do Godot e do
+  Gradle aparece na hora, sem os códigos de cor, e vai ao mesmo tempo para o
+  arquivo.
+- **Silêncio não é travamento.** O Godot não mostra nada enquanto o Gradle
+  compila, por isso a janela avisa a cada 30 s. Na primeira vez o Gradle
+  baixa as bibliotecas do Android e leva mais. Passou de 60 minutos, o
+  gerador encerra e diz isso.
+- **Clicar na janela não congela mais.** A seleção rápida do Windows, que
+  parava a janela até apertar uma tecla, fica desligada enquanto o gerador
+  roda.
+- **Erro com dica.** Se o Gradle falhar, a janela mostra a mensagem dele e
+  uma dica. Os casos cobertos são falta de internet, licenças do Android SDK,
+  caminho de pasta comprido demais, falta de espaço em disco e Java errado.
+  Ela também lembra do `GERAR_APK_SEM_CAMERA.bat`. Se o Godot fechar sozinho
+  no meio, o gerador tenta mais uma vez, como no Super Boxing PRO.
+- **Mais rápido onde dá.** Os Export Templates, quando faltam, vêm pelo
+  `curl` do Windows, com os MB baixados na tela. A descompactação usa o .NET
+  direto, sem a barra de progresso que deixava o PowerShell lento.
+
+Testado no Linux com o PowerShell 7 e o Godot 4.6.1, imitando o Windows:
+
+- um Godot falso que termina e deixa um processo segurando a saída (o
+  gerador seguiu em 3 s);
+- a exportação de verdade com o Gradle, que aqui falha por falta de acesso às
+  bibliotecas do Google (o erro e a dica apareceram, código 1, sem ficar
+  parado);
+- o modo reserva com as duas versões (APKs de 182 MB em 1 minuto, e o
+  `export_presets.cfg` voltou como estava);
+- o download dos templates e a criação da chave;
+- um sucesso completo com APK conferido (motor e plugin da webcam).
+
+O APK do jogo não mudou: continua 1.31.0 (código 33).
 
 ## Para testar no PC como se fosse a TV Box
 
