@@ -311,8 +311,10 @@ $ConfigTexto = [IO.File]::ReadAllText($ProjectGodot)
 if ($ConfigTexto -notmatch '(?m)^config_version=4\s*$' -or -not (Test-Path -LiteralPath (Join-Path $Projeto "scripts\fase.gd"))) {
     throw "Esta pasta nao e a versao Mali-450 (Godot 3.6) do Lazer Shot. Baixe a branch tvbox-mali450 numa pasta NOVA (ex.: C:\LazerShotMali)."
 }
+# (So arquivos que a Mali-450 nao tem nem com outra caixa de letra: no
+# Windows, scripts\Maquina.gd da 4.6 e scripts\maquina.gd daqui sao o mesmo.)
 $Misturados = @()
-foreach ($Velho in @("scripts\Maquina.gd", "scripts\main.gd", "scenes\main.tscn", "scenes\admin.tscn", ".godot")) {
+foreach ($Velho in @("scripts\pincel.gd", "scripts\webcam.gd", "scripts\video_nativo.gd", "scripts\hd.gd", "scenes\main.tscn", "scenes\admin.tscn", ".godot")) {
     if (Test-Path -LiteralPath (Join-Path $Projeto $Velho)) { $Misturados += $Velho }
 }
 $Uids = @(Get-ChildItem -LiteralPath $Projeto -Recurse -File -Filter "*.uid" -ErrorAction SilentlyContinue | Where-Object { $_.FullName -notlike "*\build\*" })
