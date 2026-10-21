@@ -1,1098 +1,329 @@
-extends Control
+extends Node2D
 
-const Pincel := preload("res://scripts/pincel.gd")
-const CENA_MENU: String = "res://scenes/cenarios.tscn"
-const MAX_RANKING: int = 20
+## RANKING DOS 20 MELHORES: abas TODOS / DESERTO / MAR / BAR / ARENA, as
+## linhas com posição (medalhas no pódio), foto, jogador, cenário, pontos e
+## acerto, e VOLTAR AOS CENÁRIOS. Tudo pela mira: tiro na aba, nas setas ▲▼
+## (rolam a lista) ou no botão.
+##
+## Na abertura (vindo da tela inicial parada) é a vitrine: sem botões,
+## "APERTE START" piscando, START começa; volta sozinho para a tela inicial.
+## A câmera da 4.6 não existe na TV Box Mali-450: a foto é a silhueta.
 
-const CAMINHO_MUSICA_RANKING: String = "res://songs/ranking-song.mp3"
+const CENA_CENARIOS = "res://scenes/cenarios.tscn"
+const CENA_MENU = "res://scenes/menu.tscn"
+const TEMPO_VITRINE = 20.0
+const MAX = 20
+const COLUNAS = [["POS", 0.11], ["FOTO", 0.12], ["JOGADOR", 0.31], ["CENÁRIO", 0.15], ["PONTOS", 0.19], ["ACERTO", 0.12]]
+const ALTURA_LINHA = 116.0
+const ESPACO_LINHA = 10.0
+const FILTROS = ["TODOS", "DESERTO", "MAR", "BAR", "ARENA"]
+const VERMELHO = Color(1.0, 0.02, 0.02)
 
-const CENA_INICIO: String = "res://scenes/main.tscn"
-const TEMPO_RANKING_ATRATIVO: float = 20.0
+var vitrine = false
 
-const RankingManagerScript := preload("res://scripts/RankingManager.gd")
-const FONTE_FORTE := preload("res://fonts/Exo2-ExtraBold.ttf")
-const FONTE := preload("res://fonts/Exo2-Bold.ttf")
-
-## Colunas da tabela (largura em proporção). Letras grandes: os nomes e os
-## pontos são lidos de longe, do outro lado do salão. A FOTO (Rodada 31) é a
-## da webcam antes da partida (scripts/pose.gd); sem foto, a silhueta.
-const COLUNAS := [["POS", 0.11], ["FOTO", 0.12], ["JOGADOR", 0.31], ["CENÁRIO", 0.15], ["PONTOS", 0.19], ["ACERTO", 0.12]]
-const LADO_FOTO := 96
-const ALTURA_LINHA := 116.0
-const ALTURA_CABECALHO := 50.0
-var RankingManager := RankingManagerScript.new()
-
-var modo_atrativo: bool = false
-# Fundo: vídeo da abertura pelo decodificador de hardware sobre o fundo vivo
-# (quadro parado animado), os dois escurecidos atrás da tabela.
-var fundo_vivo: FundoVivo = null
-var video_fundo: VideoNativo = null
-
-var audio_ranking: AudioStreamPlayer = null
-
-var dados_ranking: Array[Dictionary] = []
-## Fotos ainda abrindo (scripts/fotos_ranking.gd): [TextureRect, caminho].
-var _fotos_pendentes: Array = []
-var modal_limpar_layer: CanvasLayer = null
-var modal_limpar_root: Control = null
-
-var botao_voltar_hover_mira: bool = false
-
-var filtro_atual: String = "TODOS"
-
-var filtros_box: HBoxContainer = null
-var botao_todos: Button = null
-var botao_deserto: Button = null
-var botao_mar: Button = null
-var botao_bar: Button = null
-var botao_arena: Button = null
-
-var flash_insert_layer: CanvasLayer = null
-var flash_insert_rect: ColorRect = null
-var transicionando_insert: bool = false
-
-var botao_subir: Button = null
-var botao_descer: Button = null
-
-var alvo_layer: CanvasLayer = null
-var alvo_overlay: Control = null
-var alvo_pos: Vector2 = Vector2.ZERO
-var alvo_anim_t: float = 0.0
-
-
-var insert_coin_layer: CanvasLayer = null
-var insert_coin_label: Label = null
-var tween_insert_coin: Tween = null
-
-
-var fundo: ColorRect
-var painel: Panel
-var scroll: ScrollContainer
-var lista: VBoxContainer
-var botao_voltar: Button
-
-@export var usar_controle_xbox: bool = true
-@export var velocidade_mira_xbox: float = 920.0
-@export var deadzone_xbox: float = 0.18
-@export var xbox_botao_tiro: int = JOY_BUTTON_RIGHT_SHOULDER
-
-@export var velocidade_mira_mouse: float = 1.0
-var mira_iniciada: bool = false
-
-var xbox_mira_iniciada: bool = false
+var _fundo: FundoVivo
+var _painel: Panel
+var _filtro = "TODOS"
+var _botoes_filtro = []
+var _lista_caixa: Control       # recorta a lista
+var _lista: Control             # as linhas (sobe e desce)
+var _rolagem = 0
+var _linhas = 0
+var _visiveis = 1
+var _subir: Panel
+var _descer: Panel
+var _voltar: Panel
+var _sb_voltar: StyleBoxFlat
+var _sb_voltar_mira: StyleBoxFlat
+var _voltar_mira = false
+var _chamada: Label
+var _mira: MiraDesenho
+var _trajetoria: Trajetoria
+var _musica: AudioStreamPlayer
+var _som_tiro: AudioStream
+var _saindo = false
+var _t = 0.0
 
 
 func _ready() -> void:
-	Maquina.webcam.soltar()   # fora da partida a webcam fica solta
-	var origem: String = "cenarios"
+	var origem = str(get_tree().get_meta("ranking_origem")) if get_tree().has_meta("ranking_origem") else "cenarios"
 	if get_tree().has_meta("ranking_origem"):
-		origem = str(get_tree().get_meta("ranking_origem"))
-
-	modo_atrativo = origem == "main_atrativo"
-
-	_iniciar_musica_ranking()
-	set_anchors_preset(Control.PRESET_FULL_RECT)
-
-	_criar_fundo()
-	_criar_painel()
-	_criar_titulo()
-	_criar_filtros_cenarios()
-	_criar_cabecalho()
-	_criar_scroll()
-	_criar_ranking()
-	_criar_botoes_rolagem()
-	_criar_botao_voltar()
-	if not modo_atrativo:
-		_configurar_alvo_overlay()
+		get_tree().remove_meta("ranking_origem")
+	vitrine = origem == "main_atrativo"
+	MiraGlobal.ativa = not vitrine
+	_som_tiro = load("res://songs/tiro_menu.wav")
+	_fundo = FundoVivo.new()
+	_fundo.escurecer = 0.55
+	add_child(_fundo)
+	_fundo.mostrar("init")
+	var camada = CanvasLayer.new()
+	camada.layer = 10
+	add_child(camada)
+	_painel = Estilo.painel(camada, Vector2(16, 16), Tela.TELA - Vector2(32, 32),
+		Estilo.caixa(Color(0, 0, 0, 0.80), Color(1.0, 0.02, 0.02, 0.95), 4, 32, 24, Color(1, 0, 0, 0.26)))
+	var titulo = Estilo.rotulo(_painel, "🏆 RANKING DOS 20 MELHORES", 58, Color.white, 10)
+	Estilo.colocar(titulo, Vector2(0, 18), Vector2(_painel.rect_size.x, 80))
+	_montar_filtros()
+	_montar_cabecalho()
+	_montar_lista()
+	_montar_botoes()
+	_montar_lista_linhas()
+	_musica = Maquina.musica(self, load("res://songs/ranking-song.mp3"), -4.0)
+	if vitrine:
+		_montar_chamada()
 	else:
-		alvo_layer = null
-		alvo_overlay = null
-
-	if modo_atrativo:
-		if botao_voltar != null:
-			botao_voltar.visible = false
-			botao_voltar.disabled = true
-
-		if botao_subir != null:
-			botao_subir.visible = false
-			botao_subir.disabled = true
-
-		if botao_descer != null:
-			botao_descer.visible = false
-			botao_descer.disabled = true
-
-		_criar_flash_insert_coin()
-		_criar_insert_coin_atrativo()
-		_auto_voltar_atrativo()
-
-
-func _criar_flash_insert_coin() -> void:
-	if flash_insert_layer == null:
-		flash_insert_layer = CanvasLayer.new()
-		flash_insert_layer.name = "FlashInsertLayer"
-		flash_insert_layer.layer = 400
-		add_child(flash_insert_layer)
-
-	if flash_insert_rect == null:
-		flash_insert_rect = ColorRect.new()
-		flash_insert_rect.set_anchors_preset(Control.PRESET_FULL_RECT)
-		flash_insert_rect.color = Color.WHITE
-		flash_insert_rect.modulate.a = 0.0
-		flash_insert_rect.visible = false
-		flash_insert_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		flash_insert_layer.add_child(flash_insert_rect)
-
-
-func _efeito_insert_coin_confirmado() -> void:
-	if flash_insert_rect == null:
-		_criar_flash_insert_coin()
-
-	transicionando_insert = true
-
-	if tween_insert_coin != null:
-		tween_insert_coin.kill()
-
-	flash_insert_rect.visible = true
-	flash_insert_rect.modulate.a = 0.0
-	flash_insert_rect.color = Color.WHITE
-
-	var tween: Tween = create_tween()
-	tween.set_parallel(true)
-
-	if insert_coin_label != null:
-		tween.tween_property(insert_coin_label, "scale", Vector2(1.18, 1.18), 0.12) \
-			.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-
-		tween.tween_property(insert_coin_label, "modulate:a", 0.0, 0.18) \
-			.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
-
-	tween.tween_property(flash_insert_rect, "modulate:a", 0.95, 0.12) \
-		.set_trans(Tween.TRANS_EXPO).set_ease(Tween.EASE_OUT)
-
-	await tween.finished
-
-	var tween_saida: Tween = create_tween()
-	tween_saida.tween_property(flash_insert_rect, "modulate:a", 0.0, 0.20) \
-		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-
-	await tween_saida.finished
-
-
-
-func _criar_insert_coin_atrativo() -> void:
-	if insert_coin_layer == null:
-		insert_coin_layer = CanvasLayer.new()
-		insert_coin_layer.name = "InsertCoinLayer"
-		insert_coin_layer.layer = 300
-		add_child(insert_coin_layer)
-
-	if insert_coin_label == null:
-		insert_coin_label = Label.new()
-		insert_coin_label.text = Maquina.texto_chamada()
-		if not Maquina.creditos_mudaram.is_connected(_ao_mudar_creditos):
-			Maquina.creditos_mudaram.connect(_ao_mudar_creditos)
-		insert_coin_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		insert_coin_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		insert_coin_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		Leve.font_size(insert_coin_label, "font_size", 34)
-		Leve.color(insert_coin_label, "font_color", Color.WHITE)
-		Leve.color(insert_coin_label, "font_outline_color", Color.BLACK)
-		Leve.constant(insert_coin_label, "outline_size", 5)
-		insert_coin_layer.add_child(insert_coin_label)
-
-	var tela: Vector2 = get_viewport_rect().size
-	insert_coin_label.position = Vector2(tela.x * 0.5 - 360.0, tela.y - 125.0)
-	insert_coin_label.size = Vector2(720.0, 90.0)
-	insert_coin_label.visible = true
-	insert_coin_label.modulate.a = 1.0
-
-	if tween_insert_coin != null:
-		tween_insert_coin.kill()
-
-	tween_insert_coin = create_tween()
-	tween_insert_coin.set_loops()
-	tween_insert_coin.tween_property(insert_coin_label, "modulate:a", 0.35, 0.7)
-	tween_insert_coin.tween_property(insert_coin_label, "modulate:a", 1.0, 0.7)
-
-
-func _auto_voltar_atrativo() -> void:
-	await get_tree().create_timer(TEMPO_RANKING_ATRATIVO).timeout
-
-	if get_tree().has_meta("ranking_origem"):
-		get_tree().remove_meta("ranking_origem")
-
-	TransicaoGlobal.trocar_cena(CENA_INICIO)
-
-
-
-func _process(delta: float) -> void:
-	_colher_fotos()
-	if modo_atrativo:
-		return
-
-	# mira única do jogo (MiraGlobal)
-	alvo_pos = MiraGlobal.pos
-	mira_iniciada = true
-
-	alvo_anim_t += delta
-
-	if botao_voltar != null:
-		var hover_agora: bool = botao_voltar.get_global_rect().has_point(alvo_pos)
-
-		if hover_agora != botao_voltar_hover_mira:
-			botao_voltar_hover_mira = hover_agora
-			_animar_hover_voltar(hover_agora)
-
-	if alvo_overlay != null:
-		alvo_overlay.queue_redraw()
-
-
-
-func _atualizar_mira_xbox(_delta: float) -> void:
-	alvo_pos = MiraGlobal.pos
-
-
-func _criar_fundo() -> void:
-	fundo_vivo = FundoVivo.new(["init"])
-	fundo_vivo.z_index = -50
-	# escurecido (antes: vídeo + véu preto de 45%, duas camadas de tela cheia)
-	fundo_vivo.modulate = Color(0.55, 0.55, 0.55)
-	add_child(fundo_vivo)
-	fundo_vivo.mostrar("init")
-
-	video_fundo = VideoNativo.new("res://background_video/back_init.mp4", "res://background_video/back_init.ogv", Vector2(720, 1088), true, 0.0)
-	video_fundo.so_hardware = true
-	video_fundo.z_index = -50
-	video_fundo.modulate = Color(0.55, 0.55, 0.55)
-	add_child(video_fundo)
-	video_fundo.comecou.connect(func() -> void:
-		get_tree().create_timer(0.5).timeout.connect(func() -> void:
-			if fundo_vivo != null and video_fundo != null and video_fundo.esta_mostrando():
-				fundo_vivo.visible = false
-		)
-	)
-	video_fundo.tocar()
-
-
-func _evento_start(event: InputEvent) -> bool:
-	if InputMap.has_action("input_start") and event.is_action_pressed("input_start"):
-		return true
-
-	if event is InputEventKey:
-		var key := event as InputEventKey
-		if key.pressed and not key.echo:
-			return key.keycode == KEY_1 or key.keycode == KEY_ENTER or key.keycode == KEY_SPACE
-
-	return false
-
-
-func _iniciar_jogo_pelo_insert_coin() -> void:
-	if not modo_atrativo:
-		return
-
-	if transicionando_insert:
-		return
-
-	# Modo crédito: só entra no jogo se houver crédito (desconta aqui). Trava
-	# na hora: START repetido não cobra nem entra duas vezes.
-	if not Maquina.cobrar():
-		return
-	transicionando_insert = true
-
-	if get_tree().has_meta("ranking_origem"):
-		get_tree().remove_meta("ranking_origem")
-
-
-	await _efeito_insert_coin_confirmado()
-
-	if ResourceLoader.exists(CENA_MENU):
-		TransicaoGlobal.trocar_cena(CENA_MENU)
-
-
-func _criar_painel() -> void:
-	painel = Panel.new()
-	painel.position = Vector2(16, 16)
-	painel.size = get_viewport_rect().size - Vector2(32, 32)
-	add_child(painel)
-
-	var estilo := StyleBoxFlat.new()
-	estilo.bg_color = Color(0.0, 0.0, 0.0, 0.80)
-	estilo.border_color = Color(1.0, 0.02, 0.02, 0.95)
-	estilo.set_border_width_all(4)
-	estilo.set_corner_radius_all(32)
-	estilo.shadow_color = Color(1.0, 0.0, 0.0, 0.26)
-	estilo.shadow_size = 24
-	estilo.shadow_offset = Vector2(0, 8)
-	Leve.stylebox(painel, "panel", estilo)
-
-
-func _criar_titulo() -> void:
-	var titulo := Label.new()
-	titulo.text = "🏆 RANKING DOS 20 MELHORES"
-	titulo.position = Vector2(0, 18)
-	titulo.size = Vector2(painel.size.x, 80)
-	titulo.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	titulo.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	Leve.font(titulo, "font", FONTE_FORTE)
-	Leve.font_size(titulo, "font_size", 58)
-	Leve.color(titulo, "font_color", Color.WHITE)
-	Leve.color(titulo, "font_outline_color", Color.BLACK)
-	Leve.constant(titulo, "outline_size", 10)
-	painel.add_child(titulo)
-
-
-func _criar_cabecalho() -> void:
-	var cab := HBoxContainer.new()
-	cab.position = Vector2(26, 196)
-	cab.size = Vector2(painel.size.x - 52, ALTURA_CABECALHO)
-	Leve.constant(cab, "separation", 0)
-	painel.add_child(cab)
-
-	var largura_util: float = painel.size.x - 52 - 20
+		_trajetoria = Trajetoria.criar(self)
+		_mira = MiraDesenho.criar(self, Color(1.0, 0.2, 0.18))
+
+
+# ------------------------------------------------------------ montagem
+func _montar_filtros() -> void:
+	var larg = 176.0
+	var sep = 8.0
+	var x0 = (_painel.rect_size.x - (larg * FILTROS.size() + sep * (FILTROS.size() - 1))) * 0.5
+	for i in FILTROS.size():
+		var b = Estilo.painel(_painel, Vector2(x0 + i * (larg + sep), 108), Vector2(larg, 72), StyleBoxFlat.new())
+		b.rect_pivot_offset = b.rect_size * 0.5
+		var t = Estilo.rotulo(b, FILTROS[i], 30, Color.white, 4)
+		Estilo.colocar(t, Vector2.ZERO, b.rect_size)
+		_botoes_filtro.append(b)
+	_pintar_filtros()
+
+
+func _pintar_filtros() -> void:
+	for i in FILTROS.size():
+		var ativo = FILTROS[i] == _filtro
+		var sb = Estilo.caixa(VERMELHO if ativo else Color(0, 0, 0, 0.88), Color.white if ativo else Color(1.0, 0.02, 0.02, 0.85), 2, 18)
+		_botoes_filtro[i].add_stylebox_override("panel", sb)
+
+
+func _montar_cabecalho() -> void:
+	var util = _painel.rect_size.x - 52.0 - 20.0
+	var x = 26.0
 	for col in COLUNAS:
-		var lbl := Label.new()
-		lbl.text = col[0]
-		lbl.custom_minimum_size = Vector2(largura_util * float(col[1]), ALTURA_CABECALHO)
-		lbl.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-		lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		lbl.clip_text = true
-		Leve.font(lbl, "font", FONTE)
-		Leve.font_size(lbl, "font_size", 28)
-		Leve.color(lbl, "font_color", Color(1.0, 0.25, 0.22))
-		Leve.color(lbl, "font_outline_color", Color.BLACK)
-		Leve.constant(lbl, "outline_size", 5)
-		cab.add_child(lbl)
+		var l = Estilo.rotulo(_painel, col[0], 28, Color(1.0, 0.25, 0.22), 5, false)
+		Estilo.colocar(l, Vector2(x, 196), Vector2(util * col[1], 50))
+		x += util * col[1]
 
 
-func _criar_scroll() -> void:
-	scroll = ScrollContainer.new()
-	scroll.position = Vector2(26, 196 + ALTURA_CABECALHO + 8)
-
-	# espaço do botão VOLTAR embaixo
-	var margem_botao: float = 136.0
-
-	scroll.size = Vector2(
-		painel.size.x - 52,
-		painel.size.y - scroll.position.y - margem_botao
-	)
-
-	# rola pelos botões ▲▼ (sem barra); com a rolagem desligada a lista
-	# esticava a caixa e passava por baixo do botão VOLTAR
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
-	painel.add_child(scroll)
-
-	lista = VBoxContainer.new()
-	lista.custom_minimum_size = Vector2(scroll.size.x - 12, 0)
-	lista.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	Leve.constant(lista, "separation", 10)
-	scroll.add_child(lista)
+func _montar_lista() -> void:
+	_lista_caixa = Control.new()
+	_lista_caixa.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_lista_caixa.rect_clip_content = true
+	_lista_caixa.rect_position = Vector2(26, 254)
+	_lista_caixa.rect_size = Vector2(_painel.rect_size.x - 52, _painel.rect_size.y - 254 - 136)
+	_painel.add_child(_lista_caixa)
+	_lista = Control.new()
+	_lista.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_lista_caixa.add_child(_lista)
+	_visiveis = int(floor((_lista_caixa.rect_size.y + ESPACO_LINHA) / (ALTURA_LINHA + ESPACO_LINHA)))
 
 
-func _normalizar_cenario(valor: String) -> String:
-	var c := valor.strip_edges().to_upper()
+func _montar_botoes() -> void:
+	var sb_seta = Estilo.caixa(Color(0.88, 0.08, 0.06, 0.96), Color(0, 0, 0, 0), 0, 20)
+	var caixa = _lista_caixa
+	_subir = Estilo.painel(_painel, caixa.rect_position + Vector2(caixa.rect_size.x - 96, 10), Vector2(88, 88), sb_seta)
+	_descer = Estilo.painel(_painel, caixa.rect_position + Vector2(caixa.rect_size.x - 96, caixa.rect_size.y - 98), Vector2(88, 88), sb_seta)
+	for par in [[_subir, "▲"], [_descer, "▼"]]:
+		par[0].rect_pivot_offset = Vector2(44, 44)
+		var t = Estilo.rotulo(par[0], par[1], 40, Color.white, 0)
+		Estilo.colocar(t, Vector2.ZERO, Vector2(88, 88))
+	_sb_voltar = Estilo.caixa(Color(0, 0, 0, 0.96), Color(1.0, 0.02, 0.02, 0.95), 3, 28, 12, Color(1, 0, 0, 0.18))
+	_sb_voltar_mira = Estilo.caixa(Color(0.18, 0, 0, 1), Color.white, 4, 28, 38, Color(1, 0, 0, 0.72))
+	_voltar = Estilo.painel(_painel, Vector2(_painel.rect_size.x * 0.5 - 300, _painel.rect_size.y - 118), Vector2(600, 96), _sb_voltar)
+	_voltar.rect_pivot_offset = _voltar.rect_size * 0.5
+	var tv = Estilo.rotulo(_voltar, "VOLTAR AOS CENÁRIOS", 40, Color.white, 5)
+	Estilo.colocar(tv, Vector2.ZERO, _voltar.rect_size)
+	if vitrine:
+		_voltar.visible = false
+		_subir.visible = false
+		_descer.visible = false
 
-	if c.contains("DESERTO") or c.contains("SAGRADO"):
-		return "DESERTO"
 
-	if c.contains("MAR") or c.contains("FUNDO"):
-		return "MAR"
-
-	if c.contains("BAR") or c.contains("FAROESTE"):
-		return "BAR"
-
-	if c.contains("ARENA") or c.contains("LAZER"):
-		return "ARENA"
-
-	return c
+func _montar_chamada() -> void:
+	var camada = CanvasLayer.new()
+	camada.layer = 30
+	add_child(camada)
+	_chamada = Estilo.rotulo(camada, Maquina.texto_chamada(), 38, Color.white, 6)
+	Estilo.colocar(_chamada, Vector2(152, Tela.TELA.y - 137), Vector2(720, 90))
+	var tw = create_tween().set_loops()
+	tw.tween_property(_chamada, "modulate:a", 0.35, 0.7).set_trans(Tween.TRANS_SINE)
+	tw.tween_property(_chamada, "modulate:a", 1.0, 0.7).set_trans(Tween.TRANS_SINE)
 
 
+# ------------------------------------------------------------ linhas
+func _montar_lista_linhas() -> void:
+	for c in _lista.get_children():
+		c.queue_free()
+	_rolagem = 0
+	_lista.rect_position = Vector2.ZERO
+	var dados = []
+	for e in RankingManager.obter_ranking():
+		if _filtro == "TODOS" or RankingManager.normalizar(str(e.get("cenario", ""))) == _filtro:
+			dados.append(e)
+	_linhas = int(min(MAX, dados.size()))
+	if _linhas == 0:
+		_lista_vazia()
+	for i in _linhas:
+		var e: Dictionary = dados[i]
+		_linha(i, e)
+	_atualizar_setas()
 
-func _criar_ranking() -> void:
-	for child in lista.get_children():
-		child.queue_free()
 
-	var todos_dados: Array = RankingManager.obter_ranking()
-	dados_ranking.clear()
+func _linha(i: int, e: Dictionary) -> void:
+	var pos = i + 1
+	var larg = _lista_caixa.rect_size.x - 20.0
+	var cor_pontos = Color(1.0, 0.86, 0.30)
+	var fundo = Color(0, 0, 0, 0.72)
+	var borda = Color(1.0, 0.02, 0.02, 0.35)
+	match pos:
+		1:
+			fundo = Color(0.40, 0.28, 0.0, 0.62)
+			borda = Color(1.0, 0.82, 0.20)
+		2:
+			fundo = Color(0.20, 0.20, 0.22, 0.75)
+			borda = Color(0.90, 0.92, 0.96)
+		3:
+			fundo = Color(0.30, 0.13, 0.03, 0.62)
+			borda = Color(0.95, 0.55, 0.25)
+		_:
+			cor_pontos = Color(1.0, 0.30, 0.25)
+	var l = Estilo.painel(_lista, Vector2(0, i * (ALTURA_LINHA + ESPACO_LINHA)), Vector2(larg, ALTURA_LINHA),
+		Estilo.caixa(fundo, borda, 3 if pos <= 3 else 2, 22))
+	var medalha = {1: "🥇 ", 2: "🥈 ", 3: "🥉 "}.get(pos, "")
+	var nome = str(e.get("nome", "PLAYER")).strip_edges().to_upper().left(10)
+	if nome == "":
+		nome = "PLAYER"
+	var x = 0.0
+	x = _campo(l, medalha + str(pos), x, larg * COLUNAS[0][1], 46, Color.white, true)
+	# foto: a silhueta, com a borda da cor da linha
+	var w_foto = larg * COLUNAS[1][1]
+	var lado = min(96.0, w_foto - 8.0)
+	var foto = TextureRect.new()
+	foto.texture = Estilo.tex("foto_vazia")
+	foto.expand = true
+	foto.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	foto.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	foto.rect_position = Vector2(x + (w_foto - lado) * 0.5, (ALTURA_LINHA - lado) * 0.5)
+	foto.rect_size = Vector2(lado, lado)
+	l.add_child(foto)
+	var mold = StyleBoxFlat.new()
+	mold.draw_center = false
+	mold.border_color = Color(borda.r, borda.g, borda.b, max(borda.a, 0.7))
+	mold.set_border_width_all(3)
+	mold.set_corner_radius_all(6)
+	Estilo.painel(l, foto.rect_position - Vector2(3, 3), foto.rect_size + Vector2(6, 6), mold)
+	x += w_foto
+	x = _campo(l, nome, x, larg * COLUNAS[2][1], 52, Color.white, true)
+	x = _campo(l, RankingManager.normalizar(str(e.get("cenario", ""))).left(8), x, larg * COLUNAS[3][1], 30, Color(0.82, 0.90, 1.0), false)
+	x = _campo(l, Estilo.milhar(int(e.get("pontos", 0))), x, larg * COLUNAS[4][1], 56, cor_pontos, true)
+	_campo(l, "%d%%" % int(e.get("precisao", 0)), x, larg * COLUNAS[5][1], 36, Color.white, false)
 
-	for item in todos_dados:
-		var dados := item as Dictionary
-		var cenario_salvo := str(dados.get("cenario", "GERAL"))
-		var cenario_normalizado := _normalizar_cenario(cenario_salvo)
 
-		if filtro_atual == "TODOS" or cenario_normalizado == filtro_atual:
-			dados_ranking.append(dados)
+## Um campo da linha; a letra diminui só o necessário para caber na coluna.
+func _campo(pai: Control, texto: String, x: float, larg: float, tam: int, cor: Color, forte: bool) -> float:
+	while tam > 16 and Estilo.fonte(tam, forte, 7).get_string_size(texto).x > larg - 12.0:
+		tam -= 2
+	var l = Estilo.rotulo(pai, texto, tam, cor, 7, forte)
+	l.clip_text = true
+	Estilo.colocar(l, Vector2(x, 0), Vector2(larg, ALTURA_LINHA))
+	return x + larg
 
-	if dados_ranking.is_empty():
-		_criar_lista_vazia()
+
+func _lista_vazia() -> void:
+	var p = Estilo.painel(_lista, Vector2(0, 0), Vector2(_lista_caixa.rect_size.x - 24, 300),
+		Estilo.caixa(Color(0.08, 0.09, 0.13, 0.82), Color(1.0, 0.78, 0.18, 0.35), 2, 22))
+	var t = Estilo.rotulo(p, "🏆 RANKING VAZIO\n\nJOGUE UMA PARTIDA E\nENTRE PARA O RANKING!", 40, Color.white, 7, false)
+	Estilo.colocar(t, Vector2(20, 20), Vector2(p.rect_size.x - 40, 260))
+
+
+func _rolar(passos: int) -> void:
+	var max_rol = int(max(0, _linhas - _visiveis))
+	_rolagem = int(clamp(_rolagem + passos, 0, max_rol))
+	var tw = create_tween()
+	tw.tween_property(_lista, "rect_position:y", -_rolagem * (ALTURA_LINHA + ESPACO_LINHA), 0.25).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	_atualizar_setas()
+
+
+func _atualizar_setas() -> void:
+	if vitrine:
 		return
-
-	for i in range(min(MAX_RANKING, dados_ranking.size())):
-		var dados := dados_ranking[i]
-		var cenario_original := str(dados.get("cenario", "GERAL"))
-
-		var linha := _criar_linha_ranking(
-			i + 1,
-			str(dados.get("nome", "PLAYER")),
-			cenario_original,
-			str(dados.get("modo", "FACIL")),
-			int(dados.get("pontos", 0)),
-			int(dados.get("precisao", 0)),
-			str(dados.get("foto", ""))
-		)
-		lista.add_child(linha)
-		
-	await get_tree().process_frame
-	_atualizar_botoes_rolagem()
+	var precisa = _linhas > _visiveis
+	_subir.visible = precisa and _rolagem > 0
+	_descer.visible = precisa and _rolagem < _linhas - _visiveis
 
 
-
-func _criar_filtros_cenarios() -> void:
-	filtros_box = HBoxContainer.new()
-	filtros_box.position = Vector2(24, 106)
-	filtros_box.size = Vector2(painel.size.x - 48, 76)
-	filtros_box.alignment = BoxContainer.ALIGNMENT_CENTER
-	Leve.constant(filtros_box, "separation", 8)
-	painel.add_child(filtros_box)
-
-	botao_todos = _criar_botao_filtro("TODOS")
-	botao_deserto = _criar_botao_filtro("DESERTO")
-	botao_mar = _criar_botao_filtro("MAR")
-	botao_bar = _criar_botao_filtro("BAR")
-	botao_arena = _criar_botao_filtro("ARENA")
-
-	filtros_box.add_child(botao_todos)
-	filtros_box.add_child(botao_deserto)
-	filtros_box.add_child(botao_mar)
-	filtros_box.add_child(botao_bar)
-	filtros_box.add_child(botao_arena)
-
-	_atualizar_visual_filtros()
-
-
-func _criar_botao_filtro(texto: String) -> Button:
-	var btn := Button.new()
-	btn.text = texto
-	btn.custom_minimum_size = Vector2(176, 72)
-	btn.focus_mode = Control.FOCUS_NONE
-	Leve.font(btn, "font", FONTE_FORTE)
-	Leve.font_size(btn, "font_size", 30)
-
-	btn.pressed.connect(func():
-		filtro_atual = texto
-		if scroll != null:
-			scroll.scroll_vertical = 0
-		_criar_ranking()
-		_atualizar_visual_filtros()
-	)
-
-	return btn
-
-
-
-func _atualizar_visual_filtros() -> void:
-	var botoes: Array[Button] = [botao_todos, botao_deserto, botao_mar, botao_bar, botao_arena]
-
-	for btn in botoes:
-		if btn == null:
-			continue
-
-		var estilo := StyleBoxFlat.new()
-		estilo.corner_radius_top_left = 18
-		estilo.corner_radius_top_right = 18
-		estilo.corner_radius_bottom_left = 18
-		estilo.corner_radius_bottom_right = 18
-		estilo.border_width_left = 2
-		estilo.border_width_top = 2
-		estilo.border_width_right = 2
-		estilo.border_width_bottom = 2
-
-		if btn.text == filtro_atual:
-			estilo.bg_color = Color(1.0, 0.02, 0.02, 1.0)
-			estilo.border_color = Color.WHITE
-		else:
-			estilo.bg_color = Color(0.0, 0.0, 0.0, 0.88)
-			estilo.border_color = Color(1.0, 0.02, 0.02, 0.85)
-
-		Leve.color(btn, "font_color", Color.WHITE)
-		Leve.color(btn, "font_outline_color", Color.BLACK)
-		Leve.constant(btn, "outline_size", 4)
-		Leve.stylebox(btn, "normal", estilo)
-		Leve.stylebox(btn, "hover", estilo)
-		Leve.stylebox(btn, "pressed", estilo)
-
-
-
-func _criar_botoes_rolagem() -> void:
-	botao_subir = Button.new()
-	botao_subir.text = "▲"
-	botao_subir.position = Vector2(scroll.position.x + scroll.size.x - 96, scroll.position.y + 10)
-	botao_subir.size = Vector2(88, 88)
-	botao_subir.focus_mode = Control.FOCUS_NONE
-	painel.add_child(botao_subir)
-
-	botao_descer = Button.new()
-	botao_descer.text = "▼"
-	botao_descer.position = Vector2(scroll.position.x + scroll.size.x - 96, scroll.position.y + scroll.size.y - 98)
-	botao_descer.size = Vector2(88, 88)
-	botao_descer.focus_mode = Control.FOCUS_NONE
-	painel.add_child(botao_descer)
-
-	_estilizar_botao_rolagem(botao_subir)
-	_estilizar_botao_rolagem(botao_descer)
-
-	botao_subir.pressed.connect(func():
-		scroll.scroll_vertical = max(0, scroll.scroll_vertical - int(ALTURA_LINHA * 4))
-		_atualizar_botoes_rolagem()
-	)
-
-	botao_descer.pressed.connect(func():
-		scroll.scroll_vertical += int(ALTURA_LINHA * 4)
-		_atualizar_botoes_rolagem()
-	)
-
-	_atualizar_botoes_rolagem()
-
-
-func _atualizar_botoes_rolagem() -> void:
-	if botao_subir == null or botao_descer == null or scroll == null or lista == null:
+# ------------------------------------------------------------ quadro e tiro
+func _process(delta: float) -> void:
+	_t += delta
+	if vitrine:
+		if _t >= TEMPO_VITRINE and not _saindo:
+			_ir(CENA_MENU)
 		return
-
-	var altura_conteudo: float = lista.get_combined_minimum_size().y
-	var precisa_rolar: bool = altura_conteudo > scroll.size.y
-
-	botao_subir.visible = precisa_rolar and scroll.scroll_vertical > 0
-	botao_descer.visible = precisa_rolar
-
-
-func _estilizar_botao_rolagem(btn: Button) -> void:
-	var normal := StyleBoxFlat.new()
-	normal.bg_color = Color(0.88, 0.08, 0.06, 0.96)
-	normal.corner_radius_top_left = 20
-	normal.corner_radius_top_right = 20
-	normal.corner_radius_bottom_left = 20
-	normal.corner_radius_bottom_right = 20
-
-	Leve.stylebox(btn, "normal", normal)
-	Leve.stylebox(btn, "hover", normal)
-	Leve.stylebox(btn, "pressed", normal)
-	Leve.font_size(btn, "font_size", 40)
-	Leve.color(btn, "font_color", Color.WHITE)
+	var p = MiraGlobal.mira()
+	var sob = Rect2(_painel.rect_position + _voltar.rect_position, _voltar.rect_size).grow(10.0).has_point(p)
+	if sob != _voltar_mira:
+		_voltar_mira = sob
+		_voltar.add_stylebox_override("panel", _sb_voltar_mira if sob else _sb_voltar)
+		var tw = create_tween()
+		tw.tween_property(_voltar, "rect_scale", Vector2.ONE * (1.06 if sob else 1.0), 0.12).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 
 
-
-func _configurar_alvo_overlay() -> void:
-	alvo_layer = CanvasLayer.new()
-	alvo_layer.name = "AlvoLayer"
-	alvo_layer.layer = 100
-	add_child(alvo_layer)
-
-	alvo_overlay = Control.new()
-	alvo_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
-	alvo_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	alvo_overlay.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
-	alvo_layer.add_child(alvo_overlay)
-	alvo_overlay.draw.connect(_desenhar_alvo_overlay)
-
-
-
-func _desenhar_alvo_overlay() -> void:
-	var pulso := 1.0 + sin(alvo_anim_t * 6.0) * 0.08
-	var raio := 18.0 * pulso
-
-	Pincel.mira_inicio(alvo_overlay, alvo_pos)
-	Pincel.anel(alvo_overlay, alvo_pos, raio, 2.8, Color(1.0, 0.12, 0.08))
-	Pincel.anel(alvo_overlay, alvo_pos, raio * 0.52, 1.4, Color.WHITE)
-	Pincel.circulo(alvo_overlay, alvo_pos, 3.4 * pulso, Color(1.0, 0.12, 0.08))
-
-	var l := 13.0 * pulso
-	var e := 7.0 * pulso
-	Pincel.linha(alvo_overlay, alvo_pos + Vector2(-l - e, 0), alvo_pos + Vector2(-e, 0), Color.WHITE, 2.2)
-	Pincel.linha(alvo_overlay, alvo_pos + Vector2(e, 0), alvo_pos + Vector2(l + e, 0), Color.WHITE, 2.2)
-	Pincel.linha(alvo_overlay, alvo_pos + Vector2(0, -l - e), alvo_pos + Vector2(0, -e), Color.WHITE, 2.2)
-	Pincel.linha(alvo_overlay, alvo_pos + Vector2(0, e), alvo_pos + Vector2(0, l + e), Color.WHITE, 2.2)
-	Pincel.mira_fim(alvo_overlay)
-func _criar_linha_ranking(posicao: int, nome: String, cenario: String, _modo: String, pontos: int, precisao: int, foto: String = "") -> Panel:
-	var linha := Panel.new()
-	linha.custom_minimum_size = Vector2(scroll.size.x - 20, ALTURA_LINHA)
-
-	var estilo := StyleBoxFlat.new()
-	var cor_pontos := Color(1.0, 0.86, 0.30)
-	if posicao == 1:
-		estilo.bg_color = Color(0.40, 0.28, 0.0, 0.62)
-		estilo.border_color = Color(1.0, 0.82, 0.20)
-	elif posicao == 2:
-		estilo.bg_color = Color(0.20, 0.20, 0.22, 0.75)
-		estilo.border_color = Color(0.90, 0.92, 0.96)
-	elif posicao == 3:
-		estilo.bg_color = Color(0.30, 0.13, 0.03, 0.62)
-		estilo.border_color = Color(0.95, 0.55, 0.25)
-	else:
-		estilo.bg_color = Color(0.0, 0.0, 0.0, 0.72)
-		estilo.border_color = Color(1.0, 0.02, 0.02, 0.35)
-		cor_pontos = Color(1.0, 0.30, 0.25)
-	estilo.set_border_width_all(3 if posicao <= 3 else 2)
-	estilo.set_corner_radius_all(22)
-	Leve.stylebox(linha, "panel", estilo)
-
-	var hbox := HBoxContainer.new()
-	hbox.position = Vector2(0, 0)
-	hbox.size = Vector2(linha.custom_minimum_size.x, ALTURA_LINHA)
-	Leve.constant(hbox, "separation", 0)
-	linha.add_child(hbox)
-
-	var medalha := ""
-	if posicao == 1:
-		medalha = "🥇"
-	elif posicao == 2:
-		medalha = "🥈"
-	elif posicao == 3:
-		medalha = "🥉"
-
-	var nome_final: String = nome.strip_edges().to_upper().left(10)
-	if nome_final == "":
-		nome_final = "PLAYER"
-	var cenario_final: String = _normalizar_cenario(cenario).left(8)
-
-	var largura_util: float = linha.custom_minimum_size.x
-	_adicionar_campo(hbox, (medalha + " " if medalha != "" else "") + str(posicao), largura_util * float(COLUNAS[0][1]), 46, Color.WHITE, FONTE_FORTE)
-	_adicionar_foto(hbox, foto, largura_util * float(COLUNAS[1][1]), estilo.border_color)
-	_adicionar_campo(hbox, nome_final, largura_util * float(COLUNAS[2][1]), 52, Color.WHITE, FONTE_FORTE)
-	_adicionar_campo(hbox, cenario_final, largura_util * float(COLUNAS[3][1]), 30, Color(0.82, 0.90, 1.0), FONTE)
-	_adicionar_campo(hbox, _milhar(pontos), largura_util * float(COLUNAS[4][1]), 56, cor_pontos, FONTE_FORTE)
-	_adicionar_campo(hbox, str(precisao) + "%", largura_util * float(COLUNAS[5][1]), 36, Color.WHITE, FONTE)
-
-	return linha
-
-
-## A foto do jogador (ou a silhueta), com a borda da cor da linha. A foto
-## abre em segundo plano: até ficar pronta aparece a silhueta.
-func _adicionar_foto(pai: HBoxContainer, foto: String, largura: float, cor_borda: Color) -> void:
-	var celula := Control.new()
-	celula.custom_minimum_size = Vector2(largura, ALTURA_LINHA)
-	celula.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-	celula.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	pai.add_child(celula)
-	var lado := minf(float(LADO_FOTO), largura - 8.0)
-	var pos := Vector2((largura - lado) * 0.5, (ALTURA_LINHA - lado) * 0.5)
-	var img := TextureRect.new()
-	img.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	img.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	img.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
-	img.position = pos
-	img.size = Vector2(lado, lado)
-	var tex := FotosRanking.textura(foto, LADO_FOTO + 16)
-	img.texture = tex if tex != null else FotosRanking.vazia()
-	if tex == null:
-		_fotos_pendentes.append([img, foto])
-	celula.add_child(img)
-	var moldura := Panel.new()
-	moldura.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	moldura.position = pos - Vector2(3, 3)
-	moldura.size = Vector2(lado + 6, lado + 6)
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color(0, 0, 0, 0)
-	sb.border_color = Color(cor_borda, maxf(cor_borda.a, 0.7))
-	sb.set_border_width_all(3)
-	sb.set_corner_radius_all(6)
-	Leve.stylebox(moldura, "panel", sb)
-	celula.add_child(moldura)
-
-
-## Até duas fotos prontas por quadro entram na tabela.
-func _colher_fotos() -> void:
-	var entraram := 0
-	var i := 0
-	while i < _fotos_pendentes.size() and entraram < 2:
-		var par: Array = _fotos_pendentes[i]
-		var img: TextureRect = par[0]
-		if not is_instance_valid(img):
-			_fotos_pendentes.remove_at(i)
-			continue
-		var tex := FotosRanking.textura(str(par[1]), LADO_FOTO + 16)
-		if tex != null:
-			img.texture = tex
-			_fotos_pendentes.remove_at(i)
-			entraram += 1
-			continue
-		i += 1
-
-
-func _adicionar_campo(pai: HBoxContainer, texto: String, largura: float, fonte: int, cor: Color, tipo: Font = null) -> void:
-	var lbl := Label.new()
-	lbl.text = texto
-	lbl.custom_minimum_size = Vector2(largura, ALTURA_LINHA)
-	lbl.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	lbl.clip_text = true
-	lbl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-
-	if tipo != null:
-		Leve.font(lbl, "font", tipo)
-		# diminui só o necessário para caber na coluna
-		while fonte > 16 and tipo.get_string_size(texto, HORIZONTAL_ALIGNMENT_LEFT, -1, fonte).x > largura - 12.0:
-			fonte -= 2
-	Leve.font_size(lbl, "font_size", fonte)
-	Leve.color(lbl, "font_color", cor)
-	Leve.color(lbl, "font_outline_color", Color.BLACK)
-	Leve.constant(lbl, "outline_size", 7)
-
-	pai.add_child(lbl)
-
-
-static func _milhar(n: int) -> String:
-	var t := str(absi(n))
-	var out := ""
-	while t.length() > 3:
-		out = "." + t.right(3) + out
-		t = t.left(t.length() - 3)
-	return ("-" if n < 0 else "") + t + out
-
-
-func _criar_botao_voltar() -> void:
-	botao_voltar = Button.new()
-	botao_voltar.text = "VOLTAR AOS CENÁRIOS"
-
-	botao_voltar.position = Vector2(
-		painel.size.x * 0.5 - 300,
-		painel.size.y - 118
-	)
-
-	botao_voltar.size = Vector2(600, 96)
-	botao_voltar.focus_mode = Control.FOCUS_NONE
-	botao_voltar.pivot_offset = botao_voltar.size * 0.5
-	painel.add_child(botao_voltar)
-
-	# =========================
-	# ESTILO NORMAL
-	# =========================
-	var normal := StyleBoxFlat.new()
-	normal.bg_color = Color(0.0, 0.0, 0.0, 0.96)
-	normal.border_color = Color(1.0, 0.02, 0.02, 0.95)
-	normal.border_width_left = 3
-	normal.border_width_top = 3
-	normal.border_width_right = 3
-	normal.border_width_bottom = 3
-	normal.corner_radius_top_left = 28
-	normal.corner_radius_top_right = 28
-	normal.corner_radius_bottom_left = 28
-	normal.corner_radius_bottom_right = 28
-	normal.shadow_color = Color(1.0, 0.0, 0.0, 0.18)
-	normal.shadow_size = 12
-
-	# =========================
-	# ESTILO HOVER (NEON)
-	# =========================
-	var hover := StyleBoxFlat.new()
-	hover.bg_color = Color(0.18, 0.0, 0.0, 1.0)
-	hover.border_color = Color.WHITE
-	hover.border_width_left = 4
-	hover.border_width_top = 4
-	hover.border_width_right = 4
-	hover.border_width_bottom = 4
-	hover.corner_radius_top_left = 28
-	hover.corner_radius_top_right = 28
-	hover.corner_radius_bottom_left = 28
-	hover.corner_radius_bottom_right = 28
-	hover.shadow_color = Color(1.0, 0.0, 0.0, 0.72)
-	hover.shadow_size = 38
-
-	Leve.stylebox(botao_voltar, "normal", normal)
-	Leve.stylebox(botao_voltar, "hover", hover)
-	Leve.stylebox(botao_voltar, "pressed", hover)
-
-	Leve.font(botao_voltar, "font", FONTE_FORTE)
-	Leve.font_size(botao_voltar, "font_size", 40)
-	Leve.color(botao_voltar, "font_color", Color.WHITE)
-	Leve.color(botao_voltar, "font_hover_color", Color.WHITE)
-	Leve.color(botao_voltar, "font_pressed_color", Color.WHITE)
-	Leve.color(botao_voltar, "font_outline_color", Color.BLACK)
-	Leve.constant(botao_voltar, "outline_size", 5)
-
-	# Hover mouse
-	botao_voltar.mouse_entered.connect(func():
-		_animar_hover_voltar(true)
-	)
-
-	botao_voltar.mouse_exited.connect(func():
-		_animar_hover_voltar(false)
-	)
-
-	botao_voltar.pressed.connect(_voltar_menu)
-
-
-
-func _animar_hover_voltar(hover: bool) -> void:
-	if botao_voltar == null:
+func _input(ev: InputEvent) -> void:
+	if _saindo:
 		return
-
-	var estilo := StyleBoxFlat.new()
-	estilo.corner_radius_top_left = 28
-	estilo.corner_radius_top_right = 28
-	estilo.corner_radius_bottom_left = 28
-	estilo.corner_radius_bottom_right = 28
-	estilo.border_width_left = 4
-	estilo.border_width_top = 4
-	estilo.border_width_right = 4
-	estilo.border_width_bottom = 4
-
-	if hover:
-		estilo.bg_color = Color(0.95, 0.02, 0.02, 1.0)
-		estilo.border_color = Color.WHITE
-		estilo.shadow_color = Color(1.0, 0.0, 0.0, 0.85)
-		estilo.shadow_size = 42
-
-		Leve.color(botao_voltar, "font_color", Color.WHITE)
-	else:
-		estilo.bg_color = Color(0.0, 0.0, 0.0, 0.96)
-		estilo.border_color = Color(1.0, 0.02, 0.02, 0.95)
-		estilo.shadow_color = Color(1.0, 0.0, 0.0, 0.18)
-		estilo.shadow_size = 12
-
-		Leve.color(botao_voltar, "font_color", Color.WHITE)
-
-	Leve.stylebox(botao_voltar, "normal", estilo)
-	Leve.stylebox(botao_voltar, "hover", estilo)
-	Leve.stylebox(botao_voltar, "pressed", estilo)
-
-	var tween := create_tween()
-	tween.set_parallel(true)
-
-	if hover:
-		tween.tween_property(botao_voltar, "scale", Vector2(1.08, 1.08), 0.12)
-	else:
-		tween.tween_property(botao_voltar, "scale", Vector2.ONE, 0.12)
-
-
-
-func _input(event: InputEvent) -> void:
-	if modo_atrativo:
-		if _evento_start(event):
-			_iniciar_jogo_pelo_insert_coin()
-			return
-
-		if event is InputEventJoypadButton:
-			var jb_atrativo := event as InputEventJoypadButton
-			if jb_atrativo.pressed and jb_atrativo.button_index == xbox_botao_tiro:
-				_iniciar_jogo_pelo_insert_coin()
-				return
-
+	if vitrine:
+		if Maquina.e_start(ev):
+			get_tree().set_input_as_handled()
+			if Maquina.cobrar():
+				Maquina.efeito(load("res://songs/init.wav"), 0.0)
+				_ir(CENA_CENARIOS)
 		return
+	if Maquina.e_tiro(ev):
+		get_tree().set_input_as_handled()
+		_tiro(MiraGlobal.mira())
 
-	if event is InputEventMouseMotion:
-		# o movimento já entra na mira única (MiraGlobal)
+
+func _sob(c: Control, p: Vector2) -> bool:
+	return c.visible and Rect2(_painel.rect_position + c.rect_position, c.rect_size).grow(8.0).has_point(p)
+
+
+func _tiro(p: Vector2) -> void:
+	Maquina.efeito(_som_tiro, -4.0, rand_range(0.96, 1.04))
+	MiraGlobal.coice(0.5)
+	_mira.pulso()
+	_trajetoria.disparar(p, "menu")
+	for i in FILTROS.size():
+		if _sob(_botoes_filtro[i], p):
+			_filtro = FILTROS[i]
+			_pintar_filtros()
+			_montar_lista_linhas()
+			_pulo(_botoes_filtro[i])
+			return
+	if _sob(_subir, p):
+		_pulo(_subir)
+		_rolar(-4)
 		return
-
-	if event is InputEventJoypadButton:
-		var jb := event as InputEventJoypadButton
-
-		if not jb.pressed:
-			return
-
-		print("DEBUG XBOX RANKING:", jb.button_index)
-
-		if jb.button_index == xbox_botao_tiro:
-			_tentar_acao_por_tiro(alvo_pos)
-			return
-
-	if event is InputEventMouseButton:
-		var mouse := event as InputEventMouseButton
-
-		if mouse.pressed and mouse.button_index == MOUSE_BUTTON_LEFT:
-			_tentar_acao_por_tiro(alvo_pos)
-			return
-
-	elif event is InputEventScreenTouch:
-		var toque := event as InputEventScreenTouch
-
-		if toque.pressed:
-			_tentar_acao_por_tiro(alvo_pos)
-			return
-
-	elif event is InputEventKey:
-		var key := event as InputEventKey
-
-		if key.pressed and not key.echo and key.keycode == KEY_F9:
-			_abrir_modal_limpar_ranking()
-			return
-
-
-
-func _tentar_acao_por_tiro(pos: Vector2) -> void:
-	var botoes: Array[Button] = [
-		botao_todos,
-		botao_deserto,
-		botao_mar,
-		botao_bar,
-		botao_arena,
-		botao_subir,
-		botao_descer,
-		botao_voltar
-	]
-
-	for btn in botoes:
-		if btn != null and btn.get_global_rect().has_point(pos):
-			btn.emit_signal("pressed")
-			return
-
-
-
-func _abrir_modal_limpar_ranking() -> void:
-	if modal_limpar_layer != null:
+	if _sob(_descer, p):
+		_pulo(_descer)
+		_rolar(4)
 		return
-
-	modal_limpar_layer = CanvasLayer.new()
-	modal_limpar_layer.layer = 200
-	add_child(modal_limpar_layer)
-
-	modal_limpar_root = Control.new()
-	modal_limpar_root.set_anchors_preset(Control.PRESET_FULL_RECT)
-	modal_limpar_layer.add_child(modal_limpar_root)
-
-	var escuro := ColorRect.new()
-	escuro.color = Color(0, 0, 0, 0.72)
-	escuro.set_anchors_preset(Control.PRESET_FULL_RECT)
-	modal_limpar_root.add_child(escuro)
-
-	var modal := Panel.new()
-	modal.size = Vector2(620, 310)
-	modal.position = get_viewport_rect().size * 0.5 - modal.size * 0.5
-	modal_limpar_root.add_child(modal)
-
-	var estilo := StyleBoxFlat.new()
-	estilo.bg_color = Color(0.035, 0.04, 0.065, 0.98)
-	estilo.border_color = Color(1.0, 0.20, 0.15, 1.0)
-	estilo.border_width_left = 3
-	estilo.border_width_top = 3
-	estilo.border_width_right = 3
-	estilo.border_width_bottom = 3
-	estilo.corner_radius_top_left = 28
-	estilo.corner_radius_top_right = 28
-	estilo.corner_radius_bottom_left = 28
-	estilo.corner_radius_bottom_right = 28
-	Leve.stylebox(modal, "panel", estilo)
-
-	var titulo := Label.new()
-	titulo.text = "⚠ LIMPAR RANKING?"
-	titulo.position = Vector2(20, 28)
-	titulo.size = Vector2(580, 58)
-	titulo.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	titulo.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	Leve.font_size(titulo, "font_size", 36)
-	Leve.color(titulo, "font_color", Color(1.0, 0.25, 0.18))
-	Leve.color(titulo, "font_outline_color", Color.BLACK)
-	Leve.constant(titulo, "outline_size", 7)
-	modal.add_child(titulo)
-
-	var msg := Label.new()
-	msg.text = "Essa ação apaga todos os 20 melhores jogadores salvos.\nDeseja realmente continuar?"
-	msg.position = Vector2(40, 100)
-	msg.size = Vector2(540, 80)
-	msg.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	msg.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	Leve.font_size(msg, "font_size", 23)
-	Leve.color(msg, "font_color", Color.WHITE)
-	Leve.color(msg, "font_outline_color", Color.BLACK)
-	Leve.constant(msg, "outline_size", 5)
-	modal.add_child(msg)
-
-	var btn_sim := Button.new()
-	btn_sim.text = "SIM, LIMPAR"
-	btn_sim.position = Vector2(70, 215)
-	btn_sim.size = Vector2(210, 58)
-	Leve.font_size(btn_sim, "font_size", 22)
-	modal.add_child(btn_sim)
-
-	var btn_nao := Button.new()
-	btn_nao.text = "CANCELAR"
-	btn_nao.position = Vector2(340, 215)
-	btn_nao.size = Vector2(210, 58)
-	Leve.font_size(btn_nao, "font_size", 22)
-	modal.add_child(btn_nao)
-
-	btn_sim.pressed.connect(_confirmar_limpar_ranking)
-	btn_nao.pressed.connect(_fechar_modal_limpar_ranking)
+	if _sob(_voltar, p):
+		_pulo(_voltar)
+		_ir(CENA_CENARIOS)
 
 
-func _confirmar_limpar_ranking() -> void:
-	RankingManager.limpar()
-	_fechar_modal_limpar_ranking()
-	_criar_ranking()
+func _pulo(c: Control) -> void:
+	c.rect_scale = Vector2(0.94, 0.94)
+	var tw = create_tween()
+	tw.tween_property(c, "rect_scale", Vector2.ONE, 0.16).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 
 
-func _fechar_modal_limpar_ranking() -> void:
-	if modal_limpar_layer != null:
-		modal_limpar_layer.queue_free()
-		modal_limpar_layer = null
-		modal_limpar_root = null
-
-
-func _criar_lista_vazia() -> void:
-	var painel_vazio := Panel.new()
-	painel_vazio.custom_minimum_size = Vector2(scroll.size.x - 24, 300)
-
-	var estilo := StyleBoxFlat.new()
-	estilo.bg_color = Color(0.08, 0.09, 0.13, 0.82)
-	estilo.border_color = Color(1.0, 0.78, 0.18, 0.35)
-	estilo.border_width_left = 2
-	estilo.border_width_top = 2
-	estilo.border_width_right = 2
-	estilo.border_width_bottom = 2
-	estilo.corner_radius_top_left = 22
-	estilo.corner_radius_top_right = 22
-	estilo.corner_radius_bottom_left = 22
-	estilo.corner_radius_bottom_right = 22
-	Leve.stylebox(painel_vazio, "panel", estilo)
-
-	var lbl := Label.new()
-	lbl.text = "🏆 RANKING VAZIO\n\nJOGUE UMA PARTIDA E\nENTRE PARA O RANKING!"
-	lbl.position = Vector2(20, 20)
-	lbl.size = Vector2(painel_vazio.custom_minimum_size.x - 40, 260)
-	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	Leve.font(lbl, "font", FONTE)
-	Leve.font_size(lbl, "font_size", 40)
-	Leve.color(lbl, "font_color", Color.WHITE)
-	Leve.color(lbl, "font_outline_color", Color.BLACK)
-	Leve.constant(lbl, "outline_size", 7)
-	painel_vazio.add_child(lbl)
-
-	lista.add_child(painel_vazio)
-	
-	await get_tree().process_frame
-	_atualizar_botoes_rolagem()
-
-
-func _voltar_menu() -> void:
-	if ResourceLoader.exists(CENA_MENU):
-		TransicaoGlobal.trocar_cena(CENA_MENU)
-
-
-func _iniciar_musica_ranking() -> void:
-	if audio_ranking == null:
-		audio_ranking = AudioStreamPlayer.new()
-		audio_ranking.name = "AudioRanking"
-		add_child(audio_ranking)
-		
-	audio_ranking.bus = "Master"
-	audio_ranking.volume_db = 5.0
-	
-	if ResourceLoader.exists(CAMINHO_MUSICA_RANKING):
-		audio_ranking.stream = load(CAMINHO_MUSICA_RANKING)
-		
-		if not audio_ranking.finished.is_connected(_reiniciar_musica_ranking):
-			audio_ranking.finished.connect(_reiniciar_musica_ranking)
-			
-		audio_ranking.play()
-
-
-func _reiniciar_musica_ranking() -> void:
-	if audio_ranking != null:
-		audio_ranking.play()
-
-
-func _ao_mudar_creditos(_creditos: int) -> void:
-	if insert_coin_label != null and is_instance_valid(insert_coin_label):
-		insert_coin_label.text = Maquina.texto_chamada()
+func _ir(caminho: String) -> void:
+	if _saindo:
+		return
+	_saindo = true
+	if _musica != null:
+		var tw = create_tween()
+		tw.tween_property(_musica, "volume_db", -40.0, 0.3)
+	TransicaoGlobal.trocar_cena(caminho)

@@ -1,24 +1,23 @@
 [remap]
 
 importer="wav"
-type="AudioStreamWAV"
-uid="uid://ckx3fcp4rgsvf"
-path="res://.godot/imported/aguia.wav-4abce264924a0b3b687e6f2c0080ad69.sample"
+type="AudioStreamSample"
+path="res://.import/aguia.wav-4abce264924a0b3b687e6f2c0080ad69.sample"
 
 [deps]
 
 source_file="res://songs/aguia.wav"
-dest_files=["res://.godot/imported/aguia.wav-4abce264924a0b3b687e6f2c0080ad69.sample"]
+dest_files=[ "res://.import/aguia.wav-4abce264924a0b3b687e6f2c0080ad69.sample" ]
 
 [params]
 
 force/8_bit=false
 force/mono=false
-force/max_rate=false
-force/max_rate_hz=44100
+force/max_rate=true
+force/max_rate_hz=32000
 edit/trim=false
 edit/normalize=false
 edit/loop_mode=0
 edit/loop_begin=0
 edit/loop_end=-1
-compress/mode=2
+compress/mode=1

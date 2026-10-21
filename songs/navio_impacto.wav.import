@@ -1,24 +1,23 @@
 [remap]
 
 importer="wav"
-type="AudioStreamWAV"
-uid="uid://dixu16jb0vda5"
-path="res://.godot/imported/navio_impacto.wav-34363bb8434f1ebe67d8657fa81142a1.sample"
+type="AudioStreamSample"
+path="res://.import/navio_impacto.wav-34363bb8434f1ebe67d8657fa81142a1.sample"
 
 [deps]
 
 source_file="res://songs/navio_impacto.wav"
-dest_files=["res://.godot/imported/navio_impacto.wav-34363bb8434f1ebe67d8657fa81142a1.sample"]
+dest_files=[ "res://.import/navio_impacto.wav-34363bb8434f1ebe67d8657fa81142a1.sample" ]
 
 [params]
 
 force/8_bit=false
 force/mono=false
-force/max_rate=false
-force/max_rate_hz=44100
+force/max_rate=true
+force/max_rate_hz=32000
 edit/trim=false
 edit/normalize=false
 edit/loop_mode=0
 edit/loop_begin=0
 edit/loop_end=-1
-compress/mode=2
+compress/mode=1

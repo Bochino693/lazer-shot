@@ -1,19 +1,15 @@
 [remap]
 
-importer="oggvorbisstr"
-type="AudioStreamOggVorbis"
-uid="uid://bkdc6kjxveg1s"
-path="res://.godot/imported/deserto_penta.ogg-f17ac63860ab3ef7be05c44bb29a7f47.oggvorbisstr"
+importer="ogg_vorbis"
+type="AudioStreamOGGVorbis"
+path="res://.import/deserto_penta.ogg-f17ac63860ab3ef7be05c44bb29a7f47.oggstr"
 
 [deps]
 
 source_file="res://songs/voz/deserto_penta.ogg"
-dest_files=["res://.godot/imported/deserto_penta.ogg-f17ac63860ab3ef7be05c44bb29a7f47.oggvorbisstr"]
+dest_files=[ "res://.import/deserto_penta.ogg-f17ac63860ab3ef7be05c44bb29a7f47.oggstr" ]
 
 [params]
 
 loop=false
 loop_offset=0
-bpm=0
-beat_count=0
-bar_beats=4

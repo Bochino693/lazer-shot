@@ -1,13 +1,12 @@
-# Godot 4+ specific ignores
-.godot/
-/android/
-# Saidas do GERAR_APK_PRO_ULTRA.bat
+# Godot 3
+.import/
+export.cfg
+export_presets.cfg.bak
+*.translation
+# Saídas do gerador do APK
 /build/
 /APK-Pronto/
 *.apk
 *.idsig
-
 __pycache__/
-
-# fundos em 2x da super-resolução (fonte de sprites/hd/*.res, refeitos por tools/gerar_hd.py)
-tools/hd/*.png
+android/build/

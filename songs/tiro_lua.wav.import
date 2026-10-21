@@ -1,24 +1,23 @@
 [remap]
 
 importer="wav"
-type="AudioStreamWAV"
-uid="uid://b0mlsbnof3eu2"
-path="res://.godot/imported/tiro_lua.wav-206d515351d2eaec92a1609fe2ac957a.sample"
+type="AudioStreamSample"
+path="res://.import/tiro_lua.wav-206d515351d2eaec92a1609fe2ac957a.sample"
 
 [deps]
 
 source_file="res://songs/tiro_lua.wav"
-dest_files=["res://.godot/imported/tiro_lua.wav-206d515351d2eaec92a1609fe2ac957a.sample"]
+dest_files=[ "res://.import/tiro_lua.wav-206d515351d2eaec92a1609fe2ac957a.sample" ]
 
 [params]
 
 force/8_bit=false
 force/mono=false
-force/max_rate=false
-force/max_rate_hz=44100
+force/max_rate=true
+force/max_rate_hz=32000
 edit/trim=false
 edit/normalize=false
 edit/loop_mode=0
 edit/loop_begin=0
 edit/loop_end=-1
-compress/mode=2
+compress/mode=1

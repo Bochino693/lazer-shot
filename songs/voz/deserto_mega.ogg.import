@@ -1,19 +1,15 @@
 [remap]
 
-importer="oggvorbisstr"
-type="AudioStreamOggVorbis"
-uid="uid://b7h572ndtxajh"
-path="res://.godot/imported/deserto_mega.ogg-651435471a94c6501b6f97a181305313.oggvorbisstr"
+importer="ogg_vorbis"
+type="AudioStreamOGGVorbis"
+path="res://.import/deserto_mega.ogg-651435471a94c6501b6f97a181305313.oggstr"
 
 [deps]
 
 source_file="res://songs/voz/deserto_mega.ogg"
-dest_files=["res://.godot/imported/deserto_mega.ogg-651435471a94c6501b6f97a181305313.oggvorbisstr"]
+dest_files=[ "res://.import/deserto_mega.ogg-651435471a94c6501b6f97a181305313.oggstr" ]
 
 [params]
 
 loop=false
 loop_offset=0
-bpm=0
-beat_count=0
-bar_beats=4

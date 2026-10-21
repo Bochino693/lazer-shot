@@ -1,19 +1,15 @@
 [remap]
 
-importer="oggvorbisstr"
-type="AudioStreamOggVorbis"
-uid="uid://evbyrkkt6rym"
-path="res://.godot/imported/mar_especial.ogg-1e3f9b57bdaadae18c3616429b9b9acf.oggvorbisstr"
+importer="ogg_vorbis"
+type="AudioStreamOGGVorbis"
+path="res://.import/mar_especial.ogg-1e3f9b57bdaadae18c3616429b9b9acf.oggstr"
 
 [deps]
 
 source_file="res://songs/voz/mar_especial.ogg"
-dest_files=["res://.godot/imported/mar_especial.ogg-1e3f9b57bdaadae18c3616429b9b9acf.oggvorbisstr"]
+dest_files=[ "res://.import/mar_especial.ogg-1e3f9b57bdaadae18c3616429b9b9acf.oggstr" ]
 
 [params]
 
 loop=false
 loop_offset=0
-bpm=0
-beat_count=0
-bar_beats=4

@@ -1,19 +1,15 @@
 [remap]
 
-importer="oggvorbisstr"
-type="AudioStreamOggVorbis"
-uid="uid://ptt00k76d2j8"
-path="res://.godot/imported/arena_triple.ogg-91a3792ac1f2495ab95931159dc34c05.oggvorbisstr"
+importer="ogg_vorbis"
+type="AudioStreamOGGVorbis"
+path="res://.import/arena_triple.ogg-91a3792ac1f2495ab95931159dc34c05.oggstr"
 
 [deps]
 
 source_file="res://songs/voz/arena_triple.ogg"
-dest_files=["res://.godot/imported/arena_triple.ogg-91a3792ac1f2495ab95931159dc34c05.oggvorbisstr"]
+dest_files=[ "res://.import/arena_triple.ogg-91a3792ac1f2495ab95931159dc34c05.oggstr" ]
 
 [params]
 
 loop=false
 loop_offset=0
-bpm=0
-beat_count=0
-bar_beats=4

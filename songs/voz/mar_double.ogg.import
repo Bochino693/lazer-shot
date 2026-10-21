@@ -1,19 +1,15 @@
 [remap]
 
-importer="oggvorbisstr"
-type="AudioStreamOggVorbis"
-uid="uid://jjxtasjv65d"
-path="res://.godot/imported/mar_double.ogg-84bfdf4c88bd9ade789324493665b9a6.oggvorbisstr"
+importer="ogg_vorbis"
+type="AudioStreamOGGVorbis"
+path="res://.import/mar_double.ogg-84bfdf4c88bd9ade789324493665b9a6.oggstr"
 
 [deps]
 
 source_file="res://songs/voz/mar_double.ogg"
-dest_files=["res://.godot/imported/mar_double.ogg-84bfdf4c88bd9ade789324493665b9a6.oggvorbisstr"]
+dest_files=[ "res://.import/mar_double.ogg-84bfdf4c88bd9ade789324493665b9a6.oggstr" ]
 
 [params]
 
 loop=false
 loop_offset=0
-bpm=0
-beat_count=0
-bar_beats=4

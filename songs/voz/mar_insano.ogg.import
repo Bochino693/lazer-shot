@@ -1,19 +1,15 @@
 [remap]
 
-importer="oggvorbisstr"
-type="AudioStreamOggVorbis"
-uid="uid://c21s46wwl5y3x"
-path="res://.godot/imported/mar_insano.ogg-bcf8e093fb8fd568ef3ce9d7df0eff6f.oggvorbisstr"
+importer="ogg_vorbis"
+type="AudioStreamOGGVorbis"
+path="res://.import/mar_insano.ogg-bcf8e093fb8fd568ef3ce9d7df0eff6f.oggstr"
 
 [deps]
 
 source_file="res://songs/voz/mar_insano.ogg"
-dest_files=["res://.godot/imported/mar_insano.ogg-bcf8e093fb8fd568ef3ce9d7df0eff6f.oggvorbisstr"]
+dest_files=[ "res://.import/mar_insano.ogg-bcf8e093fb8fd568ef3ce9d7df0eff6f.oggstr" ]
 
 [params]
 
 loop=false
 loop_offset=0
-bpm=0
-beat_count=0
-bar_beats=4

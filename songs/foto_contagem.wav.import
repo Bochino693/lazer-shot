@@ -1,24 +1,23 @@
 [remap]
 
 importer="wav"
-type="AudioStreamWAV"
-uid="uid://bxq4qg5egdi66"
-path="res://.godot/imported/foto_contagem.wav-784d0243e4a1ecfc4f6c70f7b98c5712.sample"
+type="AudioStreamSample"
+path="res://.import/foto_contagem.wav-784d0243e4a1ecfc4f6c70f7b98c5712.sample"
 
 [deps]
 
 source_file="res://songs/foto_contagem.wav"
-dest_files=["res://.godot/imported/foto_contagem.wav-784d0243e4a1ecfc4f6c70f7b98c5712.sample"]
+dest_files=[ "res://.import/foto_contagem.wav-784d0243e4a1ecfc4f6c70f7b98c5712.sample" ]
 
 [params]
 
 force/8_bit=false
 force/mono=false
-force/max_rate=false
-force/max_rate_hz=44100
+force/max_rate=true
+force/max_rate_hz=32000
 edit/trim=false
 edit/normalize=false
 edit/loop_mode=0
 edit/loop_begin=0
 edit/loop_end=-1
-compress/mode=2
+compress/mode=1

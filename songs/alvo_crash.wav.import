@@ -1,24 +1,23 @@
 [remap]
 
 importer="wav"
-type="AudioStreamWAV"
-uid="uid://2vfixcq4kci3"
-path="res://.godot/imported/alvo_crash.wav-1eecef7ffa35d195da8f60721e5b5d78.sample"
+type="AudioStreamSample"
+path="res://.import/alvo_crash.wav-1eecef7ffa35d195da8f60721e5b5d78.sample"
 
 [deps]
 
 source_file="res://songs/alvo_crash.wav"
-dest_files=["res://.godot/imported/alvo_crash.wav-1eecef7ffa35d195da8f60721e5b5d78.sample"]
+dest_files=[ "res://.import/alvo_crash.wav-1eecef7ffa35d195da8f60721e5b5d78.sample" ]
 
 [params]
 
 force/8_bit=false
 force/mono=false
-force/max_rate=false
-force/max_rate_hz=44100
+force/max_rate=true
+force/max_rate_hz=32000
 edit/trim=false
 edit/normalize=false
 edit/loop_mode=0
 edit/loop_begin=0
 edit/loop_end=-1
-compress/mode=2
+compress/mode=1

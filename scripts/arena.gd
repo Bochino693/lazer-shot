@@ -1,100 +1,30 @@
-extends Node2D
+extends "res://scripts/fase.gd"
 
-var modal_atire_label: Label = null
-var chat_rodape_panel: Panel = null
-var ranking_nome_bg: ColorRect = null
-var ranking_nome_titulo: Label = null
-var ranking_nome_texto: Label = null
-var ranking_nome_teclado: GridContainer = null
-var ranking_nome_btn_ok: Button = null
-var ranking_nome_btn_apagar: Button = null
-var ranking_nome_timer_label: Label = null
+## ARENA LAZER SHOT, em 2D para a Mali-450.
+##
+## As cores dão a ordem dos tiros: AZUL 1º, VERDE 2º, AMARELO 3º, VERMELHO
+## 4º, ROXO 5º (vale 20, 40, 60, 80, 100). A partida cicla entre duas rodadas:
+##   MEMÓRIA  as 9 lanternas apagadas nos furos; a sequência (1 a 5, cresce a
+##            cada nível) acende uma a uma nas cores da ordem e apaga; o
+##            jogador repete. Cada acerto fica aceso na sua cor. Parado 20 s,
+##            a sequência que falta acende de novo.
+##   FIXA     as lanternas descem; 5 lanternas acesas sobem uma depois da
+##            outra (a cada 1 a 1,5 s), cada uma já na cor da vez: é acertar
+##            na ordem enquanto elas aparecem. Acerto em até 1,1 s: +10;
+##            completa: +50.
+## Ordem errada: -100 e a rodada recomeça (na memória, volta ao nível 1).
+## O LED do alto é bônus: o tiro estoura a lâmpada (+50), que fica queimada,
+## soltando fumaça, e volta a acender piscando depois de 7 s.
+##
+## A parede vive: o logo e os anéis dos furos acendem com a música (luz
+## somada, sem shader de tela), vapor dos canos, faíscas da caixa elétrica,
+## fachos das arandelas com poeira, giroflex girando na troca de rodada e a
+## faixa da ordem embaixo dos furos. O laser que erra deixa a marca queimada
+## na parede.
 
-var ranking_precisao_pendente: int = 0
-var ranking_pontos_pendentes: int = 0
-var ranking_cenario_pendente: String = "ARENA"
-var ranking_ja_salvo: bool = false
- 
-# ─────────────────────────────────────────────
-#  CONFIGURAÇÕES EXPORTADAS
-# ─────────────────────────────────────────────
- 
-@export var quantidade_alvos_simultaneos: int = 9
-@export var escala_alvo_jogo: float = 0.66
- 
-# load() e não preload(): o Godot 4.6 nunca descarrega um script já carregado,
-# e o que ele pré-carrega ficava na memória depois da primeira partida.
-@export var cena_lanterna_vermelha: PackedScene = load("res://entities/LanternaVermelha.tscn")
-@export var cena_lanterna_verde: PackedScene   = load("res://entities/LanternaVerde.tscn")
-@export var cena_lanterna_azul: PackedScene    = load("res://entities/LanternaAzul.tscn")
- 
-@export var pontos_base_sequencia: int = 20
-@export var penalidade_erro_sequencia: int = 100
-
-@export var offset_lanterna_vermelha: Vector2 = Vector2.ZERO
-@export var offset_lanterna_azul: Vector2 = Vector2(-6.0, 6.0)
-@export var offset_lanterna_verde: Vector2 = Vector2(-3.0, 0.0)
- 
-@export var tempo_mostrar_azul: float   = 0.55
-@export var pausa_entre_azuis: float    = 0.20
-@export var tempo_feedback_verde: float = 0.60
-@export var tempo_feedback_erro: float  = 0.50
- 
-@export var capacidade_cartucho: int      = 30
-@export var tempo_recarga_seg: float      = 1.10
-@export var alerta_baixa_municao_limite: int = 6
- 
-@export var subida_spawn_distancia: float = 190.0
-@export var tempo_respawn_alvo: float     = 0.08
- 
-@export var distancia_minima_spawn: float = 155.0
-@export var distancia_segura_cruzamento: float = 120.0
- 
-@export var volume_crash_db: float = 8.0
- 
-@export var escala_preview_modal: float = 0.72
-@export var offset_y_alvos: float       = 40.0
- 
-@export var textura_fundo: Texture2D
- 
-@export_file("*.mp3;*.wav;*.ogg") var caminho_musica_arena: String  = "res://songs/arena_song.mp3"
-@export_file("*.mp3;*.wav;*.ogg") var caminho_som_tiro: String      = "res://songs/plasma-hit.wav"
-@export_file("*.mp3;*.wav;*.ogg") var caminho_som_recarga: String   = "res://songs/lazer-charge.wav"
-@export_file("*.mp3;*.wav;*.ogg") var caminho_som_sem_bala: String  = "res://songs/bullet_no.wav"
-@export_file("*.mp3;*.wav;*.ogg") var caminho_som_alvo_cash: String = "res://songs/alvo_crash.wav"
-@export_file("*.mp3;*.wav;*.ogg") var caminho_som_hit_lamp: String = "res://songs/hit-lamp.wav" 
-@export_file("*.mp3;*.wav;*.ogg") var caminho_som_bip: String = "res://songs/bip.wav"
-@export_file("*.mp3;*.wav;*.ogg") var caminho_som_bip_error: String = "res://songs/bip-error.wav"
-
-
-@export var tempo_total: float = 120.0
-@export var intervalo_spawn_arco: float = 0.95
- 
-@export var altura_maxima_spawn_ratio: float = 0.48
-@export var margem_topo_spawn: float    = 180.0
-@export var margem_lateral_spawn: float = 90.0
-@export var margem_spawn_x: float       = 130.0
-@export var margem_spawn_topo: float    = 420.0
-@export var margem_spawn_baixo: float   = 150.0
-
-@export var tempo_repetir_sequencia_inativo: float = 20.0
-
-@export var usar_controle_xbox: bool = true
-@export var velocidade_mira_xbox: float = 900.0
-@export var deadzone_xbox: float = 0.18
-
-@export var xbox_botao_tiro: int = JOY_BUTTON_RIGHT_SHOULDER
-@export var xbox_botao_recarga: int = JOY_BUTTON_X
-@export var xbox_botao_recarga_extra: int = JOY_BUTTON_LEFT_SHOULDER
-
-const Pincel := preload("res://scripts/pincel.gd")
-# load() e não preload(): o Godot 4.6 nunca descarrega um script já carregado,
-# e o que ele pré-carrega ficava na memória depois da primeira partida.
-var FOLHA_LANTERNAS: Texture2D = load("res://sprites/arena_lanternas.png")
-
-# ordem dos tiros pelas cores: azul 1º, verde 2º, amarelo 3º, vermelho 4º, roxo 5º
-const CORES_SEQ: Array[String] = ["azul", "verde", "amarelo", "vermelho", "roxo"]
-const CORES_FX := {
+const CORES_SEQ = ["azul", "verde", "amarelo", "vermelho", "roxo"]
+const QUADRO_COR = {"apagada": 0, "azul": 1, "verde": 2, "amarelo": 3, "vermelho": 4, "roxo": 5}
+const CORES_FX = {
 	"apagada": Color(0.75, 0.78, 0.85),
 	"azul": Color(0.25, 0.62, 1.0),
 	"verde": Color(0.25, 1.0, 0.35),
@@ -102,3516 +32,987 @@ const CORES_FX := {
 	"vermelho": Color(1.0, 0.14, 0.10),
 	"roxo": Color(0.78, 0.32, 1.0),
 }
-const NOMES_COR := {"azul": "AZUL", "verde": "VERDE", "amarelo": "AMARELO", "vermelho": "VERMELHO", "roxo": "ROXO"}
-const BONUS_FIXA: int = 50
-const SOM_SOBE := preload("res://songs/lanterna_sobe.wav")
-const SOM_DESCE := preload("res://songs/lanterna_desce.wav")
-const SOM_LASER_PAREDE := preload("res://songs/laser_parede.wav")
-# tom do bip sobe com a ordem (1º grave ... 5º agudo)
-const TONS_BIP: Array[float] = [0.84, 0.94, 1.06, 1.19, 1.34]
-
-var _quadros_lanterna: SpriteFrames = null
-const META_SENS_XBOX: String = "sensibilidade_xbox"
-const META_SENS_MOUSE: String = "sensibilidade_mouse"
-
-const COR_NEON_ARENA: Color       = Color(1.0, 0.08, 0.06, 1.0)
-const COR_NEON_ARENA_CLARO: Color  = Color(1.0, 0.58, 0.58, 1.0)
-const COR_FUNDO_CARD_ARENA: Color  = Color(0.045, 0.008, 0.008, 0.94)
-
-
-
-func _estilo_card_arena() -> StyleBoxFlat:
-	var estilo := StyleBoxFlat.new()
-	estilo.bg_color            = COR_FUNDO_CARD_ARENA
-	estilo.border_width_left   = 4
-	estilo.border_width_top    = 4
-	estilo.border_width_right  = 4
-	estilo.border_width_bottom = 4
-	estilo.border_color        = COR_NEON_ARENA
-	estilo.corner_radius_top_left     = 34
-	estilo.corner_radius_top_right    = 34
-	estilo.corner_radius_bottom_left  = 34
-	estilo.corner_radius_bottom_right = 34
-	estilo.shadow_color  = Color(COR_NEON_ARENA.r, COR_NEON_ARENA.g, COR_NEON_ARENA.b, 0.60)
-	estilo.shadow_size   = 34
-	estilo.shadow_offset = Vector2.ZERO
-	return estilo
+const NOMES_COR = {"azul": "AZUL", "verde": "VERDE", "amarelo": "AMARELO", "vermelho": "VERMELHO", "roxo": "ROXO"}
+const TONS_BIP = [0.84, 0.94, 1.06, 1.19, 1.34]
+# os 9 furos da parede (centro do anel, px do fundo 1080x1920)
+const FUROS = [Vector2(226, 782), Vector2(538, 781), Vector2(842, 781),
+	Vector2(226, 1098), Vector2(538, 1098), Vector2(842, 1098),
+	Vector2(226, 1418), Vector2(538, 1418), Vector2(842, 1417)]
+const ESCALA_LANTERNA = 0.66 / 0.70      # a lanterna da 4.6 (0,66) na folha de 70%
+const SUBIDA = 190.0
+const PONTOS_BASE = 20
+const PENA_ORDEM = 100
+const BONUS_FIXA = 50
+const BONUS_LED = 50
+const RAPIDO_MS = 1100
+const TEMPO_MOSTRAR = 0.55
+const PAUSA_ENTRE = 0.20
+const INATIVO_REPETE = 20.0
+# px da imagem 1024x1536 da 4.6 (tela() converte)
+const GIROFLEX = Vector2(510, 190)
+const LED_CAIXA = Rect2(484, 177, 54, 25)
+const LED_APAGADO = 7.0
+const ARANDELAS = [Vector2(44, 762), Vector2(978, 762)]
+const VAPOR = [Vector2(150, 748), Vector2(804, 944), Vector2(842, 1128), Vector2(118, 1180)]
+const CAIXA_ELETRICA = Vector2(842, 956)
+const Y_ORDEM = 1318.0
+# o recorte do logo (tools/preparar_mali.py: ARENA_LOGO), px do fundo 1080x1920
+const LOGO = Rect2(52, 148, 996, 456)
+const COR_MEMORIA = Color(1.0, 0.12, 0.06)
+const COR_FIXA = Color(0.75, 0.30, 1.0)
 
 
+class Lanterna:
+	var no: Node2D
+	var spr: Sprite
+	var slot = 0
+	var cor = "apagada"
+	var quebrando = false
 
-func _set_estilo_panel_arena(panel: Panel, bg: Color, borda: Color = COR_NEON_ARENA, sombra_alpha: float = 0.60) -> void:
-	if panel == null:
+
+var lanternas = []          # 9 casas: Lanterna ou null
+var sequencia = []          # os furos da rodada, na ordem das cores
+var indice = 0              # quantos da sequência já foram
+var nivel = 1
+var mostrando = false
+var bloqueado = true
+var modo_fixo = false
+var _rodada = 0             # muda a cada rodada: corta as esperas da anterior
+var _fixa_nasceu = []       # ms em que cada lanterna da rodada fixa subiu
+var _sem_jogada = 0.0
+var _repetindo = false
+var _aviso_espera = 0.0
+
+var _f: Dictionary
+var _furos_tela = []
+var _fundo: Sprite
+var _fundo_fixa: Sprite
+var _logo: Sprite
+var _logo_fixa: Sprite
+var _aneis = []
+var _aneis_fixa = []
+var _tw_arte: SceneTreeTween
+var _parede: Node2D          # marcas do laser e o LED queimado (mistura normal)
+var _brilhos: Node2D         # fachos, giroflex, faixa da ordem (luz somada)
+var _vapor: Particulas
+var _marcas = []
+var _brasas = false
+
+var _t = 0.0
+var _giro = 0.0              # tempo girando o giroflex
+var _giro_cor = COR_MEMORIA
+var _giro_arco = false
+var _pisca = 0.0
+var _pisca_cor = Color.white
+var _led = 0.0               # s até a luz do alto voltar (0 = acesa)
+var _led_clarao = 0.0
+var _led_fumaca = 0.0
+var _varre = -1.0            # 0..1 linha colorida descendo a parede
+var _prox_vapor = 3.0
+var _prox_faisca = 6.0
+var _poeira = []
+
+var _letreiro: Control
+var _letreiro_txt: Label
+var _letreiro_sub: Label
+var _letreiro_barras = []
+
+var _som_lampada: AudioStream
+var _som_bip: AudioStream
+var _som_bip_erro: AudioStream
+var _som_sobe: AudioStream
+var _som_desce: AudioStream
+var _som_parede: AudioStream
+var _som_led: AudioStream
+var _som_vapor: AudioStream
+var _som_faisca: AudioStream
+var _som_troca: AudioStream
+
+
+func _configurar() -> void:
+	id_fase = "arena"
+	cenario_ranking = "ARENA"
+	cor = Estilo.CORES["arena"]
+	estilo_tiro = "laser"
+	forca_coice = 0.6
+	musica_path = "res://songs/arena_song.mp3"
+	som_tiro_path = "res://songs/plasma-hit.wav"
+	som_recarga_path = "res://songs/lazer-charge.wav"
+	vol_tiro = -4.0
+	janela_combo = 1.0e6       # o combo da arena é de acertos seguidos, sem relógio
+	tempo_recarga = 1.10
+	centro_contagem = 1100.0
+
+
+func _icones() -> Dictionary:
+	var r = {}
+	for c in QUADRO_COR.keys():
+		r[c] = quadro(_f, QUADRO_COR[c])
+	return r
+
+
+# ------------------------------------------------------------ cenário
+func _montar_cenario() -> void:
+	_f = folha("lanterna")
+	_som_lampada = load("res://songs/hit-lamp.wav")
+	_som_bip = load("res://songs/bip.wav")
+	_som_bip_erro = load("res://songs/bip-error.wav")
+	_som_sobe = load("res://songs/lanterna_sobe.wav")
+	_som_desce = load("res://songs/lanterna_desce.wav")
+	_som_parede = load("res://songs/laser_parede.wav")
+	_som_led = load("res://songs/led_estoura.wav")
+	_som_vapor = load("res://songs/arena_vapor.wav")
+	_som_faisca = load("res://songs/arena_faisca.wav")
+	_som_troca = load("res://songs/arena_troca.wav")
+	var esc = Tela.TELA.x / 1080.0
+	for p in FUROS:
+		_furos_tela.append(p * esc)
+	_fundo = fundo_sprite("fundo_arena")
+	_fundo_fixa = fundo_sprite("fundo_arena_fixa")
+	_fundo_fixa.modulate.a = 0.0
+	_fundo_fixa.visible = false
+	# o que acende com a música: o logo e os anéis dos furos (luz somada)
+	_logo = _brilho_recortado("arena_brilho_logo", LOGO.position * esc + LOGO.size * esc * 0.5, LOGO.size.x * esc)
+	_logo_fixa = _brilho_recortado("arena_brilho_logo_fixa", _logo.position, LOGO.size.x * esc)
+	_logo_fixa.visible = false
+	for p in _furos_tela:
+		var a = _brilho_recortado("arena_brilho_furo", p, 184.0 * esc)
+		var b = _brilho_recortado("arena_brilho_furo_fixa", p, 184.0 * esc)
+		b.visible = false
+		_aneis.append(a)
+		_aneis_fixa.append(b)
+	_parede = Node2D.new()
+	_parede.connect("draw", self, "_desenhar_parede")
+	cenario.add_child(_parede)
+	_vapor = Particulas.new()
+	_vapor.add_to_group("efeito_opcional")
+	cenario.add_child(_vapor)
+	_brilhos = Node2D.new()
+	_brilhos.material = Estilo.material_soma()
+	_brilhos.connect("draw", self, "_desenhar_brilhos")
+	cenario.add_child(_brilhos)
+	for i in 2:
+		for k in 9:
+			_poeira.append({"i": i, "pos": Vector2(rand_range(-0.5, 0.5), randf()), "vel": Vector2(rand_range(-0.02, 0.02), rand_range(-0.03, 0.01)),
+				"fase": randf() * TAU})
+	for i in 9:
+		lanternas.append(null)
+	_montar_letreiro()
+	# as lanternas apagadas já ficam nos furos durante o COMO JOGAR
+	for i in 9:
+		_nascer(i, "apagada", false)
+
+
+func _brilho_recortado(nome: String, centro: Vector2, largura: float) -> Sprite:
+	var s = Sprite.new()
+	s.texture = Estilo.tex(nome)
+	s.material = Estilo.material_soma()
+	s.position = centro
+	s.scale = Vector2.ONE * (largura / s.texture.get_width())
+	s.modulate.a = 0.0
+	cenario.add_child(s)
+	return s
+
+
+## Letreiro da troca de rodada (SEQUÊNCIA FIXA / MEMÓRIA): uma faixa que
+## entra pela direita, para no meio e sai pela esquerda.
+func _montar_letreiro() -> void:
+	var camada = CanvasLayer.new()
+	camada.layer = 45
+	add_child(camada)
+	_letreiro = Control.new()
+	_letreiro.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_letreiro.rect_size = Vector2(Tela.TELA.x, 184)
+	_letreiro.rect_position = Vector2(0, Tela.TELA.y * 0.5 - 92)
+	_letreiro.visible = false
+	camada.add_child(_letreiro)
+	var fundo = ColorRect.new()
+	fundo.color = Color(0.0, 0.0, 0.02, 0.66)
+	fundo.rect_size = _letreiro.rect_size
+	fundo.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_letreiro.add_child(fundo)
+	for k in 5:
+		for y in [0.0, 180.0]:
+			var b = ColorRect.new()
+			b.rect_position = Vector2(Tela.TELA.x * k / 5.0, y)
+			b.rect_size = Vector2(Tela.TELA.x / 5.0, 4)
+			b.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			_letreiro.add_child(b)
+			_letreiro_barras.append([b, k])
+	_letreiro_txt = Estilo.rotulo(_letreiro, "", 88, Color.white, 10)
+	Estilo.colocar(_letreiro_txt, Vector2(0, 14), Vector2(Tela.TELA.x, 110))
+	_letreiro_sub = Estilo.rotulo(_letreiro, "", 34, Color(1.0, 0.9, 0.55), 4)
+	Estilo.colocar(_letreiro_sub, Vector2(0, 118), Vector2(Tela.TELA.x, 48))
+	Estilo.aquecer_fonte(Estilo.fonte(88, true, 10), "SEQUÊNCIA FIXA MEMÓRIA")
+	Estilo.aquecer_fonte(Estilo.fonte(34, true, 4), "ACERTE NA ORDEM DAS CORES GRAVE")
+
+
+func _mostrar_letreiro(fixo: bool) -> void:
+	_letreiro_txt.text = "SEQUÊNCIA FIXA" if fixo else "MEMÓRIA"
+	_letreiro_sub.text = "ACERTE NA ORDEM DAS CORES" if fixo else "GRAVE A ORDEM DAS CORES"
+	for par in _letreiro_barras:
+		par[0].color = CORES_FX[CORES_SEQ[par[1]]] if fixo else Color(1.0, 0.15, 0.1)
+	_letreiro.visible = true
+	_letreiro.modulate.a = 0.0
+	var largura = Tela.TELA.x
+	_letreiro_txt.rect_position.x = largura
+	_letreiro_sub.rect_position.x = largura
+	var tw = create_tween()
+	tw.set_parallel(true)
+	tw.tween_property(_letreiro, "modulate:a", 1.0, 0.2)
+	tw.tween_property(_letreiro_txt, "rect_position:x", 0.0, 0.35).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	tw.tween_property(_letreiro_sub, "rect_position:x", 0.0, 0.35).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	tw.chain().tween_interval(1.2)
+	tw.chain().tween_property(_letreiro_txt, "rect_position:x", -largura, 0.35).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+	tw.tween_property(_letreiro_sub, "rect_position:x", -largura, 0.35).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+	tw.tween_property(_letreiro, "modulate:a", 0.0, 0.3).set_delay(0.05)
+	tw.chain().tween_callback(_letreiro, "hide")
+
+
+## Troca de arte da rodada: fixa = letreiro nas 5 cores, furos em neon frio,
+## giroflex roxo; memória = a arena vermelha de sempre.
+func _modo_arte(fixo: bool) -> void:
+	_giro = 1.6
+	_giro_arco = fixo
+	_giro_cor = COR_MEMORIA
+	_varre = 0.0
+	_mostrar_letreiro(fixo)
+	Maquina.efeito(_som_troca, -4.0, 1.0 if fixo else 0.86)
+	if _tw_arte != null and _tw_arte.is_valid():
+		_tw_arte.kill()
+	_fundo_fixa.visible = true
+	_fundo.visible = true
+	_logo_fixa.visible = true
+	_logo.visible = true
+	for i in 9:
+		_aneis[i].visible = true
+		_aneis_fixa[i].visible = true
+	_tw_arte = create_tween()
+	_tw_arte.tween_property(_fundo_fixa, "modulate:a", 1.0 if fixo else 0.0, 0.6).set_trans(Tween.TRANS_SINE)
+	_tw_arte.tween_callback(self, "_arte_assentou")
+
+
+## Com uma arte cobrindo a outra, a de baixo nem é desenhada (as duas são
+## opacas: uma tela inteira a menos por quadro).
+func _arte_assentou() -> void:
+	var fixo = _fundo_fixa.modulate.a > 0.5
+	_fundo.visible = not fixo
+	_fundo_fixa.visible = fixo
+	_logo.visible = not fixo
+	_logo_fixa.visible = fixo
+	for i in 9:
+		_aneis[i].visible = not fixo
+		_aneis_fixa[i].visible = fixo
+
+
+# ------------------------------------------------------------ partida
+func _comecar() -> void:
+	nivel = 1
+	indice = 0
+	sequencia.clear()
+	_nova_sequencia()
+
+
+func _extra_placar() -> Array:
+	if modo_fixo:
+		return ["FIXA", "%d/%d" % [indice, CORES_SEQ.size()], Color(1.0, 0.85, 0.3)]
+	return ["NÍVEL", str(nivel), Color(0.55, 0.9, 1.0)]
+
+
+func _jogo(delta: float) -> void:
+	_aviso_espera = max(0.0, _aviso_espera - delta)
+	# parado muito tempo na memória: a sequência que falta acende de novo
+	if mostrando or bloqueado or modo_fixo or sequencia.empty() or indice >= sequencia.size():
+		_sem_jogada = 0.0
 		return
-	var estilo := panel.get_theme_stylebox("panel") as StyleBoxFlat
-	if estilo == null:
-		estilo = _estilo_card_arena()
-		Leve.stylebox(panel, "panel", estilo)
-	estilo.bg_color     = bg
-	estilo.border_color = borda
-	estilo.shadow_color = Color(borda.r, borda.g, borda.b, sombra_alpha)
+	_sem_jogada += delta
+	if _sem_jogada >= INATIVO_REPETE:
+		_sem_jogada = 0.0
+		_repetir_sequencia()
 
 
-@export var sensibilidade_mouse: float = 1.0
-var ultimo_mouse_pos: Vector2 = Vector2.ZERO
+## Na hora de ver a sequência o gatilho não gasta bala (como na 4.6).
+func atirar(p: Vector2) -> void:
+	if estado == JOGO and (mostrando or bloqueado or sequencia.empty() or indice >= sequencia.size()):
+		if _aviso_espera <= 0.0:
+			_aviso_espera = 1.5
+			avisos.instrucao("OBSERVE A SEQUÊNCIA!" if mostrando else "AGUARDE...", Color(0.55, 0.9, 1.0))
+		return
+	.atirar(p)
 
 
-var mouse_delta_acumulado: Vector2 = Vector2.ZERO
-
-var xbox_mira_iniciada: bool = false
-
-var tempo_sem_jogada: float = 0.0
-var repetindo_sequencia_por_inatividade: bool = false
- 
- 
-# ─────────────────────────────────────────────
-#  ESTADO DA SEQUÊNCIA (JOGO DE MEMÓRIA)
-# ─────────────────────────────────────────────
- 
-var sequencia_atual: Array[int] = []
-var indice_sequencia: int       = 0
-var nivel_sequencia: int        = 1
-var mostrando_sequencia: bool   = false
-var bloqueia_tiro_sequencia: bool = false
-var modo_fixo: bool = false               # rodada fixa (true) ou de memória
-var _rodada: int = 0                      # muda a cada rodada: corta as esperas da anterior
-var _fixa_nasceu: Array[int] = []         # ms em que cada lanterna da rodada fixa nasceu
-var _vivo: ArenaVivo = null               # vida do fundo e troca de arte
-const BONUS_LED := 50                      # estourar o LED do alto (volta a acender em 7 s)
-var _placar: Placar = null
- 
- 
-# ─────────────────────────────────────────────
-#  ESTADO GERAL DO JOGO
-# ─────────────────────────────────────────────
- 
-var tempo_restante: float = 0.0
-var pontuacao: int        = 0
-var municao_atual: int    = 0
-var tiros: int            = 0
-var acertos: int          = 0
-var _seguidos := 0                         # acertos seguidos (o combo da arena)
-var _anuncio: ComboAnuncio = null          # o combo grande no meio da tela, com a voz da arena
- 
-var jogo_ativo: bool    = false
-var jogo_iniciado: bool = false
- 
-var recarregando: bool         = false
-var reload_tempo_restante: float = 0.0
-var aviso_recarga_t: float       = 0.0
- 
-var municao_maxima: int = 12
- 
- 
-# ─────────────────────────────────────────────
-#  ALVOS / SLOTS
-# ─────────────────────────────────────────────
- 
-var alvos_ativos: Array[Area2D]  = []
-var dados_alvos: Dictionary      = {}
-var slots_ocupados: Array[bool]  = []
-var posicoes_spawn: Array[Vector2] = []
- 
- 
-# ─────────────────────────────────────────────
-#  EFEITOS VISUAIS
-# ─────────────────────────────────────────────
- 
-var fx_colisao: Array[Dictionary] = []
-var mira_pos: Vector2             = Vector2.ZERO
-var marcas_laser_parede: Array[Dictionary] = []
-var fx_layer_jogo: Node2D = null
-# As marcas na parede só mudam quando nasce uma (junto vem fumaça): sem
-# efeito animando, a camada fica como está em vez de redesenhar tudo.
-var _fx_parado: bool = false
-
- 
- 
-# ─────────────────────────────────────────────
-#  MENSAGENS DE RODAPÉ
-# ─────────────────────────────────────────────
- 
-var status_msgs: Array              = []
-var status_labels: Array[Label]     = []
-
- 
- 
-# ─────────────────────────────────────────────
-#  ÁUDIO
-# ─────────────────────────────────────────────
- 
-var audio_tiro: AudioStreamPlayer        = null
-var audio_recarga: AudioStreamPlayer     = null
-var audio_sem_bala: AudioStreamPlayer    = null
-var audio_musica_arena: AudioStreamPlayer = null
-var audio_alvo_cash: AudioStreamPlayer   = null
-var audio_hit_lamp: AudioStreamPlayer = null
-var audio_bip: AudioStreamPlayer = null
-var audio_bip_error: AudioStreamPlayer = null
-
- 
-# ─────────────────────────────────────────────
-#  HUD (criado por código)
-# ─────────────────────────────────────────────
- 
-var hud_layer_codigo: CanvasLayer = null
-var hud_root: Control             = null
- 
-var top_bar: Panel       = null
-var top_bar_sombra: ColorRect = null
-var top_bar_linha: ColorRect  = null
- 
-var timer_panel: Panel  = null
-var score_panel: Panel  = null
-var municao_panel: Panel = null
- 
-var stats_arena_panel: Panel = null   # ← novo
-
-var timer_title_label: Label = null
-var timer_label: Label       = null
-var score_title_label: Label = null
-var score_label: Label       = null
-var municao_title_label: Label = null
-var municao_label: Label     = null
-var recarga_label: Label     = null
-var acertos_title_label: Label = null
-var acertos_label: Label     = null
-var tiros_title_label: Label = null
-var tiros_label: Label       = null
-var nivel_title_label: Label = null
-var nivel_label: Label       = null
- 
-var municao_blocos: Array[ColorRect] = []
- 
- 
-# ─────────────────────────────────────────────
-#  MIRA
-# ─────────────────────────────────────────────
- 
-var mira_layer: CanvasLayer = null
-var mira_root: Control      = null
- 
- 
-# ─────────────────────────────────────────────
-#  MODAL DE INÍCIO
-# ─────────────────────────────────────────────
- 
-var modal_layer: CanvasLayer   = null
-var modal_root: Control        = null
-var modal_fundo: ColorRect     = null
-var modal_painel: Panel        = null
-var modal_titulo: Label        = null
-var modal_texto: Label         = null
-var modal_texto2: Label        = null
-var preview_left: AnimatedSprite2D   = null
-var preview_center: AnimatedSprite2D = null
-var preview_right: AnimatedSprite2D  = null
-var preview_label_left: Label   = null
-var preview_label_center: Label = null
-var preview_label_right: Label  = null
-var info_inicio_texture: TextureRect = null
- 
-
-
-# modal fim
- 
-var fim_layer: CanvasLayer = null
-var fim_root: Control = null
-
-var fim_bg: ColorRect = null
-var fim_panel: Panel = null
-
-var fim_titulo: Label = null
-var fim_score_label: Label = null
-var fim_stats_label: Label = null
-var fim_footer: Label = null
-var fim_contagem_label: Label = null
-
-var fim_ativo: bool = false
-var fim_tempo_voltar: float = 21.0
-
-# RANKING
-var ranking_nome_layer: CanvasLayer = null
-var ranking_nome_root: Control = null
-var ranking_nome_panel: Panel = null
-var ranking_nome_display: Label = null
-var ranking_nome_digitado: String = ""
-
-var ranking_nome_ativo: bool = false
-var ranking_nome_tempo: float = 50.0
-var nome_ranking: NomeRanking = null   # tela de nome (igual em todas as fases)
-
-
-
-
-# ─────────────────────────────────────────────
-#  CONTAGEM REGRESSIVA
-# ─────────────────────────────────────────────
- 
-var countdown_layer: CanvasLayer = null
-var countdown_root: Control      = null
-var countdown_flash: ColorRect   = null
-var countdown_label: Label       = null
- 
-var intro_comeco_ativa: bool  = false
-var intro_comeco_t: float     = 0.0
-var intro_contagem_valor: int = 3
- 
- 
-# ─────────────────────────────────────────────
-#  NÓS DA CENA
-# ─────────────────────────────────────────────
- 
-@onready var background: Node        = $Background
-@onready var hud_layer: CanvasLayer  = $Hud
-@onready var lbl_tempo: Label        = $Hud/Topo/PainelTempo/ValorTempo
-@onready var lbl_pontos: Label       = $Hud/Topo/PainelPontuacao/ValorPontuacao
-@onready var lbl_municao: Label      = $Hud/Topo/PainelMunicao/ValorMunicao
-@onready var lbl_tiros: Label        = $Hud/Topo/PainelTiros/ValorTiros
-@onready var lbl_acertos: Label      = $Hud/Topo/PainelAcertos/ValorAcertos
- 
-@onready var topo_hud: Control       = $Hud/Topo
-@onready var painel_tempo: Control   = $Hud/Topo/PainelTempo
-@onready var painel_pontos: Control  = $Hud/Topo/PainelPontuacao
-@onready var painel_municao: Control = $Hud/Topo/PainelMunicao
-@onready var painel_tiros: Control   = $Hud/Topo/PainelTiros
-@onready var painel_acertos: Control = $Hud/Topo/PainelAcertos
- 
-@onready var timer_jogo: Timer   = $TimerJogo
-@onready var timer_spawn: Timer  = $TimerSpawn
-@onready var camada_alvos: Node2D = $CamadaAlvos
-@onready var alvo_inicial: Area2D = get_node_or_null("CamadaAlvos/Alvo") as Area2D
- 
- 
-# ═══════════════════════════════════════════════════════════
-#  _ready
-# ═══════════════════════════════════════════════════════════
- 
-func _ready() -> void:
-	_aquecer_fase.call_deferred()
-	randomize()
-	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
-	# fundo em alta (scripts/hd.gd): o mesmo tamanho para o jogo
-	if background is Sprite2D and (background as Sprite2D).texture == null:
-		(background as Sprite2D).texture = Hd.textura("res://sprites/arena.png")
-
-	_aplicar_sensibilidade_global()
-
-	mira_pos = get_viewport_rect().size * 0.5
-	ultimo_mouse_pos = mira_pos
-	mouse_delta_acumulado = Vector2.ZERO
-
-	_aplicar_config_admin_na_cena()
-
-	tempo_restante = tempo_total
-	municao_maxima = capacidade_cartucho
-	municao_atual = capacidade_cartucho
-	pontuacao = 0
-	tiros = 0
-	acertos = 0
-	_seguidos = 0
-	if _anuncio == null:
-		_anuncio = ComboAnuncio.criar(self, "arena")
-	jogo_ativo = false
-	jogo_iniciado = false
-	recarregando = false
-	reload_tempo_restante = 0.0
-	aviso_recarga_t = 0.0
-
-	timer_jogo.wait_time = 1.0
-	timer_jogo.one_shot = false
-	if not timer_jogo.timeout.is_connected(_on_timer_jogo_timeout):
-		timer_jogo.timeout.connect(_on_timer_jogo_timeout)
-
-	timer_spawn.wait_time = intervalo_spawn_arco
-	timer_spawn.one_shot = false
-	if not timer_spawn.timeout.is_connected(_on_timer_spawn_timeout):
-		timer_spawn.timeout.connect(_on_timer_spawn_timeout)
-
-	if not get_viewport().size_changed.is_connected(_on_viewport_size_changed):
-		get_viewport().size_changed.connect(_on_viewport_size_changed)
-
-	if hud_layer != null:
-		hud_layer.visible = false
-
-	_configurar_audio()
-	_configurar_background_fullscreen()
-	_configurar_fx_layer_jogo()
-	_configurar_pontos_spawn()
-	_preparar_alvo_inicial()
-	_criar_modal_inicio()
-	_criar_intro_comeco()
-	_configurar_mira()
-	_tocar_musica_arena()
-	_configurar_hud_bar_padrao()
-	_instalar_placar()
-	_criar_vivo()
-	_configurar_modal_fim()
-	FimPartida.instalar(self, COR_NEON_ARENA, func() -> bool: return fim_ativo and not ranking_nome_ativo, 150)
-
-	call_deferred("_reposicionar_modal")
-	call_deferred("_atualizar_hud")
-
- 
-
-func _aplicar_sensibilidade_global() -> void:
-	# XBOX travado em 5000 — vale para FÁCIL e DIFÍCIL.
-	velocidade_mira_xbox = 1500.0
-
-	# MOUSE continua respeitando o config.
-	if get_tree().has_meta(META_SENS_MOUSE):
-		sensibilidade_mouse = float(get_tree().get_meta(META_SENS_MOUSE))
-
-	sensibilidade_mouse = clamp(sensibilidade_mouse, 0.2, 3.0)
-
-
- 
-# ═══════════════════════════════════════════════════════════
-#  _process
-# ═══════════════════════════════════════════════════════════
- 
-func _process(delta: float) -> void:
-	tempo_trava_input_arma = max(0.0, tempo_trava_input_arma - delta)
-
-	_atualizar_mira_hibrida(delta)		
-
-	aviso_recarga_t += delta
-	_atualizar_repeticao_sequencia_por_inatividade(delta)
-
-	# FX SEMPRE ATUALIZA, mesmo se o jogo pausar/finalizar.
-	# Isso impede explosão/cacos/fumaça travados na tela.
-	if fx_colisao.size() > 0:
-		_atualizar_fx_colisao(delta)
-
-	# Marcas de laser também somem automaticamente depois de um limite.
-	while marcas_laser_parede.size() > 60:
-		marcas_laser_parede.pop_front()
-
-	if fx_layer_jogo != null:
-		if fx_colisao.size() > 0:
-			fx_layer_jogo.queue_redraw()
-			_fx_parado = false
-		elif not _fx_parado:
-			fx_layer_jogo.queue_redraw()   # último quadro, já sem a fumaça
-			_fx_parado = true
-
-	if jogo_ativo:
-		_atualizar_chat_rodape(delta)
-
-
-	if recarregando:
-		reload_tempo_restante = max(0.0, reload_tempo_restante - delta)
-		if reload_tempo_restante <= 0.0:
-			_finalizar_recarga()
-		_atualizar_hud()
-
-	if audio_musica_arena != null:
-		if jogo_ativo or not jogo_iniciado:
-			if not audio_musica_arena.playing:
-				audio_musica_arena.play()
-
-	if Input.get_mouse_mode() != Input.MOUSE_MODE_CAPTURED:
-		Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
-
-	if mira_root != null:
-		# no resultado a mira fica por cima do modal (botão VOLTAR AOS CENÁRIOS)
-		if ranking_nome_ativo or fim_ativo:
-			if mira_layer != null:
-				mira_layer.layer = 200
-				mira_layer.visible = true
-
-			mira_root.visible = true
-			mira_root.queue_redraw()
-		else:
-			if mira_layer != null:
-				mira_layer.layer = 100
-
-			mira_root.visible = true
-			mira_root.queue_redraw()
-
-	if fim_ativo:
-		if ranking_nome_ativo:
-			# a volta ao menu só conta depois do nome
-			if nome_ranking != null:
-				nome_ranking.mira(mira_pos)
-			if fim_contagem_label != null:
-				fim_contagem_label.text = "DIGITE SEU NOME PARA SALVAR O RECORDE"
+func _tiro(p: Vector2) -> void:
+	_sem_jogada = 0.0
+	var l = _lanterna_no_ponto(p)
+	if l == null:
+		if _tiro_no_led(p):
+			bonus(BONUS_LED, p, Color(1.0, 0.45, 0.35))
+			avisos.instrucao("LED ESTOURADO! +%d" % BONUS_LED, Color(1.0, 0.72, 0.62))
 			return
-
-		fim_tempo_voltar -= delta
-
-		if fim_contagem_label != null:
-			fim_contagem_label.text = "VOLTANDO AO INÍCIO EM %02d" % int(ceil(fim_tempo_voltar))
-
-		if fim_tempo_voltar <= 0.0:
-			FimPartida.voltar_a_abertura()
-
-
-func _atualizar_mira_hibrida(_delta: float) -> void:
-	# mira única do jogo (MiraGlobal): mesma em todas as telas, sem saltos
-	mira_pos = MiraGlobal.mira()
-
-
-func _atualizar_mira_xbox(_delta: float) -> void:
-	mira_pos = MiraGlobal.mira()
-
-
-func _resetar_timer_jogada() -> void:
-	tempo_sem_jogada = 0.0 
- 
-
-func _atualizar_repeticao_sequencia_por_inatividade(delta: float) -> void:
-	if not jogo_ativo:
+		_marca_laser(p)
+		errar(p)
 		return
-
-	if not jogo_iniciado:
+	if l.quebrando:
 		return
-
-	if fim_ativo or ranking_nome_ativo:
-		return
-
-	if intro_comeco_ativa:
-		return
-
-	if mostrando_sequencia or bloqueia_tiro_sequencia:
-		tempo_sem_jogada = 0.0
-		return
-
-	if sequencia_atual.is_empty() or modo_fixo:
-		return
-
-	if indice_sequencia >= sequencia_atual.size():
-		return
-
-	tempo_sem_jogada += delta
-
-	if tempo_sem_jogada >= tempo_repetir_sequencia_inativo:
-		tempo_sem_jogada = 0.0
-		_repetir_sequencia_atual_por_inatividade()
-
-
-func _repetir_sequencia_atual_por_inatividade() -> void:
-	if repetindo_sequencia_por_inatividade:
-		return
-
-	if not jogo_ativo:
-		return
-
-	if sequencia_atual.is_empty():
-		return
-
-	repetindo_sequencia_por_inatividade = true
-	bloqueia_tiro_sequencia = true
-	mostrando_sequencia = true
-
-	_adicionar_chat_rodape("RELEMBRANDO A SEQUÊNCIA ATUAL...", Color(0.30, 0.85, 1.0))
-
-	await get_tree().create_timer(0.35).timeout
-
-	if jogo_ativo and not modo_fixo:
-		await _mostrar_sequencia(_rodada, true)
-
-	mostrando_sequencia = false
-	bloqueia_tiro_sequencia = false
-	repetindo_sequencia_por_inatividade = false
-	tempo_sem_jogada = 0.0
-
-	if jogo_ativo:
-		_adicionar_chat_rodape("CONTINUE DE ONDE PAROU! %d/%d" % [
-			indice_sequencia,
-			sequencia_atual.size()
-		], Color(0.30, 1.0, 0.60))
-
-
-
-func _exit_tree() -> void:
-	pass
- 
- 
-func _draw() -> void:
-	pass
- 
-
-func _desenhar_fx_layer_jogo() -> void:
-	_desenhar_marcas_laser_parede()
-	_desenhar_fx_colisao()
-
- 
-# ═══════════════════════════════════════════════════════════
-#  INPUT
-# ═══════════════════════════════════════════════════════════
-func _input(event: InputEvent) -> void:
-	# ============================================================
-	# MOVIMENTO DA MIRA
-	# ============================================================
-	if event is InputEventMouseMotion:
-		var mm: InputEventMouseMotion = event as InputEventMouseMotion
-		mouse_delta_acumulado += mm.relative
-		return
-
-	# ============================================================
-	# START / CRÉDITO / RECOMEÇAR
-	# ============================================================
-	if InputMap.has_action("input_start") and event.is_action_pressed("input_start"):
-		if ranking_nome_ativo:
-			_confirmar_nome_ranking(false)
-			return
-
-		if fim_ativo:
-			_reiniciar_partida_modal_final()
-			return
-
-		if intro_comeco_ativa:
-			return
-
-		if not jogo_iniciado:
-			_iniciar_intro_comeco()
-			return
-
-	# ============================================================
-	# INPUT MAP — ARMA FÍSICA / ZERO DELAY / ARDUINO
-	# input_shot = tiro
-	# input_recharge = recarga
-	# ============================================================
-	if _evento_input_shot_arma(event):
-		_executar_tiro_arma()
-		return
-
-	if _evento_input_recharge_arma(event):
-		_executar_recarga_arma()
-		return
-
-	# ============================================================
-	# CONTROLE XBOX — FALLBACK
-	# ============================================================
-	if event is InputEventJoypadButton:
-		var jb: InputEventJoypadButton = event as InputEventJoypadButton
-
-		if not jb.pressed:
-			return
-
-		print("BOTÃO XBOX ARENA:", jb.button_index)
-
-		if jb.button_index == xbox_botao_tiro:
-			_executar_tiro_arma()
-			return
-
-		if jb.button_index == xbox_botao_recarga or jb.button_index == xbox_botao_recarga_extra:
-			_executar_recarga_arma()
-			return
-
-	# ============================================================
-	# MOUSE / ARMA COMO MOUSE — FALLBACK
-	# BOTAO_GATILHO_1 / BOTAO_GATILHO_2 = tiro
-	# BOTAO_RECARGA_1 / 2 / 3 = recarga
-	# ============================================================
-	if event is InputEventMouseButton:
-		var mb: InputEventMouseButton = event as InputEventMouseButton
-
-		if not mb.pressed:
-			return
-
-		_debug_botao_arma(mb)
-
-		if _evento_tiro_arma(mb):
-			_executar_tiro_arma()
-			return
-
-		if _evento_recarga_arma(mb):
-			_executar_recarga_arma()
-			return
-
-	# ============================================================
-	# TECLADO — FALLBACK
-	# R = recarga
-	# ENTER = start
-	# ============================================================
-	if event is InputEventKey:
-		var key: InputEventKey = event as InputEventKey
-
-		if not key.pressed or key.echo:
-			return
-
-		if key.keycode == KEY_R:
-			_executar_recarga_arma()
-			return
-
-		if key.keycode == KEY_ENTER:
-			if ranking_nome_ativo:
-				_confirmar_nome_ranking(false)
-				return
-
-			if fim_ativo:
-				_reiniciar_partida_modal_final()
-				return
-
-			if intro_comeco_ativa:
-				return
-
-			if not jogo_iniciado:
-				_iniciar_intro_comeco()
-				return
-
-
- 
-func _reiniciar_partida_modal_final() -> void:
-	# Jogar de novo = recarregar a fase do zero (scripts/fim_partida.gd): nada
-	# da partida anterior fica rodando por baixo, mesmo com START repetido.
-	FimPartida.jogar_de_novo(self)
-
-
-func _estilizar_botao_modal_final(btn: Label, texto: String, destaque: bool = false) -> void:
-	if btn == null:
-		return
-
-	btn.text = texto
-	btn.scale = Vector2.ONE
-	btn.modulate = Color.WHITE
-	btn.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	btn.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-
-	Leve.font_size(btn, "font_size", 32)
-	Leve.color(btn, "font_color", Color.WHITE)
-	Leve.color(btn, "font_outline_color", Color(0.85, 0.0, 0.0))
-	Leve.constant(btn, "outline_size", 6)
-
-
-
-# ═══════════════════════════════════════════════════════════
-#  LÓGICA DE TIRO — JOGO DE MEMÓRIA
-# ═══════════════════════════════════════════════════════════
- 
-func _desenhar_marcas_laser_parede() -> void:
-	if fx_layer_jogo == null:
-		return
-
-	for marca in marcas_laser_parede:
-		var pos: Vector2 = marca.get("pos", Vector2.ZERO)
-		var raio: float = float(marca.get("raio", 8.0))
-
-		# Queimado externo vermelho escuro
-		Pincel.circulo(fx_layer_jogo, pos, raio + 9.0, Color(0.55, 0.0, 0.0, 0.20))
-		Pincel.circulo(fx_layer_jogo, pos, raio + 5.0, Color(1.0, 0.04, 0.02, 0.55))
-
-		# Metal amassado em volta do furo
-		Pincel.circulo(fx_layer_jogo, pos + Vector2(-2, 1), raio + 2.5, Color(0.34, 0.34, 0.36, 0.85))
-		Pincel.circulo(fx_layer_jogo, pos + Vector2(2, -1), raio + 1.5, Color(0.12, 0.12, 0.13, 0.95))
-
-		# Furo central
-		Pincel.circulo(fx_layer_jogo, pos, raio, Color(0.0, 0.0, 0.0, 0.98))
-		Pincel.circulo(fx_layer_jogo, pos + Vector2(-2, -2), raio * 0.35, Color(0.35, 0.02, 0.02, 0.65))
-
-
-
-func _tentar_atirar(pos_mouse: Vector2) -> void:
-	if not jogo_ativo:
-		return
-	if recarregando:
-		return
-	if mostrando_sequencia or bloqueia_tiro_sequencia:
-		return
-	if sequencia_atual.is_empty():
-		return
-
-	_resetar_timer_jogada()
-
-	# PROTEÇÃO CONTRA DOUBLE HIT FORA DO TAMANHO DA SEQUÊNCIA
-	if indice_sequencia < 0 or indice_sequencia >= sequencia_atual.size():
-		return
-
-	if municao_atual <= 0:
-		if audio_sem_bala:
-			audio_sem_bala.stop()
-			audio_sem_bala.play()
-		_adicionar_chat_rodape("SEM MUNIÇÃO!", Color.RED)
-		return
-
-	municao_atual -= 1
-	tiros += 1
-	MiraGlobal.coice(0.6)     # laser: tranco leve
-	_tocar_som_tiro()
-	_atualizar_hud()
-	Trajetoria.disparar(self, pos_mouse, "laser")
-
-	var alvo: Area2D = _detectar_alvo_no_ponto_visual(pos_mouse)
-
-	if alvo == null:
-		# o LED do alto é alvo de bônus (estoura; volta a acender depois)
-		if _vivo != null and _vivo.tiro_no_led(pos_mouse):
-			pontuacao += BONUS_LED
-			acertos += 1
-			AvisoTiro.pontos(self, pos_mouse, "+%d" % BONUS_LED, Color(1.0, 0.45, 0.35), Color(1.0, 0.9, 0.8, 0.6))
-			AvisoTiro.instrucao(self, "LED ESTOURADO! +%d" % BONUS_LED, Color(1.0, 0.72, 0.62))
-			_atualizar_hud()
-			return
-		_registrar_marca_laser_parede(pos_mouse)
-		_adicionar_chat_rodape("ERROU!", Color.RED)
-		_quebrar_seguidos()
-		return
-
-	var slot_clicado: int = -1
-	var id_clicado: int = alvo.get_instance_id()
-
-	if dados_alvos.has(id_clicado):
-		slot_clicado = int(dados_alvos[id_clicado].get("slot", -1))
-		if bool(dados_alvos[id_clicado].get("quebrando", false)):
-			return
-
-	if slot_clicado < 0:
-		_registrar_marca_laser_parede(pos_mouse)
-		return
-
-	var minha: int = _rodada
-	var ordem: int = sequencia_atual.find(slot_clicado)
-
-	if ordem == indice_sequencia and (not modo_fixo or _cor_da_lanterna(alvo) != "apagada"):
-		var cor: String = CORES_SEQ[ordem]
-		var pontos_acerto: int = _calcular_pontos_acerto_sequencia()
-		var rapido: bool = false
-		if modo_fixo and ordem < _fixa_nasceu.size():
-			rapido = Time.get_ticks_msec() - int(_fixa_nasceu[ordem]) < 1100
-			if rapido:
-				pontos_acerto += 10
-
-		acertos += 1
-		pontuacao += pontos_acerto
-		indice_sequencia += 1
-
-		var sequencia_completa: bool = indice_sequencia >= sequencia_atual.size()
-		# combo: acertos seguidos; a sequência completa ganha o anúncio especial
-		_seguidos += 1
-		if _anuncio != null:
-			if sequencia_completa:
-				_anuncio.especial("PERFECT SEQUENCE!")
-			else:
-				_anuncio.combo(_seguidos)
-
-		# Se completou, bloqueia imediatamente para evitar crash no double hit
-		if sequencia_completa:
-			bloqueia_tiro_sequencia = true
-
-		if modo_fixo:
-			dados_alvos[id_clicado]["quebrando"] = true
-
-		_tocar_som_hit_lamp()
-		_registrar_fx_colisao(pos_mouse, pontos_acerto, CORES_FX[cor])
-		_adicionar_chat_rodape("+%d  |  %s %d/%d%s" % [
-			pontos_acerto,
-			NOMES_COR[cor],
-			indice_sequencia,
-			sequencia_atual.size(),
-			"  RÁPIDO!" if rapido else ""
-		], CORES_FX[cor].lerp(Color.WHITE, 0.25))
-		_atualizar_hud()
-
-		await _tocar_acerto_lanterna(alvo, cor)
-		if not jogo_ativo or minha != _rodada:
-			return
-
-		if modo_fixo:
-			_tirar_lanterna(slot_clicado)
-		else:
-			_trocar_lanterna_slot(slot_clicado, cor)
-
-		if sequencia_completa:
-			if modo_fixo:
-				pontuacao += BONUS_FIXA
-				_registrar_fx_colisao(Vector2(get_viewport_rect().size.x * 0.5, get_viewport_rect().size.y * 0.5), BONUS_FIXA, Color(1.0, 0.85, 0.3))
-				_adicionar_chat_rodape("SEQUÊNCIA FIXA COMPLETA! +%d" % BONUS_FIXA, Color(1.0, 0.85, 0.30))
-			else:
-				_adicionar_chat_rodape("SEQUÊNCIA COMPLETA! NÍVEL %d!" % nivel_sequencia, Color(0.30, 1.0, 0.50))
-				nivel_sequencia += 1
-			_atualizar_hud()
-			if _vivo != null:
-				_vivo.vitoria()
-
-			await get_tree().create_timer(tempo_feedback_verde + 0.25).timeout
-
-			if jogo_ativo and minha == _rodada:
-				# cicla: memória -> fixa -> memória (um nível acima) -> ...
-				if modo_fixo:
-					_iniciar_nova_sequencia()
-				else:
-					_iniciar_rodada_fixa()
-
+	var ordem = sequencia.find(l.slot)
+	if ordem == indice and (not modo_fixo or l.cor != "apagada"):
+		_acertar(l, ordem, p)
 	elif ordem >= 0 or not modo_fixo:
-		_erro_sequencia(alvo)
-
+		_erro_ordem(l)
 	else:
-		_registrar_marca_laser_parede(pos_mouse)
+		_marca_laser(p)
+		errar(p)
 
 
-
-func _configurar_fx_layer_jogo() -> void:
-	if fx_layer_jogo != null and is_instance_valid(fx_layer_jogo):
+func _acertar(l: Lanterna, ordem: int, p: Vector2) -> void:
+	var minha = _rodada
+	var nome_cor = CORES_SEQ[ordem]
+	var c: Color = CORES_FX[nome_cor]
+	var valor = (indice + 1) * PONTOS_BASE
+	var rapido = false
+	if modo_fixo and ordem < _fixa_nasceu.size():
+		rapido = OS.get_ticks_msec() - int(_fixa_nasceu[ordem]) < RAPIDO_MS
+		if rapido:
+			valor += 10
+	indice += 1
+	var completa = indice >= sequencia.size()
+	if completa:
+		bloqueado = true
+	pontos += valor
+	acertos += 1
+	avisos.pontos(l.no.position + Vector2(0, -120), "+%d" % valor, c.linear_interpolate(Color.white, 0.3), 1.0 + ordem * 0.08)
+	if rapido:
+		avisos.mostrar(l.no.position + Vector2(0, -190), "RÁPIDO! +10", c.linear_interpolate(Color.white, 0.5))
+	# combo de acertos seguidos; a sequência completa ganha o anúncio especial
+	combo += 1
+	combo_t = janela_combo
+	melhor_combo = int(max(melhor_combo, combo))
+	if completa:
+		anuncio.especial("PERFECT SEQUENCE!")
+	else:
+		anuncio.combo(combo)
+	if modo_fixo:
+		l.quebrando = true
+	Maquina.efeito(_som_lampada, -3.0, rand_range(0.95, 1.08))
+	_quebrar_vidro(l, c, p)
+	yield(esperar(0.22), "timeout")
+	if estado != JOGO or minha != _rodada:
 		return
-
-	fx_layer_jogo = Node2D.new()
-	fx_layer_jogo.name = "FxLayerJogo"
-	fx_layer_jogo.z_index = 999
-	fx_layer_jogo.z_as_relative = false
-	fx_layer_jogo.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
-	add_child(fx_layer_jogo)
-
-	fx_layer_jogo.draw.connect(_desenhar_fx_layer_jogo)
-
-
-
-func _registrar_marca_laser_parede(pos: Vector2) -> void:
-	Maquina.efeito(SOM_LASER_PAREDE, -6.0, randf_range(0.9, 1.1))
-	marcas_laser_parede.append({
-		"pos": pos,
-		"raio": randf_range(7.0, 10.0)
-	})
-
-	while marcas_laser_parede.size() > 120:
-		marcas_laser_parede.pop_front()
-
-	# FUMAÇA MODERNA, ESCURA E SUAVE
-	for i in range(34):
-		var ang: float = randf_range(-PI * 0.95, -PI * 0.05)
-		var vel: Vector2 = Vector2.RIGHT.rotated(ang) * randf_range(18.0, 105.0)
-		vel.y -= randf_range(25.0, 120.0)
-
-		fx_colisao.append({
-			"fumaca": true,
-			"pos": pos + Vector2(randf_range(-8.0, 8.0), randf_range(-8.0, 8.0)),
-			"vel": vel,
-			"vida": randf_range(0.55, 1.20),
-			"idade": 0.0,
-			"tam": randf_range(7.0, 22.0),
-			"cor": Color(0.06, 0.06, 0.065, randf_range(0.30, 0.58))
-		})
-
-	# METAL SAINDO DO IMPACTO
-	for i in range(32):
-		var ang2: float = randf_range(0.0, TAU)
-		var vel2: Vector2 = Vector2.RIGHT.rotated(ang2) * randf_range(90.0, 360.0)
-
-		var cor_metal: Color = Color(0.72, 0.72, 0.76, 1.0)
-		if randf() < 0.45:
-			cor_metal = Color(0.38, 0.38, 0.42, 1.0)
-
-		fx_colisao.append({
-			"metal": true,
-			"pos": pos + Vector2(randf_range(-4.0, 4.0), randf_range(-4.0, 4.0)),
-			"vel": vel2,
-			"vida": randf_range(0.28, 0.72),
-			"idade": 0.0,
-			"tam": randf_range(3.0, 8.0),
-			"cor": cor_metal
-		})
-
-	if fx_layer_jogo != null:
-		fx_layer_jogo.queue_redraw()
-
-
-
-func _tocar_hit_lanterna_erro_e_voltar_idle(alvo: Area2D) -> void:
-	if alvo == null or not is_instance_valid(alvo):
+	if modo_fixo:
+		_tirar(l.slot)
+	else:
+		_trocar_cor(l.slot, nome_cor)
+	if not completa:
 		return
+	if modo_fixo:
+		# o bônus da fixa não conta como acerto (não é tiro)
+		pontos += BONUS_FIXA
+		avisos.pontos(Tela.TELA * 0.5, "+%d" % BONUS_FIXA, OURO, 1.5)
+		avisos.instrucao("SEQUÊNCIA FIXA COMPLETA! +%d" % BONUS_FIXA, Color(1.0, 0.85, 0.30))
+	else:
+		avisos.instrucao("SEQUÊNCIA COMPLETA! NÍVEL %d!" % nivel, Color(0.30, 1.0, 0.50))
+		nivel += 1
+	_vitoria()
+	yield(esperar(0.85), "timeout")
+	if estado == JOGO and minha == _rodada:
+		# cicla: memória -> fixa -> memória (um nível acima) -> ...
+		if modo_fixo:
+			_nova_sequencia()
+		else:
+			_rodada_fixa()
 
-	var anim: AnimatedSprite2D = _obter_animated_do_alvo(alvo)
-	if anim == null:
+
+func _erro_ordem(l: Lanterna) -> void:
+	perder(PENA_ORDEM, l.no.position + Vector2(0, -120), "ORDEM ERRADA!")
+	bloqueado = true
+	_rodada += 1
+	var minha = _rodada
+	Maquina.efeito(_som_lampada, -4.0, 0.9)
+	Maquina.efeito(_som_bip_erro, -2.0)
+	avisos.instrucao("ORDEM ERRADA! -%d  ·  RECOMEÇANDO..." % PENA_ORDEM, VERMELHO)
+	# a lanterna quebra na cor em que estava, com cacos vermelhos, e volta
+	_quebrar_vidro(l, Color(1.0, 0.08, 0.05), l.no.position)
+	var tw_l = l.no.create_tween()
+	tw_l.tween_interval(0.24)
+	tw_l.tween_callback(self, "_voltar_quadro", [l])
+	clarao(Color(1.0, 0.05, 0.02, 0.24), 0.6)
+	tremer(6.0, 0.25)
+	_giro = 1.3
+	_giro_arco = false
+	_giro_cor = Color(1.0, 0.08, 0.04)
+	# todas piscam vermelho duas vezes
+	for a in lanternas:
+		if a == null:
+			continue
+		var tw = a.no.create_tween()
+		tw.tween_property(a.spr, "modulate", Color(1.0, 0.15, 0.15), 0.18)
+		tw.tween_property(a.spr, "modulate", Color.white, 0.18)
+		tw.tween_property(a.spr, "modulate", Color(1.0, 0.15, 0.15), 0.22)
+		tw.tween_property(a.spr, "modulate", Color.white, 0.24)
+	yield(esperar(1.45), "timeout")
+	if estado != JOGO or minha != _rodada:
 		return
-
-	# quebra na cor em que estava, com cacos vermelhos, e volta
-	var cor: String = _cor_da_lanterna(alvo)
-	anim.modulate = Color.WHITE
-	if anim.sprite_frames != null and anim.sprite_frames.has_animation("hit_" + cor):
-		anim.play("hit_" + cor)
-
-	_fx_hit_lanterna(alvo, Color(1.0, 0.05, 0.05))
-	_registrar_fx_vidro_frontal_lanterna(alvo.global_position, Color(1.0, 0.05, 0.05))
-
-	await get_tree().create_timer(0.24).timeout
-
-	if not jogo_ativo:
-		return
-	if not is_instance_valid(alvo):
-		return
-
-	if anim != null and is_instance_valid(anim) and anim.sprite_frames != null:
-		if anim.sprite_frames.has_animation("idle_" + cor):
-			anim.play("idle_" + cor)
+	if modo_fixo:
+		_rodada_fixa()
+	else:
+		nivel = 1
+		_nova_sequencia()
 
 
-
-func _registrar_fx_vidro_frontal_lanterna(pos: Vector2, cor: Color) -> void:
-	for i in range(120):
-		var ang: float = randf_range(-PI * 0.92, -PI * 0.08)
-		var vel: Vector2 = Vector2.RIGHT.rotated(ang) * randf_range(160.0, 620.0)
-		vel.y += randf_range(120.0, 320.0)
-
-		var cor_caco: Color = cor
-		if randf() < 0.42:
-			cor_caco = Color(1.0, 0.92, 0.92, 1.0)
-
-		fx_colisao.append({
-			"pos": pos + Vector2(randf_range(-34.0, 34.0), randf_range(-28.0, 22.0)),
-			"vel": vel,
-			"vida": randf_range(0.35, 0.90),
-			"idade": 0.0,
-			"tam": randf_range(4.0, 13.0),
-			"cor": cor_caco
-		})
-
-	while fx_colisao.size() > 420:
-		fx_colisao.pop_front()
-
-	if fx_layer_jogo != null:
-		fx_layer_jogo.queue_redraw()
- 
+func _voltar_quadro(l: Lanterna) -> void:
+	if l.no != null and is_instance_valid(l.no) and not l.quebrando:
+		l.spr.frame = QUADRO_COR[l.cor]
 
 
-func _tocar_acerto_lanterna(alvo: Area2D, cor: String) -> void:
-	# a lanterna da vez quebra na própria cor
-	if alvo == null or not is_instance_valid(alvo):
-		return
-	var anim: AnimatedSprite2D = _obter_animated_do_alvo(alvo)
-	if anim == null:
-		return
-	var c: Color = CORES_FX.get(cor, Color.WHITE)
-	anim.modulate = Color.WHITE
-	anim.play("hit_" + cor)
-	_fx_hit_lanterna(alvo, c)
-	_registrar_fx_vidro_quebrado_lanterna(alvo.global_position, c)
-	if _vivo != null:
-		_vivo.acerto(alvo.global_position, c)
-	await get_tree().create_timer(0.22).timeout
-
-
-# ═══════════════════════════════════════════════════════════
-#  LÓGICA DE SEQUÊNCIA
-#  As cores dão a ordem dos tiros: azul 1º, verde 2º, amarelo 3º,
-#  vermelho 4º, roxo 5º. A partida cicla entre duas rodadas:
-#   MEMÓRIA  as 9 lanternas apagadas; a sequência (1 a 5) acende uma a uma
-#            nas cores da ordem e apaga; o jogador repete. Cada acerto fica
-#            aceso na sua cor.
-#   FIXA     as lanternas descem; 5 lanternas acesas nascem uma depois da
-#            outra (a cada 1 a 1,5 s), cada uma já na cor da sua vez, e
-#            ficam: é acertar na ordem das cores enquanto elas aparecem.
-#  Errar a ordem tira pontos e recomeça a rodada (na memória, volta a 1).
-# ═══════════════════════════════════════════════════════════
-
-func _iniciar_nova_sequencia() -> void:
-	if not jogo_ativo:
+# ------------------------------------------------------------ rodadas
+func _nova_sequencia() -> void:
+	if estado != JOGO:
 		return
 	_rodada += 1
-	var minha: int = _rodada
+	var minha = _rodada
+	var vinha_da_fixa = modo_fixo
 	modo_fixo = false
-	bloqueia_tiro_sequencia = true
-	mostrando_sequencia     = true
-	indice_sequencia        = 0
-	sequencia_atual.clear()
-	tempo_sem_jogada = 0.0
-	repetindo_sequencia_por_inatividade = false
-	_arte_modo(false)
-
-	var nasceram: bool = _preencher_lanternas()
-	_deixar_todas_apagadas()
-	await get_tree().create_timer(0.55 if nasceram else 0.35).timeout
-	if minha != _rodada or not jogo_ativo:
+	bloqueado = true
+	mostrando = true
+	indice = 0
+	sequencia.clear()
+	_sem_jogada = 0.0
+	_repetindo = false
+	if vinha_da_fixa:
+		_modo_arte(false)
+	var nasceram = _preencher()
+	_apagar_todas()
+	yield(esperar(0.55 if nasceram else 0.35), "timeout")
+	if minha != _rodada or estado != JOGO:
 		return
-	_deixar_todas_apagadas()
-
-	var slots: Array = range(9)
-	slots.shuffle()
-	for i in range(mini(nivel_sequencia, CORES_SEQ.size())):
-		sequencia_atual.append(int(slots[i]))
-
-	_adicionar_chat_rodape("MEMORIZE A ORDEM DAS CORES! (%d)" % sequencia_atual.size(), Color(0.30, 0.85, 1.0))
-	await _mostrar_sequencia(minha)
-	if minha != _rodada or not jogo_ativo:
+	_apagar_todas()
+	var furos = range(9)
+	furos.shuffle()
+	for i in min(nivel, CORES_SEQ.size()):
+		sequencia.append(furos[i])
+	avisos.instrucao("MEMORIZE A ORDEM DAS CORES! (%d)" % sequencia.size(), Color(0.30, 0.85, 1.0))
+	yield(_mostrar_sequencia(minha, false), "completed")
+	if minha != _rodada or estado != JOGO:
 		return
-
-	mostrando_sequencia     = false
-	bloqueia_tiro_sequencia = false
-	_adicionar_chat_rodape("REPITA NA ORDEM DAS CORES!", Color(0.30, 0.85, 1.0))
-
-
-func _tempo_mostrar_cor() -> float:
-	# depois do nível 5 a sequência continua com 5, mas acende mais rápido
-	return maxf(0.30, tempo_mostrar_azul - 0.05 * maxi(0, nivel_sequencia - CORES_SEQ.size()))
+	mostrando = false
+	bloqueado = false
+	avisos.instrucao("REPITA NA ORDEM DAS CORES!", Color(0.30, 0.85, 1.0))
 
 
-func _mostrar_sequencia(minha: int, somente_faltantes: bool = false) -> void:
-	if somente_faltantes:
-		_restaurar_cores_memoria()
-	var inicio: int = clampi(indice_sequencia, 0, sequencia_atual.size()) if somente_faltantes else 0
-	for i in range(inicio, sequencia_atual.size()):
-		if minha != _rodada or not jogo_ativo:
+## Depois do nível 5 a sequência continua com 5, mas acende mais rápido.
+func _tempo_mostrar() -> float:
+	return max(0.30, TEMPO_MOSTRAR - 0.05 * max(0, nivel - CORES_SEQ.size()))
+
+
+## Acende a sequência (ou só o que falta) e apaga. Sempre espera ao menos
+## uma vez: quem chama espera o "completed".
+func _mostrar_sequencia(minha: int, so_faltantes: bool):
+	yield(esperar(0.05), "timeout")
+	if so_faltantes:
+		_restaurar_memoria()
+	var inicio = int(clamp(indice, 0, sequencia.size())) if so_faltantes else 0
+	for i in range(inicio, sequencia.size()):
+		if minha != _rodada or estado != JOGO:
 			return
-		var slot: int = int(sequencia_atual[i])
-		if slot < 0 or slot >= alvos_ativos.size():
-			continue
-		var cor: String = CORES_SEQ[i]
-		_trocar_lanterna_slot(slot, cor)
-		_fx_sequencia_lanterna(alvos_ativos[slot], CORES_FX[cor])
-		_tocar_bip(i)
-		if _vivo != null and alvos_ativos[slot] != null:
-			_vivo.pulso_cor(CORES_FX[cor])
-		await get_tree().create_timer(_tempo_mostrar_cor()).timeout
-		if minha != _rodada or not jogo_ativo:
+		var slot: int = sequencia[i]
+		var nome_cor = CORES_SEQ[i]
+		_trocar_cor(slot, nome_cor)
+		_brilho_sequencia(slot, CORES_FX[nome_cor])
+		_bip(i)
+		yield(esperar(_tempo_mostrar()), "timeout")
+		if minha != _rodada or estado != JOGO:
 			return
-		_trocar_lanterna_slot(slot, "apagada")
-		await get_tree().create_timer(pausa_entre_azuis).timeout
-	if somente_faltantes:
-		_restaurar_cores_memoria()
+		_trocar_cor(slot, "apagada")
+		yield(esperar(PAUSA_ENTRE), "timeout")
+	if so_faltantes:
+		_restaurar_memoria()
 
 
-func _restaurar_cores_memoria() -> void:
-	for i in range(9):
-		_trocar_lanterna_slot(i, "apagada")
-	for i in range(mini(indice_sequencia, sequencia_atual.size())):
-		_trocar_lanterna_slot(int(sequencia_atual[i]), CORES_SEQ[i])
+func _repetir_sequencia() -> void:
+	if _repetindo or estado != JOGO or sequencia.empty():
+		return
+	_repetindo = true
+	bloqueado = true
+	mostrando = true
+	var minha = _rodada
+	avisos.instrucao("RELEMBRANDO A SEQUÊNCIA...", Color(0.30, 0.85, 1.0))
+	yield(esperar(0.35), "timeout")
+	if minha != _rodada or estado != JOGO or modo_fixo:
+		_repetindo = false
+		return
+	yield(_mostrar_sequencia(minha, true), "completed")
+	_repetindo = false
+	if minha != _rodada or estado != JOGO:
+		return
+	mostrando = false
+	bloqueado = false
+	_sem_jogada = 0.0
+	avisos.instrucao("CONTINUE DE ONDE PAROU! %d/%d" % [indice, sequencia.size()], Color(0.30, 1.0, 0.60))
 
 
-func _deixar_todas_apagadas() -> void:
-	for i in range(9):
-		_trocar_lanterna_slot(i, "apagada")
+func _restaurar_memoria() -> void:
+	_apagar_todas()
+	for i in min(indice, sequencia.size()):
+		_trocar_cor(sequencia[i], CORES_SEQ[i])
 
 
-## Garante as 9 lanternas nos furos (as que faltam sobem). true = alguma nasceu.
-func _preencher_lanternas() -> bool:
-	_garantir_slots()
-	while alvos_ativos.size() < 9:
-		alvos_ativos.append(null)
-	var nasceu: bool = false
-	for i in range(9):
-		var a: Area2D = alvos_ativos[i]
-		if a == null or not is_instance_valid(a):
-			alvos_ativos[i] = null
-			slots_ocupados[i] = false
-			_spawn_lanterna_no_slot(i)
+func _apagar_todas() -> void:
+	for i in 9:
+		_trocar_cor(i, "apagada")
+
+
+func _rodada_fixa() -> void:
+	if estado != JOGO:
+		return
+	_rodada += 1
+	var minha = _rodada
+	modo_fixo = true
+	bloqueado = true
+	mostrando = false
+	indice = 0
+	sequencia.clear()
+	_sem_jogada = 0.0
+	_modo_arte(true)
+	avisos.instrucao("SEQUÊNCIA FIXA! ACERTE NA ORDEM DAS CORES", Color(1.0, 0.85, 0.30))
+	var algum = _recolher()
+	yield(esperar(0.75 if algum else 0.45), "timeout")
+	if minha != _rodada or estado != JOGO:
+		return
+	var furos = range(9)
+	furos.shuffle()
+	for i in CORES_SEQ.size():
+		sequencia.append(furos[i])
+	_fixa_nasceu.clear()
+	bloqueado = false
+	for i in CORES_SEQ.size():
+		if minha != _rodada or estado != JOGO:
+			return
+		_nascer(sequencia[i], CORES_SEQ[i])
+		_fixa_nasceu.append(OS.get_ticks_msec())
+		_bip(i)
+		_pisca = 1.0
+		_pisca_cor = CORES_FX[CORES_SEQ[i]]
+		if i < CORES_SEQ.size() - 1:
+			yield(esperar(rand_range(1.0, 1.5)), "timeout")
+
+
+func _vitoria() -> void:
+	_giro = 1.4
+	_giro_arco = true
+	for i in 2:
+		particulas_luz.explosao(tela(GIROFLEX) + Vector2(rand_range(-40, 40), 10), {"n": 10, "tex": Estilo.tex("fx_faisca"),
+			"vel": [80.0, 280.0], "ang": [200.0, 340.0], "vida": [0.4, 0.9], "tam": [10.0, 16.0], "cor": Color(1.0, 0.85, 0.5),
+			"grav": 900.0, "estica": 0.04})
+
+
+# ------------------------------------------------------------ lanternas
+## Garante as 9 lanternas nos furos (as que faltam sobem). true = alguma subiu.
+func _preencher() -> bool:
+	var nasceu = false
+	for i in 9:
+		if lanternas[i] == null:
+			_nascer(i, "apagada")
 			nasceu = true
 	return nasceu
 
 
-## Todas as lanternas descem para dentro dos furos e somem.
-func _recolher_lanternas() -> void:
-	var algum: bool = false
-	for alvo in alvos_ativos:
-		if alvo == null or not is_instance_valid(alvo):
+func _nascer(slot: int, nome_cor: String, com_som: bool = true) -> void:
+	if lanternas[slot] != null:
+		return
+	var l = Lanterna.new()
+	l.slot = slot
+	l.cor = nome_cor
+	l.no = Node2D.new()
+	l.no.position = _furos_tela[slot]
+	alvos.add_child(l.no)
+	l.spr = Sprite.new()
+	l.spr.texture = _f["tex"]
+	l.spr.hframes = _f["quadros"]
+	l.spr.frame = QUADRO_COR[nome_cor]
+	l.spr.scale = Vector2.ONE * ESCALA_LANTERNA
+	l.no.add_child(l.spr)
+	lanternas[slot] = l
+	if not com_som:
+		return
+	Maquina.efeito(_som_sobe, -13.0 if nome_cor == "apagada" else -8.0, rand_range(0.92, 1.08))
+	# sobe do furo (um tranco de leve no fim)
+	l.spr.position = Vector2(0, SUBIDA)
+	l.spr.modulate.a = 0.0
+	var tw = l.no.create_tween().set_parallel(true)
+	tw.tween_property(l.spr, "position", Vector2.ZERO, 0.22).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.tween_property(l.spr, "modulate:a", 1.0, 0.16)
+	if nome_cor != "apagada":
+		luz_sprite_breve(l.no.position, 260.0, Color(CORES_FX[nome_cor].r, CORES_FX[nome_cor].g, CORES_FX[nome_cor].b, 0.7), 0.4)
+
+
+## cor: "apagada" ou uma das CORES_SEQ.
+func _trocar_cor(slot: int, nome_cor: String) -> void:
+	var l = lanternas[slot]
+	if l == null or l.quebrando:
+		return
+	l.cor = nome_cor
+	l.spr.frame = QUADRO_COR[nome_cor]
+	l.spr.modulate = Color.white
+	l.spr.scale = Vector2.ONE * ESCALA_LANTERNA
+
+
+## Todas descem para dentro dos furos e somem. true = havia alguma.
+func _recolher() -> bool:
+	var algum = false
+	for i in 9:
+		var l = lanternas[i]
+		if l == null:
 			continue
 		algum = true
-		var id: int = alvo.get_instance_id()
-		if dados_alvos.has(id):
-			dados_alvos[id]["quebrando"] = true
-		var tw := create_tween()
-		tw.set_parallel(true)
-		tw.tween_property(alvo, "global_position", alvo.global_position + Vector2(0.0, 70.0), 0.26).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_IN)
-		tw.tween_property(alvo, "modulate:a", 0.0, 0.24)
+		_descer(l, 70.0, 0.26)
+		lanternas[i] = null
 	if algum:
-		Maquina.efeito(SOM_DESCE, -6.0)
-		await get_tree().create_timer(0.28).timeout
-	_limpar_alvos()
-	while alvos_ativos.size() < 9:
-		alvos_ativos.append(null)
+		Maquina.efeito(_som_desce, -6.0)
+	return algum
 
 
 ## Uma lanterna sai do furo (acertada na rodada fixa).
-func _tirar_lanterna(slot: int) -> void:
-	if slot < 0 or slot >= alvos_ativos.size():
+func _tirar(slot: int) -> void:
+	var l = lanternas[slot]
+	if l == null:
 		return
-	var alvo: Area2D = alvos_ativos[slot]
-	alvos_ativos[slot] = null
-	if slot < slots_ocupados.size():
-		slots_ocupados[slot] = false
-	if alvo == null or not is_instance_valid(alvo):
-		return
-	dados_alvos.erase(alvo.get_instance_id())
-	Maquina.efeito(SOM_DESCE, -11.0, randf_range(1.0, 1.15))
-	var tw := create_tween()
-	tw.set_parallel(true)
-	tw.tween_property(alvo, "global_position", alvo.global_position + Vector2(0.0, 50.0), 0.22).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_IN)
-	tw.tween_property(alvo, "modulate:a", 0.0, 0.20)
-	tw.chain().tween_callback(alvo.queue_free)
+	lanternas[slot] = null
+	Maquina.efeito(_som_desce, -11.0, rand_range(1.0, 1.15))
+	_descer(l, 50.0, 0.22)
 
 
-func _iniciar_rodada_fixa() -> void:
-	if not jogo_ativo:
-		return
-	_rodada += 1
-	var minha: int = _rodada
-	modo_fixo = true
-	bloqueia_tiro_sequencia = true
-	mostrando_sequencia     = false
-	indice_sequencia        = 0
-	sequencia_atual.clear()
-	tempo_sem_jogada = 0.0
-	_arte_modo(true)
-	_adicionar_chat_rodape("SEQUÊNCIA FIXA! ACERTE NA ORDEM DAS CORES", Color(1.0, 0.85, 0.30))
-
-	await _recolher_lanternas()
-	if minha != _rodada or not jogo_ativo:
-		return
-	await get_tree().create_timer(0.45).timeout
-	if minha != _rodada or not jogo_ativo:
-		return
-
-	var slots: Array = range(9)
-	slots.shuffle()
-	for i in range(CORES_SEQ.size()):
-		sequencia_atual.append(int(slots[i]))
-	_fixa_nasceu.clear()
-	bloqueia_tiro_sequencia = false
-
-	for i in range(CORES_SEQ.size()):
-		if minha != _rodada or not jogo_ativo:
-			return
-		var slot: int = int(sequencia_atual[i])
-		_spawn_lanterna_no_slot(slot, CORES_SEQ[i])
-		_fixa_nasceu.append(Time.get_ticks_msec())
-		_tocar_bip(i)
-		if _vivo != null:
-			_vivo.pulso_cor(CORES_FX[CORES_SEQ[i]])
-		if i < CORES_SEQ.size() - 1:
-			await get_tree().create_timer(randf_range(1.0, 1.5)).timeout
+func _descer(l: Lanterna, dist: float, dur: float) -> void:
+	l.quebrando = true
+	var tw = l.no.create_tween().set_parallel(true)
+	tw.tween_property(l.spr, "position", Vector2(0, dist), dur).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_IN)
+	tw.tween_property(l.spr, "modulate:a", 0.0, dur - 0.02)
+	tw.chain().tween_callback(l.no, "queue_free")
 
 
-func _quebrar_seguidos() -> void:
-	_seguidos = 0
-	if _anuncio != null:
-		_anuncio.zerar()
-
-
-func _erro_sequencia(alvo: Area2D) -> void:
-	_quebrar_seguidos()
-	pontuacao -= penalidade_erro_sequencia
-	bloqueia_tiro_sequencia = true
-	_rodada += 1
-	var minha: int = _rodada
-
-	_tocar_som_hit_lamp()
-	_tocar_hit_lanterna_erro_e_voltar_idle(alvo)
-	_tocar_bip_error()
-	_adicionar_chat_rodape("ORDEM ERRADA! -%d  |  REINICIANDO..." % penalidade_erro_sequencia, Color.RED)
-	_atualizar_hud()
-	if _vivo != null:
-		_vivo.erro()
-
-	for a in alvos_ativos:
-		if a == null or not is_instance_valid(a):
+func _lanterna_no_ponto(p: Vector2) -> Lanterna:
+	for l in lanternas:
+		if l == null:
 			continue
-		var anim: AnimatedSprite2D = _obter_animated_do_alvo(a)
-		if anim == null:
-			continue
-		var tw := create_tween()
-		tw.tween_property(anim, "modulate", Color(1.0, 0.15, 0.15, 1.0), 0.18)
-		tw.tween_property(anim, "modulate", Color.WHITE, 0.18)
-		tw.tween_property(anim, "modulate", Color(1.0, 0.15, 0.15, 1.0), 0.22)
-		tw.tween_property(anim, "modulate", Color.WHITE, 0.24)
-
-	await get_tree().create_timer(1.45).timeout
-	if not jogo_ativo or minha != _rodada:
-		return
-	if modo_fixo:
-		_iniciar_rodada_fixa()
-	else:
-		nivel_sequencia = 1
-		_iniciar_nova_sequencia()
-
-
-# ═══════════════════════════════════════════════════════════
-#  TROCA DE COR DA LANTERNA NO SLOT
-# ═══════════════════════════════════════════════════════════
-
-## cor: "apagada" ou uma de CORES_SEQ.
-func _trocar_lanterna_slot(slot: int, cor: String) -> void:
-	if slot < 0 or slot >= alvos_ativos.size():
-		return
-
-	var alvo: Area2D = alvos_ativos[slot]
-	if alvo == null or not is_instance_valid(alvo):
-		return
-
-	var anim: AnimatedSprite2D = _obter_animated_do_alvo(alvo)
-	if anim == null:
-		return
-
-	var id: int = alvo.get_instance_id()
-	if dados_alvos.has(id):
-		dados_alvos[id]["tipo"] = "lanterna_" + cor
-
-	# NÃO MEXE NA POSIÇÃO DO ALVO: fica em cima do furo do fundo
-	alvo.scale = Vector2.ONE * escala_alvo_jogo
-	anim.position = Vector2.ZERO
-	anim.scale = Vector2.ONE
-	anim.rotation_degrees = 0.0
-	anim.modulate = Color.WHITE
-	if anim.sprite_frames != null and anim.sprite_frames.has_animation("idle_" + cor):
-		anim.play("idle_" + cor)
-
-
-func _cor_da_lanterna(alvo: Area2D) -> String:
-	if alvo == null or not is_instance_valid(alvo):
-		return "apagada"
-	var tipo: String = str(dados_alvos.get(alvo.get_instance_id(), {}).get("tipo", "lanterna_apagada"))
-	return tipo.trim_prefix("lanterna_")
-
-
-## Folha das lanternas nas cores (tools/gerar_lanternas.py): idle_<cor> e
-## hit_<cor>; "idle"/"hit" = apagada (nomes antigos).
-func _frames_lanternas() -> SpriteFrames:
-	if _quadros_lanterna != null:
-		return _quadros_lanterna
-	var sf := SpriteFrames.new()
-	var nomes: Array[String] = ["apagada"]
-	nomes.append_array(CORES_SEQ)
-	for i in nomes.size():
-		for linha in 2:
-			var nome_anim: String = ("idle_" if linha == 0 else "hit_") + nomes[i]
-			sf.add_animation(nome_anim)
-			sf.set_animation_loop(nome_anim, false)
-			var at := AtlasTexture.new()
-			at.atlas = FOLHA_LANTERNAS
-			at.region = Rect2(i * 369, linha * 358, 369, 358)
-			sf.add_frame(nome_anim, at)
-	for par in [["idle", 0], ["hit", 1]]:
-		sf.add_animation(par[0])
-		sf.set_animation_loop(par[0], false)
-		var at2 := AtlasTexture.new()
-		at2.atlas = FOLHA_LANTERNAS
-		at2.region = Rect2(0, int(par[1]) * 358, 369, 358)
-		sf.add_frame(par[0], at2)
-	if sf.has_animation("default"):
-		sf.remove_animation("default")
-	_quadros_lanterna = sf
-	return sf
-
-
-func _registrar_fx_vidro_quebrado_lanterna(pos: Vector2, cor: Color) -> void:
-	for i in range(95):
-		var ang: float = randf_range(0.0, TAU)
-		var vel: Vector2 = Vector2.RIGHT.rotated(ang) * randf_range(220.0, 780.0)
-
-		var cor_caco: Color = cor
-		if randf() < 0.35:
-			cor_caco = Color(1.0, 0.92, 0.92, 1.0)
-
-		fx_colisao.append({
-			"pos": pos + Vector2(randf_range(-18.0, 18.0), randf_range(-18.0, 18.0)),
-			"vel": vel,
-			"vida": randf_range(0.45, 1.20),
-			"idade": 0.0,
-			"tam": randf_range(3.0, 12.0),
-			"cor": cor_caco
-		})
-
-
-
-func _registrar_fx_estilhaco_lanterna(pos: Vector2, cor: Color) -> void:
-	for i in range(70):
-		var ang: float = randf_range(0.0, TAU)
-		var vel: Vector2 = Vector2.RIGHT.rotated(ang) * randf_range(180.0, 650.0)
-
-		fx_colisao.append({
-			"pos": pos,
-			"vel": vel,
-			"vida": randf_range(0.45, 1.05),
-			"idade": 0.0,
-			"tam": randf_range(5.0, 14.0),
-			"cor": cor
-		})
-
-
- 
-# ═══════════════════════════════════════════════════════════
-#  SPAWN DE LANTERNAS
-# ═══════════════════════════════════════════════════════════
- 
-func _gerar_onda_inicial() -> void:
-	_limpar_alvos()
-	_configurar_pontos_spawn()
-	for i in range(9):
-		_spawn_lanterna_no_slot(i)
- 
- 
-func _garantir_3_alvos() -> void:
-	_remover_alvos_invalidos()
-	_garantir_slots()
-	for i in range(9):
-		if i >= slots_ocupados.size():
-			continue
-		if not slots_ocupados[i]:
-			_spawn_lanterna_no_slot(i)
- 
-
- 
-func _spawn_lanterna_no_slot(slot: int, cor: String = "apagada") -> void:
-	if cena_lanterna_vermelha == null:
-		push_error("Cena LanternaVermelha.tscn não configurada.")
-		return
-	if slot < 0 or slot >= posicoes_spawn.size():
-		return
-	if slot < slots_ocupados.size() and slots_ocupados[slot]:
-		return
-
-	var alvo: Area2D = cena_lanterna_vermelha.instantiate() as Area2D
-	if alvo == null:
-		push_error("Lanterna precisa ter Area2D como nó raiz.")
-		return
-	Maquina.efeito(SOM_SOBE, -13.0 if cor == "apagada" else -8.0, randf_range(0.92, 1.08))
-
-	slots_ocupados[slot] = true
-	camada_alvos.add_child(alvo)
-
-	var pos_final: Vector2 = posicoes_spawn[slot]
-	var pos_spawn: Vector2 = pos_final + Vector2(0.0, subida_spawn_distancia)
-
-	alvo.visible = true
-	alvo.show()
-	alvo.process_mode = Node.PROCESS_MODE_INHERIT
-	alvo.monitoring = true
-	alvo.monitorable = true
-	alvo.input_pickable = true
-	alvo.z_index = 50
-	alvo.rotation_degrees = 0.0
-	alvo.global_position = pos_spawn
-
-	# AUMENTA AS LANTERNAS VERMELHAS IDLE
-	# E GARANTE QUE AZUL/VERDE USEM O MESMO TAMANHO E LUGAR
-	alvo.scale = Vector2.ONE * escala_alvo_jogo
-
-	alvo.modulate = Color(1, 1, 1, 0.0)
-
-	var anim_nova: AnimatedSprite2D = _obter_animated_do_alvo(alvo)
-	if anim_nova != null:
-		anim_nova.sprite_frames = _frames_lanternas()
-	_resetar_visual_arco(alvo)
-	if anim_nova != null:
-		anim_nova.play("idle_" + cor)
-
-	dados_alvos[alvo.get_instance_id()] = {
-		"tipo": "lanterna_" + cor,
-		"slot": slot,
-		"quebrando": false,
-		"nascendo": true,
-		"base_pos": pos_final,
-		"idade": 0.0
-	}
-
-	while alvos_ativos.size() <= slot:
-		alvos_ativos.append(null)
-
-	alvos_ativos[slot] = alvo
-
-	var tw := create_tween()
-	tw.set_parallel(true)
-	tw.set_trans(Tween.TRANS_BACK)
-	tw.set_ease(Tween.EASE_OUT)
-	tw.tween_property(alvo, "global_position", pos_final, 0.22)
-	tw.tween_property(alvo, "scale", Vector2.ONE * escala_alvo_jogo, 0.22)
-	tw.tween_property(alvo, "modulate:a", 1.0, 0.16)
-
-	await get_tree().create_timer(0.24).timeout
-
-	if is_instance_valid(alvo):
-		var id: int = alvo.get_instance_id()
-		if dados_alvos.has(id):
-			dados_alvos[id]["nascendo"] = false
-			alvo.global_position = pos_final
-			alvo.scale = Vector2.ONE * escala_alvo_jogo
-			alvo.modulate = Color.WHITE
- 
- 
-
-# ═══════════════════════════════════════════════════════════
-#  GERÊNCIA DE ALVOS / SLOTS
-# ═══════════════════════════════════════════════════════════
- 
-func _limpar_alvos() -> void:
-	for alvo in alvos_ativos:
-		if is_instance_valid(alvo):
-			alvo.queue_free()
-	alvos_ativos.clear()
-	dados_alvos.clear()
-	slots_ocupados.clear()
-	_garantir_slots()
- 
-
-
-func _fx_sequencia_lanterna(alvo: Area2D, cor: Color) -> void:
-	if alvo == null or not is_instance_valid(alvo):
-		return
-
-	var anim: AnimatedSprite2D = _obter_animated_do_alvo(alvo)
-	if anim == null:
-		return
-
-	var escala_base: Vector2 = anim.scale
-
-	var tw := create_tween()
-	tw.set_parallel(true)
-	anim.modulate = Color(1.7, 1.7, 1.7, 1.0)
-	tw.tween_property(anim, "scale", escala_base * 1.18, 0.08)
-	tw.tween_property(anim, "modulate", Color.WHITE, 0.22)
-	tw.tween_property(anim, "scale", escala_base, 0.14).set_delay(0.08)
-
-	_registrar_fx_estilhaco_lanterna(alvo.global_position, cor)
-
-
-
-func _fx_hit_lanterna(alvo: Area2D, cor: Color) -> void:
-	if alvo == null or not is_instance_valid(alvo):
-		return
-
-	var anim: AnimatedSprite2D = _obter_animated_do_alvo(alvo)
-	if anim == null:
-		return
-
-	var escala_base: Vector2 = anim.scale
-
-	var tw := create_tween()
-	tw.set_parallel(true)
-	anim.modulate = Color(1.0 + cor.r, 1.0 + cor.g, 1.0 + cor.b, 1.0)
-	tw.tween_property(anim, "scale", escala_base * 1.22, 0.06)
-	tw.tween_property(anim, "modulate", Color.WHITE, 0.20)
-	tw.tween_property(anim, "scale", escala_base, 0.14).set_delay(0.06)
-
- 
-
-func _garantir_slots() -> void:
-	slots_ocupados.resize(9)
-	for i in range(slots_ocupados.size()):
-		if typeof(slots_ocupados[i]) != TYPE_BOOL:
-			slots_ocupados[i] = false
- 
- 
-
-func _remover_alvos_invalidos() -> void:
-	_garantir_slots()
-	for i in range(alvos_ativos.size() - 1, -1, -1):
-		var alvo: Area2D = alvos_ativos[i]
-		if not is_instance_valid(alvo):
-			alvos_ativos.remove_at(i)
-			continue
-		if not alvo.visible:
-			var id: int = alvo.get_instance_id()
-			if dados_alvos.has(id):
-				var slot: int = int(dados_alvos[id].get("slot", -1))
-				if slot >= 0 and slot < slots_ocupados.size():
-					slots_ocupados[slot] = false
-				dados_alvos.erase(id)
-			if is_instance_valid(alvo):
-				alvo.queue_free()
-			alvos_ativos.remove_at(i)
- 
-
-
-func _configurar_modal_fim() -> void:
-	fim_layer = CanvasLayer.new()
-	fim_layer.layer = 120
-	add_child(fim_layer)
-
-	fim_root = Control.new()
-	fim_root.set_anchors_preset(Control.PRESET_FULL_RECT)
-	fim_root.visible = false
-	fim_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	fim_layer.add_child(fim_root)
-
-	fim_bg = ColorRect.new()
-	fim_bg.color = Color(0, 0, 0, 0.86)
-	fim_bg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	fim_root.add_child(fim_bg)
-
-	fim_panel = Panel.new()
-	Leve.stylebox(fim_panel, "panel", _estilo_card_arena())
-	fim_root.add_child(fim_panel)
-
-	var linha_topo := ColorRect.new()
-	linha_topo.name  = "LinhaTopo"
-	linha_topo.color = COR_NEON_ARENA
-	fim_panel.add_child(linha_topo)
-
-	var linha_glow := ColorRect.new()
-	linha_glow.name  = "LinhaGlow"
-	linha_glow.color = Color(COR_NEON_ARENA.r, COR_NEON_ARENA.g, COR_NEON_ARENA.b, 0.22)
-	fim_panel.add_child(linha_glow)
-
-	fim_titulo = Label.new()
-	fim_titulo.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	fim_titulo.vertical_alignment   = VERTICAL_ALIGNMENT_CENTER
-	Leve.font_size(fim_titulo, "font_size", 58)
-	Leve.color(fim_titulo, "font_color", COR_NEON_ARENA_CLARO)
-	Leve.color(fim_titulo, "font_outline_color", Color.BLACK)
-	Leve.constant(fim_titulo, "outline_size", 9)
-	fim_panel.add_child(fim_titulo)
-
-	fim_score_label = Label.new()
-	fim_score_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	fim_score_label.vertical_alignment   = VERTICAL_ALIGNMENT_CENTER
-	Leve.font_size(fim_score_label, "font_size", 78)
-	Leve.color(fim_score_label, "font_color", Color.WHITE)
-	Leve.color(fim_score_label, "font_outline_color", Color(0.90, 0.0, 0.0))
-	Leve.constant(fim_score_label, "outline_size", 10)
-	fim_panel.add_child(fim_score_label)
-
-	fim_stats_label = Label.new()
-	fim_stats_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	fim_stats_label.vertical_alignment   = VERTICAL_ALIGNMENT_CENTER
-	fim_stats_label.autowrap_mode        = TextServer.AUTOWRAP_WORD_SMART
-	Leve.font_size(fim_stats_label, "font_size", 34)
-	Leve.color(fim_stats_label, "font_color", Color(1.0, 0.88, 0.88, 1.0))
-	Leve.color(fim_stats_label, "font_outline_color", Color.BLACK)
-	Leve.constant(fim_stats_label, "outline_size", 6)
-	fim_panel.add_child(fim_stats_label)
-
-	fim_footer = Label.new()
-	_estilizar_botao_modal_final(fim_footer, Maquina.texto_jogar_novamente(), true)
-	fim_panel.add_child(fim_footer)
-
-	fim_contagem_label = Label.new()
-	fim_contagem_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	fim_contagem_label.vertical_alignment   = VERTICAL_ALIGNMENT_CENTER
-	Leve.font_size(fim_contagem_label, "font_size", 28)
-	Leve.color(fim_contagem_label, "font_color", COR_NEON_ARENA_CLARO)
-	Leve.color(fim_contagem_label, "font_outline_color", Color.BLACK)
-	Leve.constant(fim_contagem_label, "outline_size", 5)
-	fim_panel.add_child(fim_contagem_label)
-
-	_criar_nome_ranking()
-	_ajustar_layout_modal_final()
- 
-
-func _configurar_pontos_spawn() -> void:
-	posicoes_spawn.clear()
-
-	var tela: Vector2 = get_viewport_rect().size
-
-	# =====================================================
-	# AJUSTE INDIVIDUAL DE CADA FURO
-	# X = esquerda/direita
-	# Y = cima/baixo
-	#
-	# diminuir X = vai para esquerda
-	# aumentar X = vai para direita
-	# diminuir Y = sobe
-	# aumentar Y = desce
-	# =====================================================
-
-	var p_1x1 := Vector2(0.215, 0.399)
-	var p_2x1 := Vector2(0.500, 0.399)
-	var p_3x1 := Vector2(0.780, 0.399)
-
-	var p_1x2 := Vector2(0.215, 0.560)
-	var p_2x2 := Vector2(0.500, 0.560)
-	var p_3x2 := Vector2(0.780, 0.560)
-
-	var p_1x3 := Vector2(0.215, 0.730)
-	var p_2x3 := Vector2(0.500, 0.730)
-	var p_3x3 := Vector2(0.780, 0.730)
-
-
-	posicoes_spawn.append(Vector2(tela.x * p_1x1.x, tela.y * p_1x1.y)) # 1x1
-	posicoes_spawn.append(Vector2(tela.x * p_2x1.x, tela.y * p_2x1.y)) # 2x1
-	posicoes_spawn.append(Vector2(tela.x * p_3x1.x, tela.y * p_3x1.y)) # 3x1
-
-	posicoes_spawn.append(Vector2(tela.x * p_1x2.x, tela.y * p_1x2.y)) # 1x2
-	posicoes_spawn.append(Vector2(tela.x * p_2x2.x, tela.y * p_2x2.y)) # 2x2
-	posicoes_spawn.append(Vector2(tela.x * p_3x2.x, tela.y * p_3x2.y)) # 3x2
-
-	posicoes_spawn.append(Vector2(tela.x * p_1x3.x, tela.y * p_1x3.y)) # 1x3
-	posicoes_spawn.append(Vector2(tela.x * p_2x3.x, tela.y * p_2x3.y)) # 2x3
-	posicoes_spawn.append(Vector2(tela.x * p_3x3.x, tela.y * p_3x3.y)) # 3x3
-
-	_garantir_slots()
- 
-
-
-func _mostrar_modal_fim() -> void:
-	if fim_root == null or fim_score_label == null or fim_stats_label == null:
-		_configurar_modal_fim()
-
-	if fim_root == null:
-		push_error("Modal final não foi criado corretamente.")
-		return
-
-	fim_ativo = true
-	ranking_nome_ativo = false
-	ranking_ja_salvo = false
-	_aplicar_config_admin_na_cena()
-	fim_tempo_voltar = Maquina.tempo_volta_menu()
-
-	if ranking_nome_layer != null:
-		ranking_nome_layer.visible = false
-
-	if fim_layer != null:
-		fim_layer.visible = true
-
-	fim_root.visible = true
-	fim_root.mouse_filter = Control.MOUSE_FILTER_STOP
-
-	var erros: int = max(tiros - acertos, 0)
-
-	var precisao: int = 0
-	if tiros > 0:
-		precisao = int(round((float(acertos) / float(tiros)) * 100.0))
-
-	var desempenho: String = "TREINE MAIS"
-	if precisao >= 80:
-		desempenho = "EXCELENTE"
-	elif precisao >= 60:
-		desempenho = "MUITO BOM"
-	elif precisao >= 40:
-		desempenho = "BOM"
-
-	var modo_atual_ranking: String = _obter_modo_ranking()
-	var entrou_ranking: bool = _deve_entrar_no_ranking(pontuacao, precisao)
-
-	if fim_titulo != null:
-		if entrou_ranking:
-			fim_titulo.text = "🏆 NOVO RECORDE!"
-			Leve.color(fim_titulo, "font_color", Color(1.0, 0.86, 0.18))
-		else:
-			fim_titulo.text = "FIM DE JOGO"
-			Leve.color(fim_titulo, "font_color", Color(1.0, 0.06, 0.06))
-
-	if fim_score_label != null:
-		fim_score_label.text = "PONTUAÇÃO\n%d" % pontuacao
-
-	if fim_stats_label != null:
-		if entrou_ranking:
-			fim_stats_label.text = "VOCÊ ENTROU NO RANKING!\n\nTIROS: %d     ACERTOS: %d     ERROS: %d\nPRECISÃO: %d%%\nNÍVEL ALCANÇADO: %d\nDESEMPENHO: %s" % [
-				tiros,
-				acertos,
-				erros,
-				precisao,
-				nivel_sequencia,
-				desempenho
-			]
-		else:
-			fim_stats_label.text = "RESULTADO DA PARTIDA\n\nTIROS: %d     ACERTOS: %d     ERROS: %d\nPRECISÃO: %d%%\nNÍVEL ALCANÇADO: %d\nDESEMPENHO: %s" % [
-				tiros,
-				acertos,
-				erros,
-				precisao,
-				nivel_sequencia,
-				desempenho
-			]
-
-	if fim_footer != null:
-		if entrou_ranking:
-			_estilizar_botao_modal_final(fim_footer, "PREPARE-SE PARA DIGITAR SEU NOME", true)
-		else:
-			_estilizar_botao_modal_final(fim_footer, "▶ " + Maquina.texto_jogar_novamente(), true)
-
-	if fim_contagem_label != null:
-		if entrou_ranking:
-			fim_contagem_label.text = "ABRINDO REGISTRO DO RECORDE..."
-		else:
-			fim_contagem_label.text = "VOLTANDO AO INÍCIO EM %02d" % int(ceil(fim_tempo_voltar))
-
-	_ajustar_layout_modal_final()
-
-	if fim_panel != null:
-		fim_panel.modulate = Color(1, 1, 1, 0)
-		fim_panel.scale = Vector2(0.94, 0.94)
-
-		var tw := create_tween()
-		tw.set_parallel(true)
-		tw.tween_property(fim_panel, "modulate:a", 1.0, 0.22)
-		tw.tween_property(fim_panel, "scale", Vector2.ONE, 0.24).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-
-	if entrou_ranking:
-		# a contagem de volta só começa depois do nome
-		ranking_nome_ativo = true
-		await get_tree().create_timer(1.2).timeout
-		if fim_ativo and not ranking_ja_salvo:
-			_abrir_modal_nome_ranking(pontuacao, "ARENA", precisao)
-
-
-
-func _deve_entrar_no_ranking(pontos: int, precisao: int) -> bool:
-	var modo_atual_ranking: String = _obter_modo_ranking()
-
-	if Engine.has_singleton("RankingManager"):
-		return bool(RankingManager.call(
-			"deve_entrar_no_ranking",
-			pontos,
-			precisao,
-			modo_atual_ranking
-		))
-
-	if has_node("/root/RankingManager"):
-		var rm: Node = get_node("/root/RankingManager")
-		return bool(rm.call(
-			"deve_entrar_no_ranking",
-			pontos,
-			precisao,
-			modo_atual_ranking
-		))
-
-	return false
-
-
-
-func _ajustar_layout_modal_final() -> void:
-	var tela: Vector2 = get_viewport_rect().size
-
-	if fim_root != null:
-		fim_root.size = tela
-
-	if fim_bg != null:
-		fim_bg.position = Vector2.ZERO
-		fim_bg.size     = tela
-
-	if fim_panel != null:
-		var painel_w: float = min(1120.0, tela.x - 60.0)
-		var painel_h: float = min(900.0,  tela.y - 70.0)
-
-		fim_panel.size     = Vector2(painel_w, painel_h)
-		fim_panel.position = Vector2(
-			(tela.x - painel_w) * 0.5,
-			(tela.y - painel_h) * 0.5
-		).round()
-
-		var linha_topo := fim_panel.get_node_or_null("LinhaTopo") as ColorRect
-		if linha_topo != null:
-			linha_topo.color    = COR_NEON_ARENA
-			linha_topo.position = Vector2.ZERO
-			linha_topo.size     = Vector2(painel_w, 7.0)
-
-		var linha_glow := fim_panel.get_node_or_null("LinhaGlow") as ColorRect
-		if linha_glow != null:
-			linha_glow.color    = Color(COR_NEON_ARENA.r, COR_NEON_ARENA.g, COR_NEON_ARENA.b, 0.22)
-			linha_glow.position = Vector2(0, 7)
-			linha_glow.size     = Vector2(painel_w, 28.0)
-
-	if fim_titulo != null and fim_panel != null:
-		fim_titulo.position = Vector2(40, 30)
-		fim_titulo.size     = Vector2(fim_panel.size.x - 80, 76)
-
-	if fim_score_label != null and fim_panel != null:
-		fim_score_label.position = Vector2(70, 122)
-		fim_score_label.size     = Vector2(fim_panel.size.x - 140, 170)
-
-	if fim_stats_label != null and fim_panel != null:
-		fim_stats_label.position  = Vector2(90, 330)
-		fim_stats_label.size      = Vector2(fim_panel.size.x - 180, 285)
-		fim_stats_label.clip_text = true
-
-	if fim_footer != null and fim_panel != null:
-		fim_footer.position = Vector2(120, fim_panel.size.y - 160)
-		fim_footer.size     = Vector2(fim_panel.size.x - 240, 70)
-
-	if fim_contagem_label != null and fim_panel != null:
-		fim_contagem_label.position = Vector2(80, fim_panel.size.y - 78)
-		fim_contagem_label.size     = Vector2(fim_panel.size.x - 160, 46)
-
-
-
-# ═══════════════════════════════════════════════════════════
-#  DETECÇÃO DE CLIQUE NOS ALVOS
-# ═══════════════════════════════════════════════════════════
- 
-func _detectar_alvo_no_ponto_visual(pos_global: Vector2) -> Area2D:
-	for i in range(alvos_ativos.size() - 1, -1, -1):
-		var alvo: Area2D = alvos_ativos[i]
-		if alvo == null or not is_instance_valid(alvo):
-			continue
-		if not alvo.visible:
-			continue
-		if _ponto_esta_sobre_sprite_do_alvo(alvo, pos_global):
-			return alvo
+		if acerta_sprite(l.spr, _f["mascara"], _f["cel"], p, 1):
+			return l
 	return null
- 
 
- 
-func _ponto_esta_sobre_sprite_do_alvo(alvo: Area2D, pos_global: Vector2) -> bool:
-	var anim: AnimatedSprite2D = _obter_animated_do_alvo(alvo)
-	if anim == null or anim.sprite_frames == null:
+
+## O acerto: a lanterna estoura na cor dela (quadro quebrado, clarão, cacos
+## de vidro colorido voando e caindo, faíscas e a luz batendo na parede).
+func _quebrar_vidro(l: Lanterna, c: Color, p: Vector2) -> void:
+	l.spr.frame = _f["acerto"][QUADRO_COR[l.cor]]
+	l.spr.modulate = Color(1.0 + c.r, 1.0 + c.g, 1.0 + c.b)
+	var tw = l.no.create_tween().set_parallel(true)
+	tw.tween_property(l.spr, "scale", Vector2.ONE * ESCALA_LANTERNA * 1.22, 0.06)
+	tw.tween_property(l.spr, "modulate", Color.white, 0.20)
+	tw.chain().tween_property(l.spr, "scale", Vector2.ONE * ESCALA_LANTERNA, 0.14)
+	var centro = l.no.position
+	particulas.explosao(centro, {"n": 22, "tex": Estilo.tex("fx_caco"), "vel": [220.0, 620.0], "vida": [0.45, 1.1], "tam": [8.0, 18.0],
+		"cor": c.linear_interpolate(Color.white, 0.15), "grav": 1100.0, "arrasto": 0.4, "giro": [-14.0, 14.0], "espalha": 22.0})
+	particulas.explosao(centro, {"n": 8, "tex": Estilo.tex("fx_caco"), "vel": [160.0, 420.0], "vida": [0.4, 0.9], "tam": [6.0, 12.0],
+		"cor": Color(1.0, 0.94, 0.94), "grav": 1100.0, "giro": [-14.0, 14.0], "espalha": 18.0})
+	particulas_luz.explosao(centro, {"n": 16, "vel": [180.0, 520.0], "vida": [0.3, 0.7], "tam": [6.0, 14.0], "cor": c, "grav": 400.0, "estica": 0.03})
+	particulas_luz.explosao(p, {"n": 6, "tex": Estilo.tex("fx_estrela"), "vel": [40.0, 160.0], "vida": [0.25, 0.45], "tam": [26.0, 44.0], "fim": 0.1,
+		"cor": c.linear_interpolate(Color.white, 0.4)})
+	luz_sprite_breve(centro, 360.0, Color(c.r, c.g, c.b, 0.85), 0.45)
+	luz_sprite_breve(centro, 150.0, Color(1, 1, 1, 0.8), 0.18)
+
+
+## A lanterna da vez acende na sequência: pulo, clarão e faíscas na cor.
+func _brilho_sequencia(slot: int, c: Color) -> void:
+	var l = lanternas[slot]
+	if l == null:
+		return
+	l.spr.modulate = Color(1.7, 1.7, 1.7)
+	l.spr.scale = Vector2.ONE * ESCALA_LANTERNA
+	var tw = l.no.create_tween().set_parallel(true)
+	tw.tween_property(l.spr, "scale", Vector2.ONE * ESCALA_LANTERNA * 1.18, 0.08)
+	tw.tween_property(l.spr, "modulate", Color.white, 0.22)
+	tw.chain().tween_property(l.spr, "scale", Vector2.ONE * ESCALA_LANTERNA, 0.14)
+	particulas_luz.explosao(l.no.position, {"n": 14, "vel": [160.0, 480.0], "vida": [0.4, 0.9], "tam": [6.0, 14.0], "cor": c, "arrasto": 1.2})
+	luz_sprite_breve(l.no.position, 320.0, Color(c.r, c.g, c.b, 0.75), 0.5)
+	_pisca = 1.0
+	_pisca_cor = c
+
+
+func _bip(ordem: int) -> void:
+	Maquina.efeito(_som_bip, 0.0, TONS_BIP[ordem] if ordem >= 0 and ordem < TONS_BIP.size() else 1.0)
+
+
+# ------------------------------------------------------------ parede
+## O laser que erra queima a parede: marca escura com a borda em brasa que
+## esfria, fumaça subindo e lascas de metal.
+func _marca_laser(p: Vector2) -> void:
+	Maquina.efeito(_som_parede, -6.0, rand_range(0.9, 1.1))
+	_marcas.append({"pos": p, "raio": rand_range(7.0, 10.0), "t": 0.0, "giro": randf() * TAU})
+	while _marcas.size() > 40:
+		_marcas.pop_front()
+	_brasas = true
+	_parede.update()
+	particulas.explosao(p, {"n": 5, "tex": Estilo.tex("fx_fumaca"), "vel": [20.0, 70.0], "ang": [230.0, 310.0], "vida": [0.7, 1.3],
+		"tam": [26.0, 40.0], "fim": 2.2, "cor": Color(0.08, 0.08, 0.09, 0.5), "grav": -60.0, "giro": [-1.0, 1.0]})
+	particulas_luz.explosao(p, {"n": 12, "tex": Estilo.tex("fx_faisca"), "vel": [120.0, 380.0], "vida": [0.25, 0.6], "tam": [8.0, 14.0],
+		"cor": Color(1.0, 0.75, 0.45), "grav": 700.0, "estica": 0.035})
+	particulas.explosao(p, {"n": 6, "tex": Estilo.tex("fx_caco"), "vel": [90.0, 300.0], "vida": [0.3, 0.7], "tam": [4.0, 8.0],
+		"cor": Color(0.62, 0.62, 0.66), "grav": 1000.0, "giro": [-12.0, 12.0]})
+	luz_sprite_breve(p, 90.0, Color(1.0, 0.45, 0.35, 0.7), 0.2)
+
+
+## Tiro no LED do alto: estoura (true se pegou nele aceso).
+func _tiro_no_led(p: Vector2) -> bool:
+	if _led > 0.0:
 		return false
-
-	var tex: Texture2D = anim.sprite_frames.get_frame_texture(anim.animation, anim.frame)
-	if tex == null:
+	if not LED_CAIXA.grow(16.0).has_point(imagem(p)):
 		return false
-
-	var escala: Vector2 = anim.global_scale
-	var largura: float = tex.get_width() * abs(escala.x)
-	var altura: float = tex.get_height() * abs(escala.y)
-
-	# Centro visual ajustado para o corpo redondo da lanterna.
-	# Positivo no Y desce o centro.
-	var centro: Vector2 = anim.global_position + Vector2(0.0, altura * 0.08)
-
-	# Área redonda maior, sem pegar o sprite inteiro.
-	var raio: float = min(largura, altura) * 0.36
-
-	return centro.distance_to(pos_global) <= raio
- 
-
- 
-func _obter_animated_do_alvo(alvo: Area2D) -> AnimatedSprite2D:
-	if alvo == null:
-		return null
-	for filho in alvo.get_children():
-		if filho is AnimatedSprite2D:
-			return filho as AnimatedSprite2D
-	return null
- 
-
- 
-func _resetar_visual_arco(alvo: Area2D) -> void:
-	if alvo == null or not is_instance_valid(alvo):
-		return
-
-	var anim: AnimatedSprite2D = _obter_animated_do_alvo(alvo)
-	if anim == null:
-		return
-
-	anim.visible = true
-	anim.show()
-	anim.process_mode = Node.PROCESS_MODE_INHERIT
-	anim.position = Vector2.ZERO
-	anim.rotation_degrees = 0.0
-	anim.scale = Vector2.ONE
-	anim.modulate = Color.WHITE
-
-	if anim.sprite_frames != null:
-		if anim.sprite_frames.has_animation("idle"):
-			anim.play("idle")
-		elif anim.sprite_frames.has_animation("default"):
-			anim.play("default")
-		elif anim.sprite_frames.get_animation_names().size() > 0:
-			anim.play(String(anim.sprite_frames.get_animation_names()[0]))
+	_led = LED_APAGADO
+	_led_clarao = 1.0
+	_led_fumaca = 0.0
+	var g = tela(GIROFLEX)
+	particulas_luz.explosao(g, {"n": 26, "tex": Estilo.tex("fx_faisca"), "vel": [120.0, 360.0], "ang": [180.0, 360.0], "vida": [0.4, 0.9],
+		"tam": [10.0, 16.0], "cor": Color(1.0, 0.8, 0.45), "grav": 900.0, "estica": 0.04})
+	# o vidro vermelho da lâmpada se parte e cai (cacos da própria pintura)
+	var esc = Tela.TELA.x / 1080.0
+	var caixa = Rect2(tela(LED_CAIXA.position), LED_CAIXA.size * K_FUNDO)
+	var px = Rect2(caixa.position / esc, caixa.size / esc)
+	var tex = _fundo_fixa.texture if modo_fixo else _fundo.texture
+	cacos.estourar(tex, px, Transform2D(Vector2(esc, 0), Vector2(0, esc), caixa.position + caixa.size * 0.5), p,
+		{"n": 8, "forca": 0.7, "grav": 1200.0, "vida": 1.3, "sobe": 120.0})
+	particulas.explosao(g, {"n": 14, "tex": Estilo.tex("fx_caco"), "vel": [60.0, 200.0], "ang": [200.0, 340.0], "vida": [0.8, 1.4],
+		"tam": [5.0, 10.0], "cor": Color(1.0, 0.25, 0.18), "grav": 900.0, "giro": [-14.0, 14.0]})
+	Maquina.efeito(_som_led, -4.0, rand_range(0.95, 1.05))
+	tremer(4.0, 0.15)
+	_parede.update()
+	return true
 
 
- 
-# ═══════════════════════════════════════════════════════════
-#  EFEITOS VISUAIS DE COLISÃO
-# ═══════════════════════════════════════════════════════════
- 
-func _registrar_fx_colisao(pos: Vector2, pontos_ganhos: int, cor: Color) -> void:
-	# caixa-preta: o primeiro acerto de cada partida (scripts/caixa_preta.gd)
-	Tela.marca_primeiro("acerto", "%+d" % pontos_ganhos)
-	var quantidade: int = 18
-	if pontos_ganhos >= 100:
-		quantidade = 42
-	elif pontos_ganhos >= 50:
-		quantidade = 28
- 
-	for i in range(quantidade):
-		var ang: float = randf_range(0.0, TAU)
-		var vel: Vector2 = Vector2.RIGHT.rotated(ang) * randf_range(80.0, 420.0)
-		fx_colisao.append({
-			"pos":   pos,
-			"vel":   vel,
-			"vida":  randf_range(0.28, 0.72),
-			"idade": 0.0,
-			"tam":   randf_range(3.0, 9.0),
-			"cor":   cor
-		})
- 
-	if pontos_ganhos > 0:
-		fx_colisao.append({
-			"texto": "+%d" % pontos_ganhos,
-			"pos":   pos + Vector2(0, -34),
-			"vel":   Vector2(0, -75),
-			"vida":  0.72,
-			"idade": 0.0,
-			"tam":   28.0,
-			"cor":   cor
-		})
-	else:
-		fx_colisao.append({
-			"texto": "ERROU",
-			"pos":   pos + Vector2(0, -28),
-			"vel":   Vector2(0, -55),
-			"vida":  0.58,
-			"idade": 0.0,
-			"tam":   24.0,
-			"cor":   Color.RED
-		})
- 
- 
-func _atualizar_fx_colisao(delta: float) -> void:
-	for i in range(fx_colisao.size() - 1, -1, -1):
-		var fx: Dictionary = fx_colisao[i]
-		var idade: float   = float(fx.get("idade", 0.0)) + delta
-		var vida: float    = float(fx.get("vida", 0.4))
-		if idade >= vida:
-			fx_colisao.remove_at(i)
-			continue
-		var pos: Vector2 = fx.get("pos", Vector2.ZERO)
-		var vel: Vector2 = fx.get("vel", Vector2.ZERO)
-		vel.y += 380.0 * delta
-		pos   += vel * delta
-		fx["idade"] = idade
-		fx["pos"]   = pos
-		fx["vel"]   = vel
-		fx_colisao[i] = fx
- 
- 
-func _desenhar_fx_colisao() -> void:
-	if fx_layer_jogo == null:
-		return
+## Quanto a luz do alto está acesa agora (0 apagada .. 1; pisca ao voltar).
+func _led_aceso() -> float:
+	if _led <= 0.0:
+		return 1.0
+	if _led < 1.4:
+		return 1.0 if fmod(_led * 6.5, 1.0) > 0.35 + 0.4 * (_led / 1.4) else 0.0
+	return 0.0
 
-	for fx in fx_colisao:
-		var idade: float = float(fx.get("idade", 0.0))
-		var vida: float = max(float(fx.get("vida", 0.4)), 0.01)
-		var alpha: float = clamp(1.0 - idade / vida, 0.0, 1.0)
 
-		var pos: Vector2 = fx.get("pos", Vector2.ZERO)
-		var cor: Color = fx.get("cor", Color.WHITE)
-		cor.a *= alpha
-
-		if fx.has("texto"):
-			var fonte := ThemeDB.fallback_font
-			fx_layer_jogo.draw_string(fonte, pos, str(fx.get("texto", "")), HORIZONTAL_ALIGNMENT_CENTER, 240.0, int(fx.get("tam", 24.0)), cor)
-
-		elif bool(fx.get("fumaca", false)):
-			var tam_fumaca: float = float(fx.get("tam", 10.0))
-			Pincel.forma(fx_layer_jogo, Pincel.FUMACA, pos, tam_fumaca * alpha, cor)
-
-		elif bool(fx.get("metal", false)):
-			var tam: float = float(fx.get("tam", 5.0))
-			Pincel.caco(fx_layer_jogo, pos, tam, idade * 9.0, cor)
-
-		else:
-			var tam2: float = float(fx.get("tam", 5.0))
-			Pincel.circulo(fx_layer_jogo, pos, tam2 * alpha, cor)
-			Pincel.circulo(fx_layer_jogo, pos, tam2 * 0.38 * alpha, Color.WHITE)
-
- 
-# ═══════════════════════════════════════════════════════════
-#  MENSAGENS DE RODAPÉ
-# ═══════════════════════════════════════════════════════════
- 
-func _adicionar_chat_rodape(texto: String, cor: Color) -> void:
-	# sem faixa no rodapé (AvisoTiro): os pontos saltam da mira, o erro sai
-	# pequeno perto dela e os recados da sequência vão na pílula de cima
-	status_msgs.clear()
-	_atualizar_status_labels()
-	if chat_rodape_panel != null:
-		chat_rodape_panel.visible = false
-	if texto.begins_with("+"):
-		AvisoTiro.pontos(self, mira_pos, texto.get_slice(" ", 0), Color(1.0, 0.85, 0.35))
-	elif texto.begins_with("ERROU") or texto.begins_with("SEM MUNI") or texto.begins_with("ORDEM ERRADA"):
-		AvisoTiro.mostrar(self, mira_pos, texto.get_slice("|", 0).strip_edges(), cor.lerp(Color.WHITE, 0.45))
-	else:
-		AvisoTiro.instrucao(self, texto, cor.lerp(Color.WHITE, 0.3))
- 
- 
-func _atualizar_chat_rodape(delta: float) -> void:
-	# Chat fixo: não remove mensagens por tempo.
-	# As mensagens só são trocadas quando uma nova jogada acontece.
-	_atualizar_status_labels()
- 
- 
-func _atualizar_status_labels() -> void:
-	var tem_msg: bool = status_msgs.size() > 0
-
-	if chat_rodape_panel != null:
-		chat_rodape_panel.visible = tem_msg
-
-	for i in range(status_labels.size()):
-		var lbl: Label = status_labels[i]
-
-		if lbl == null:
-			continue
-
-		if i == 0 and tem_msg:
-			var msg: Dictionary = status_msgs[0]
-			var texto: String = str(msg.get("text", ""))
-			var cor: Color = msg.get("cor", Color.WHITE)
-
-			lbl.text = texto
-			lbl.visible = true
-			lbl.scale = Vector2.ONE
-			lbl.modulate = Color(cor.r, cor.g, cor.b, 1.0)
-
-			Leve.font_size(lbl, "font_size", 40)
-			Leve.color(lbl, "font_color", Color.WHITE)
-			Leve.color(lbl, "font_outline_color", Color.BLACK)
-			Leve.constant(lbl, "outline_size", 8)
-
-			if chat_rodape_panel != null:
-				var estilo := chat_rodape_panel.get_theme_stylebox("panel") as StyleBoxFlat
-				if estilo == null:
-					estilo = _estilo_card_arena()
-					Leve.stylebox(chat_rodape_panel, "panel", estilo)
-
-				Leve.prop(estilo, "bg_color", Color(0.025, 0.0, 0.0, 0.86))
-				Leve.prop(estilo, "border_color", cor)
-				Leve.prop(estilo, "shadow_color", Color(cor.r, cor.g, cor.b, 0.72))
-				Leve.prop(estilo, "shadow_size", 34)
-
-				chat_rodape_panel.modulate = Color.WHITE
-
-				var tw := create_tween()
-				tw.tween_property(chat_rodape_panel, "scale", Vector2(1.015, 1.10), 0.07)
-				tw.tween_property(chat_rodape_panel, "scale", Vector2.ONE, 0.14)
-
-		else:
-			lbl.visible = false
- 
- 
-
-# ═══════════════════════════════════════════════════════════
-#  MUNIÇÃO E RECARGA
-# ═══════════════════════════════════════════════════════════
- 
-func _iniciar_recarga() -> void:
-	if not jogo_ativo or recarregando:
-		return
-	if municao_atual >= capacidade_cartucho:
-		return
-		
-	_resetar_timer_jogada()
-	
-	recarregando          = true
-	reload_tempo_restante = tempo_recarga_seg
-	if audio_recarga != null:
-		audio_recarga.stop()
-		audio_recarga.play()
-	_atualizar_hud()
-	if mira_root != null:
-		mira_root.queue_redraw()
- 
- 
-func _finalizar_recarga() -> void:
-	recarregando          = false
-	reload_tempo_restante = 0.0
-	municao_atual         = capacidade_cartucho
-	_atualizar_hud()
-	if mira_root != null:
-		mira_root.queue_redraw()
- 
- 
-# ═══════════════════════════════════════════════════════════
-#  FLUXO DE PARTIDA
-# ═══════════════════════════════════════════════════════════
- 
-func _iniciar_partida() -> void:
-	jogo_iniciado          = true
-	jogo_ativo             = true
-	intro_comeco_ativa     = false
-	tempo_restante         = tempo_total
-	pontuacao              = 0
-	tiros                  = 0
-	acertos                = 0
-	municao_atual          = capacidade_cartucho
-	recarregando           = false
-	reload_tempo_restante  = 0.0
-	nivel_sequencia        = 1
-	indice_sequencia       = 0
-	sequencia_atual.clear()
-	mostrando_sequencia    = false
-	bloqueia_tiro_sequencia = false
-	modo_fixo              = false
+func _encerrou() -> void:
 	_rodada += 1
-	
-	if info_inicio_texture != null:
-		info_inicio_texture.visible = false
- 
-	if modal_layer != null:
-		modal_layer.visible = false
-	if countdown_root != null:
-		countdown_root.visible = false
- 
-	_limpar_alvos()
-	timer_jogo.start()
-	timer_spawn.stop()
- 
-	_gerar_onda_inicial()
-	_atualizar_hud()
- 
-	call_deferred("_iniciar_nova_sequencia")
- 
- 
-func _encerrar_partida() -> void:
-	if not jogo_ativo:
-		return
-
-	jogo_ativo = false
-	jogo_iniciado = true
-	intro_comeco_ativa = false
-	recarregando = false
-	reload_tempo_restante = 0.0
-	mostrando_sequencia = false
-	bloqueia_tiro_sequencia = true
-	_rodada += 1
-	if _vivo != null:
-		_vivo.modo(false)
-
-	timer_jogo.stop()
-	timer_spawn.stop()
-
-	# LIMPA O QUE FICAVA FEIO/TRAVADO NO FUNDO
-	_limpar_alvos()
-	fx_colisao.clear()
-	marcas_laser_parede.clear()
-	status_msgs.clear()
-
-	if fx_layer_jogo != null:
-		fx_layer_jogo.queue_redraw()
-
-	for lbl in status_labels:
-		if lbl != null:
-			lbl.visible = false
-
-	if hud_layer_codigo != null:
-		hud_layer_codigo.visible = false
-
-	if mira_layer != null:
-		mira_layer.visible = false
-
-	if countdown_root != null:
-		countdown_root.visible = false
-
-	if modal_layer != null:
-		modal_layer.visible = false
-
-	_atualizar_hud()
-	_parar_musica_arena()
-	_mostrar_modal_fim()
-
-	print("Fim de jogo — Pontuação: %d  |  Nível: %d" % [pontuacao, nivel_sequencia])
-
- 
-# ═══════════════════════════════════════════════════════════
-#  TIMERS
-# ═══════════════════════════════════════════════════════════
- 
-func _on_timer_jogo_timeout() -> void:
-	if not jogo_ativo:
-		return
-	tempo_restante -= 1.0
-	if tempo_restante <= 0.0:
-		tempo_restante = 0.0
-		_atualizar_hud()
-		_encerrar_partida()
-		return
-	_atualizar_hud()
- 
- 
-func _on_timer_spawn_timeout() -> void:
-	if not jogo_ativo:
-		return
-	_garantir_3_alvos()
- 
- 
-func _on_viewport_size_changed() -> void:
-	_configurar_background_fullscreen()
-	_configurar_pontos_spawn()
-	_reposicionar_modal()
-	_reposicionar_intro_comeco()
-	_ajustar_layout_hud_bar()
-	_atualizar_hud()
- 
- 
-# ═══════════════════════════════════════════════════════════
-#  MIRA CUSTOMIZADA
-# ═══════════════════════════════════════════════════════════
- 
-func _configurar_mira() -> void:
-	mira_layer       = CanvasLayer.new()
-	mira_layer.layer = 100
-	add_child(mira_layer)
- 
-	mira_root = Control.new()
-	mira_root.set_anchors_preset(Control.PRESET_FULL_RECT)
-	mira_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	mira_root.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
-	mira_layer.add_child(mira_root)
- 
-	mira_root.draw.connect(_desenhar_mira)
- 
- 
-func _desenhar_mira() -> void:
-	if mira_root == null:
-		return
-
-	var cor_principal := Color(1.0, 0.04, 0.04, 0.95)
-
-	if ranking_nome_ativo:
-		cor_principal = Color(1.0, 0.04, 0.04, 1.0)
-	elif mostrando_sequencia or bloqueia_tiro_sequencia:
-		cor_principal = Color(0.60, 0.60, 0.60, 0.70)
-	elif recarregando:
-		cor_principal = Color(0.20, 0.85, 1.0, 0.95)
-	elif municao_atual <= 0:
-		cor_principal = Color(1.0, 0.12, 0.08, 0.95)
-	elif municao_atual <= alerta_baixa_municao_limite:
-		cor_principal = Color(1.0, 0.45, 0.05, 0.95)
-
-	Pincel.mira_inicio(mira_root, mira_pos)
-	Pincel.anel(mira_root, mira_pos, 20.0, 3.0, cor_principal)
-	Pincel.anel(mira_root, mira_pos, 8.0, 1.4, Color.WHITE)
-	Pincel.circulo(mira_root, mira_pos, 2.6, Color.WHITE)
-	Pincel.linha(mira_root, mira_pos + Vector2(-27, 0), mira_pos + Vector2(-9, 0), Color.WHITE, 2.2)
-	Pincel.linha(mira_root, mira_pos + Vector2(9, 0), mira_pos + Vector2(27, 0), Color.WHITE, 2.2)
-	Pincel.linha(mira_root, mira_pos + Vector2(0, -27), mira_pos + Vector2(0, -9), Color.WHITE, 2.2)
-	Pincel.linha(mira_root, mira_pos + Vector2(0, 9), mira_pos + Vector2(0, 27), Color.WHITE, 2.2)
-
-	if recarregando and not ranking_nome_ativo:
-		var pct: float = 1.0 - clamp(reload_tempo_restante / max(tempo_recarga_seg, 0.01), 0.0, 1.0)
-		Pincel.arco(mira_root, mira_pos, 34.0, -PI / 2.0, -PI / 2.0 + TAU * pct, Color(0.20, 0.85, 1.0, 1.0), 5.0)
-	Pincel.mira_fim(mira_root)
-
-# ═══════════════════════════════════════════════════════════
-#  HUD
-# ═══════════════════════════════════════════════════════════
- 
-func _configurar_hud_bar_padrao() -> void:
-	if hud_layer != null:
-		hud_layer.visible = false
- 
-	hud_layer_codigo       = CanvasLayer.new()
-	hud_layer_codigo.name  = "HudBarPadraoArena"
-	hud_layer_codigo.layer = 80
-	add_child(hud_layer_codigo)
- 
-	hud_root = Control.new()
-	hud_root.name = "HudRoot"
-	hud_root.set_anchors_preset(Control.PRESET_FULL_RECT)
-	hud_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	hud_layer_codigo.add_child(hud_root)
- 
-	top_bar_sombra         = ColorRect.new()
-	top_bar_sombra.color   = Color(0, 0, 0, 0.42)
-	top_bar_sombra.visible = false
-	hud_root.add_child(top_bar_sombra)
-
-	top_bar = Panel.new()
-	Leve.stylebox(top_bar, "panel", _estilo_card_arena())
-	hud_root.add_child(top_bar)
-
-	top_bar_linha         = ColorRect.new()
-	top_bar_linha.color   = Color(0.90, 0.02, 0.02, 1.0)
-	top_bar_linha.visible = false
-	hud_root.add_child(top_bar_linha)
-
-	timer_panel   = _criar_painel_bar()
-	score_panel   = _criar_painel_bar()
-	municao_panel = _criar_painel_bar()
-
-	stats_arena_panel = Panel.new()
-	Leve.stylebox(stats_arena_panel, "panel", _estilo_card_arena())
-	stats_arena_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	hud_root.add_child(stats_arena_panel)
- 
-	timer_title_label  = _criar_label_hud("TEMPO",     18, Color(1.0, 0.05, 0.05, 1.0))
-	timer_label        = _criar_label_hud("02:00",     44, Color.WHITE)
-	score_title_label  = _criar_label_hud("PONTUAÇÃO", 18, Color(1.0, 0.05, 0.05, 1.0))
-	score_label        = _criar_label_hud("0",         64, Color.WHITE)
-	municao_title_label = _criar_label_hud("MUNIÇÃO",  16, Color(1.0, 0.05, 0.05, 1.0))
-	municao_label      = _criar_label_hud("30/30",     15, Color.WHITE)
-	recarga_label = _criar_label_hud(
-			_texto_hud_recarga_padrao(),
-			13,
-			Color(0.76, 0.88, 1.0, 0.95)
-		)
-	acertos_title_label = _criar_label_hud("ACERTOS",  15, Color(1.0, 0.05, 0.05, 1.0))
-	acertos_label      = _criar_label_hud("0",         32, Color.WHITE)
-	tiros_title_label  = _criar_label_hud("TIROS",     14, Color(1.0, 0.05, 0.05, 1.0))
-	tiros_label        = _criar_label_hud("0",         30, Color.WHITE)
-	nivel_title_label  = _criar_label_hud("NÍVEL",     15, Color(1.0, 0.05, 0.05, 1.0))
-	nivel_label        = _criar_label_hud("1",         32, Color(0.30, 0.85, 1.0, 1.0))
- 
-	hud_root.add_child(timer_title_label)
-	hud_root.add_child(timer_label)
-	hud_root.add_child(score_title_label)
-	hud_root.add_child(score_label)
-	hud_root.add_child(municao_title_label)
-	hud_root.add_child(municao_label)
-	hud_root.add_child(recarga_label)
-	hud_root.add_child(acertos_title_label)
-	hud_root.add_child(acertos_label)
-	hud_root.add_child(tiros_title_label)
-	hud_root.add_child(tiros_label)
-	hud_root.add_child(nivel_title_label)
-	hud_root.add_child(nivel_label)
-	
-	chat_rodape_panel = Panel.new()
-	chat_rodape_panel.name = "ChatRodapePanel"
-	Leve.stylebox(chat_rodape_panel, "panel", _estilo_card_arena())
-	chat_rodape_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	chat_rodape_panel.visible = false
-	hud_root.add_child(chat_rodape_panel)
- 
-	for lbl_antigo in status_labels:
-		if lbl_antigo != null and is_instance_valid(lbl_antigo):
-			lbl_antigo.queue_free()
-	status_labels.clear()
- 
-	for i in range(3):
-		var lbl := Label.new()
-		lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		lbl.vertical_alignment   = VERTICAL_ALIGNMENT_CENTER
-		Leve.font_size(lbl, "font_size", 34 - (i * 4))
-		Leve.color(lbl, "font_color", Color.WHITE)
-		Leve.color(lbl, "font_outline_color", Color.BLACK)
-		Leve.constant(lbl, "outline_size", 7)
-		lbl.visible = false
-		hud_root.add_child(lbl)
-		status_labels.append(lbl)
- 
-	_criar_blocos_municao_bar()
-	_ajustar_layout_hud_bar()
-	_atualizar_hud()
- 
- 
-## Placar compacto (scripts/placar.gd) no lugar do placar alto antigo.
-func _instalar_placar() -> void:
-	var velhos: Array = [top_bar_sombra, top_bar, top_bar_linha, timer_panel, score_panel, municao_panel,
-		stats_arena_panel, timer_title_label, timer_label, score_title_label, score_label,
-		municao_title_label, municao_label, recarga_label, acertos_title_label, acertos_label,
-		tiros_title_label, tiros_label, nivel_title_label, nivel_label]
-	_placar = Placar.instalar(self, hud_root, velhos, _dados_placar, 80)
-
-
-func _dados_placar() -> Dictionary:
-	var extra_titulo: String = "NÍVEL"
-	var extra: String = str(nivel_sequencia)
-	var extra_cor: Color = Color(0.40, 0.85, 1.0)
-	if modo_fixo:
-		extra_titulo = "FIXA"
-		extra = "%d/%d" % [mini(indice_sequencia, CORES_SEQ.size()), CORES_SEQ.size()]
-	if jogo_ativo and not sequencia_atual.is_empty() and indice_sequencia < sequencia_atual.size():
-		# a cor do valor é a da próxima lanterna
-		extra_cor = CORES_FX[CORES_SEQ[indice_sequencia]].lerp(Color.WHITE, 0.15)
-	return {
-		"tempo": tempo_restante, "pontos": pontuacao,
-		"municao": municao_atual, "municao_max": capacidade_cartucho,
-		"recarregando": recarregando,
-		"recarga": 1.0 - reload_tempo_restante / maxf(tempo_recarga_seg, 0.01),
-		"acertos": acertos, "tiros": tiros,
-		"extra_titulo": extra_titulo, "extra": extra, "extra_cor": extra_cor,
-		"cor": Color(1.0, 0.16, 0.12) if not modo_fixo else Color(0.75, 0.40, 1.0),
-	}
-
-
-## Vida do fundo da Arena (scripts/arena_vivo.gd), entre o fundo e as lanternas.
-func _criar_vivo() -> void:
-	if background == null or not (background is Sprite2D):
-		return
-	_vivo = ArenaVivo.new()
-	_vivo.name = "ArenaVivo"
-	_vivo.arena = self
-	_vivo.fundo = background as Sprite2D
-	add_child(_vivo)
-	move_child(_vivo, background.get_index() + 1)
-
-
-## Troca de arte da rodada: fixa = neon nas 5 cores, furos frios, faixa de
-## varredura e letreiro; memória = a arena vermelha de sempre.
-func _arte_modo(fixo: bool) -> void:
-	if _vivo != null:
-		_vivo.modo(fixo)
-
-
-func _criar_painel_bar() -> Panel:
-	var painel := Panel.new()
-	Leve.stylebox(painel, "panel", _estilo_card_arena())
-	painel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	hud_root.add_child(painel)
-	return painel
- 
- 
-func _criar_label_hud(texto: String, tamanho: int, cor: Color) -> Label:
-	var lbl := Label.new()
-	lbl.text = texto
-	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	lbl.vertical_alignment   = VERTICAL_ALIGNMENT_CENTER
-	Leve.font_size(lbl, "font_size", tamanho)
-	Leve.color(lbl, "font_color", cor)
-	Leve.color(lbl, "font_outline_color", Color.BLACK)
-	Leve.constant(lbl, "outline_size", 4)
-	return lbl
- 
- 
-
-func _ajustar_layout_hud_bar() -> void:
-	var tela: Vector2 = get_viewport_rect().size
-	var tela_w: int = int(round(tela.x))
-
-	if hud_root != null:
-		hud_root.size = tela
-
-	if top_bar != null:
-		top_bar.position = Vector2(8, 8)
-		top_bar.size = Vector2(tela_w - 16, 230)
-
-	if top_bar_sombra != null:
-		top_bar_sombra.visible = false
-
-	if top_bar_linha != null:
-		top_bar_linha.visible = false
-
-	var py: int = 22
-	var ph: int = 198
-	var gap: int = 14
-
-	# TEMPO
-	var tp_x: int = 22
-	var tp_w: int = 210
-
-	if timer_panel != null:
-		timer_panel.position = Vector2(tp_x, py)
-		timer_panel.size = Vector2(tp_w, ph)
-
-	if timer_title_label != null:
-		timer_title_label.position = Vector2(tp_x, py + 16)
-		timer_title_label.size = Vector2(tp_w, 28)
-
-	if timer_label != null:
-		timer_label.position = Vector2(tp_x, py + 58)
-		timer_label.size = Vector2(tp_w, 66)
-
-	# PONTUAÇÃO
-	var sc_x: int = tp_x + tp_w + gap
-	var sc_w: int = 360
-
-	if score_panel != null:
-		score_panel.position = Vector2(sc_x, py)
-		score_panel.size = Vector2(sc_w, ph)
-
-	if score_title_label != null:
-		score_title_label.position = Vector2(sc_x, py + 16)
-		score_title_label.size = Vector2(sc_w, 28)
-
-	if score_label != null:
-		score_label.position = Vector2(sc_x, py + 48)
-		score_label.size = Vector2(sc_w, 92)
-
-	# STATS: NÍVEL / ACERTOS / TIROS
-	var st_w: int = 190
-	var st_x: int = tela_w - st_w - 22
-
-	if stats_arena_panel != null:
-		stats_arena_panel.position = Vector2(st_x, py)
-		stats_arena_panel.size = Vector2(st_w, ph)
-
-	var st_pad: int = 12
-
-	if nivel_title_label != null:
-		nivel_title_label.position = Vector2(st_x + st_pad, py + 10)
-		nivel_title_label.size = Vector2(st_w - st_pad * 2, 20)
-
-	if nivel_label != null:
-		nivel_label.position = Vector2(st_x + st_pad, py + 30)
-		nivel_label.size = Vector2(st_w - st_pad * 2, 34)
-
-	if acertos_title_label != null:
-		acertos_title_label.position = Vector2(st_x + st_pad, py + 72)
-		acertos_title_label.size = Vector2(st_w - st_pad * 2, 20)
-
-	if acertos_label != null:
-		acertos_label.position = Vector2(st_x + st_pad, py + 92)
-		acertos_label.size = Vector2(st_w - st_pad * 2, 34)
-
-	if tiros_title_label != null:
-		tiros_title_label.position = Vector2(st_x + st_pad, py + 134)
-		tiros_title_label.size = Vector2(st_w - st_pad * 2, 20)
-
-	if tiros_label != null:
-		tiros_label.position = Vector2(st_x + st_pad, py + 154)
-		tiros_label.size = Vector2(st_w - st_pad * 2, 34)
-
-	# MUNIÇÃO
-	var mu_x: int = sc_x + sc_w + gap
-	var mu_w: int = st_x - mu_x - gap
-
-	if mu_w < 250:
-		mu_w = 250
-		mu_x = st_x - mu_w - gap
-
-	if municao_panel != null:
-		municao_panel.position = Vector2(mu_x, py)
-		municao_panel.size = Vector2(mu_w, ph)
-
-	if municao_title_label != null:
-		municao_title_label.position = Vector2(mu_x, py + 12)
-		municao_title_label.size = Vector2(mu_w, 24)
-
-	if municao_label != null:
-		municao_label.position = Vector2(mu_x, py + 104)
-		municao_label.size = Vector2(mu_w, 30)
-
-	if recarga_label != null:
-		recarga_label.position = Vector2(mu_x, py + 142)
-		recarga_label.size = Vector2(mu_w, 32)
-
-	# CHAT / STATUS RODAPÉ COM BARRA NEON
-	var chat_w: float = float(tela_w) - 48.0
-	var chat_h: float = 68.0
-	var chat_x: float = 24.0
-	var chat_y: float = tela.y - 104.0
-
-	if chat_rodape_panel != null:
-		chat_rodape_panel.position = Vector2(chat_x, chat_y)
-		chat_rodape_panel.size = Vector2(chat_w, chat_h)
-
-	for i in range(status_labels.size()):
-		var lbl := status_labels[i]
-		if lbl == null:
+	bloqueado = true
+	mostrando = false
+	for i in 9:
+		var l = lanternas[i]
+		if l == null:
 			continue
+		var tw = l.no.create_tween()
+		tw.tween_property(l.no, "modulate:a", 0.0, 0.4)
+		tw.tween_callback(l.no, "queue_free")
+		lanternas[i] = null
 
-		if i == 0:
-			lbl.position = Vector2(chat_x + 18.0, chat_y + 4.0)
-			lbl.size = Vector2(chat_w - 36.0, chat_h - 8.0)
-		else:
-			lbl.visible = false
 
-	_atualizar_barra_municao_bar()
+# ------------------------------------------------------------ vida da arena
+func _sempre(delta: float) -> void:
+	_t += delta
+	var som = Maquina.pulso_vivo()
+	# o logo e os anéis acendem com a música (a cor do furo pisca na sequência)
+	var a_logo = clamp(0.10 + 0.45 * som.x + 0.35 * som.y + 0.08 * sin(_t * 2.3), 0.0, 1.0)
+	var a_led = _led_aceso()
+	_logo.modulate.a = a_logo * (0.35 + 0.65 * a_led)
+	_logo_fixa.modulate.a = _logo.modulate.a
+	for i in 9:
+		var a = clamp(0.12 + 0.5 * som.x + 0.3 * som.y + 0.15 * sin(_t * 3.1 + i * 1.7), 0.0, 1.0)
+		_aneis[i].modulate.a = a
+		_aneis_fixa[i].modulate.a = a
+	_giro = max(0.0, _giro - delta)
+	_pisca = max(0.0, _pisca - delta * 2.6)
+	if _led > 0.0 or _led_clarao > 0.0:
+		_animar_led(delta)
+	if _varre >= 0.0:
+		_varre += delta / 0.9
+		if _varre > 1.0:
+			_varre = -1.0
+	# vapor dos canos e faíscas da caixa elétrica, de vez em quando
+	_prox_vapor -= delta
+	if _prox_vapor <= 0.0:
+		_prox_vapor = rand_range(4.0, 8.5)
+		var v: Vector2 = VAPOR[randi() % VAPOR.size()]
+		var dir = -1.0 if v.x > 512.0 else 1.0
+		Maquina.efeito(_som_vapor, -17.0, rand_range(0.85, 1.15))
+		_vapor.explosao(tela(v), {"n": 9, "tex": Estilo.tex("fx_nuvem"), "vel": [40.0, 110.0], "ang": [-50.0 if dir > 0 else 192.0, -12.0 if dir > 0 else 230.0],
+			"vida": [1.2, 2.0], "tam": [30.0, 50.0], "fim": 3.0, "cor": Color(0.78, 0.80, 0.84, 0.30), "grav": -16.0, "arrasto": 0.6})
+	_prox_faisca -= delta
+	if _prox_faisca <= 0.0:
+		_prox_faisca = rand_range(6.0, 13.0)
+		particulas_luz.explosao(tela(CAIXA_ELETRICA), {"n": randi() % 7 + 8, "tex": Estilo.tex("fx_faisca"), "vel": [80.0, 300.0], "ang": [190.0, 350.0],
+			"vida": [0.4, 0.9], "tam": [8.0, 14.0], "cor": Color(1.0, 0.75, 0.3), "grav": 900.0, "estica": 0.035})
+		luz_sprite_breve(tela(CAIXA_ELETRICA), 120.0, Color(1.0, 0.7, 0.3, 0.6), 0.3)
+		Maquina.efeito(_som_faisca, -15.0, rand_range(0.9, 1.1))
+	for p in _poeira:
+		p["pos"] += p["vel"] * delta
+		if p["pos"].y < 0.0 or p["pos"].y > 1.0 or abs(p["pos"].x) > 0.6:
+			p["pos"] = Vector2(rand_range(-0.5, 0.5), rand_range(0.6, 1.0))
+	if _brasas:
+		_brasas = false
+		for m in _marcas:
+			m["t"] += delta
+			if m["t"] < 1.6:
+				_brasas = true
+		_parede.update()
+	_brilhos.update()
 
- 
- 
-func _criar_blocos_municao_bar() -> void:
-	municao_blocos.clear()
-	if municao_panel == null:
+
+func _animar_led(delta: float) -> void:
+	var antes = _led
+	_led = max(0.0, _led - delta)
+	_led_clarao = max(0.0, _led_clarao - delta * 2.4)
+	if _led > 1.4:
+		# a lâmpada queimada solta fumaça e de vez em quando estala
+		_led_fumaca -= delta
+		if _led_fumaca <= 0.0:
+			_led_fumaca = rand_range(0.25, 0.5)
+			var g = tela(GIROFLEX)
+			_vapor.soltar(g + Vector2(rand_range(-10.0, 10.0), -4.0), Vector2(rand_range(-12.0, 12.0), rand_range(-40.0, -22.0)), rand_range(1.0, 1.6),
+				18.0, 44.0, Color(0.55, 0.55, 0.58, 0.35), Color(0.55, 0.55, 0.58, 0.0), Estilo.tex("fx_nuvem"))
+			if randf() < 0.18:
+				particulas_luz.explosao(g, {"n": randi() % 4 + 3, "tex": Estilo.tex("fx_faisca"), "vel": [60.0, 200.0], "ang": [190.0, 350.0],
+					"vida": [0.3, 0.6], "tam": [8.0, 12.0], "cor": Color(1.0, 0.75, 0.3), "grav": 900.0, "estica": 0.035})
+	if antes >= 1.4 and _led < 1.4:
+		Maquina.efeito(_som_faisca, -14.0, 1.3)        # religando
+	if (antes > 0.0) != (_led > 0.0) or _led < 1.4:
+		_parede.update()
+
+
+func _desenhar_parede() -> void:
+	var brilho = Estilo.tex("fx_brilho")
+	var ponto = Estilo.tex("fx_ponto")
+	# marcas do laser: queimado escuro, miolo preto e a borda em brasa esfriando
+	for m in _marcas:
+		var p: Vector2 = m["pos"]
+		var r: float = m["raio"]
+		_parede.draw_texture_rect(brilho, Rect2(p - Vector2(r, r) * 3.2, Vector2(r, r) * 6.4), false, Color(0.0, 0.0, 0.0, 0.55))
+		_parede.draw_texture_rect(ponto, Rect2(p - Vector2(r, r), Vector2(r, r) * 2.0), false, Color(0.02, 0.02, 0.02, 0.95))
+		var k = clamp(1.0 - m["t"] / 1.6, 0.0, 1.0)
+		if k > 0.0:
+			_parede.draw_texture_rect(brilho, Rect2(p - Vector2(r, r) * 1.6, Vector2(r, r) * 3.2), false, Color(1.0, 0.45 + 0.3 * k, 0.15, 0.85 * k))
+	# a luz do alto queimada: vidro escuro, trincado, e a parede sem o brilho
+	if _led_aceso() < 0.5:
+		var esc = K_FUNDO
+		var g = tela(GIROFLEX)
+		_parede.draw_texture_rect(brilho, Rect2(g + Vector2(-78, -70) * esc, Vector2(156, 156) * esc), false, Color(0, 0, 0, 0.62))
+		_parede.draw_texture_rect(brilho, Rect2(g + Vector2(-92, -58) * esc, Vector2(184, 184) * esc), false, Color(0, 0, 0, 0.5))
+		var r = Rect2(tela(LED_CAIXA.position + Vector2(3, 3)), (LED_CAIXA.size - Vector2(6, 6)) * esc)
+		_parede.draw_rect(r, Color(0.10, 0.03, 0.03, 0.96))
+		_parede.draw_rect(Rect2(r.position, Vector2(r.size.x, r.size.y * 0.35)), Color(0.35, 0.12, 0.12, 0.35))
+		var c = r.position + r.size * 0.5 + Vector2(-4.0, 1.0) * esc
+		for k in 5:
+			var ang = k * 1.3 + 0.4
+			_parede.draw_line(c, c + Vector2(cos(ang), sin(ang) * 0.5) * r.size.x * 0.42, Color(0.75, 0.62, 0.62, 0.55), 1.2)
+
+
+func _desenhar_brilhos() -> void:
+	var esc = K_FUNDO
+	var som = Maquina.pulso_vivo()
+	var brilho = Estilo.tex("fx_brilho")
+	# fachos das arandelas descendo a parede (os dois num desenho) e a poeira
+	for i in 2:
+		var a = tela(ARANDELAS[i])
+		var dir = 1.0 if i == 0 else -1.0
+		var comp = 520.0 * esc
+		var c = Color(1.0, 0.92, 0.78, 0.06 + 0.03 * som.x)
+		var c0 = Color(c.r, c.g, c.b, 0.0)
+		_brilhos.draw_polygon(PoolVector2Array([a + Vector2(-8 * esc, 4), a + Vector2(8 * esc, 4),
+			a + Vector2(dir * 210.0 * esc + 90.0 * esc, comp), a + Vector2(dir * 210.0 * esc - 90.0 * esc, comp)]),
+			PoolColorArray([c, c, c0, c0]))
+	for p in _poeira:
+		var i: int = p["i"]
+		var a2 = tela(ARANDELAS[i])
+		var dir2 = 1.0 if i == 0 else -1.0
+		var y: float = p["pos"].y
+		var x: float = p["pos"].x * (16.0 + 180.0 * y)
+		var pos = a2 + Vector2((dir2 * 210.0 * y + x) * esc, 520.0 * y * esc)
+		var luz_p = (0.5 + 0.5 * sin(_t * 1.7 + p["fase"])) * (1.0 - y) * 0.55
+		_brilhos.draw_texture_rect(brilho, Rect2(pos - Vector2(5, 5), Vector2(10, 10)), false, Color(1.0, 0.92, 0.8, luz_p))
+	# giroflex
+	var g = tela(GIROFLEX)
+	var cor_g = COR_FIXA if modo_fixo else COR_MEMORIA
+	if _pisca > 0.0:
+		cor_g = cor_g.linear_interpolate(_pisca_cor, _pisca)
+	var aceso = _led_aceso()
+	if aceso > 0.0:
+		var r = (34.0 + 26.0 * _pisca + 10.0 * som.y) * esc * 2.0
+		_brilhos.draw_texture_rect(brilho, Rect2(g - Vector2(r, r), Vector2(r, r) * 2.0), false, Color(cor_g.r, cor_g.g, cor_g.b, (0.35 + 0.4 * _pisca) * aceso))
+	if _led_clarao > 0.0:
+		var kc = 1.0 - _led_clarao
+		var r1 = (60.0 + 260.0 * kc) * esc * 2.0
+		var r2 = (30.0 + 60.0 * kc) * esc * 2.0
+		_brilhos.draw_texture_rect(brilho, Rect2(g - Vector2(r1, r1), Vector2(r1, r1) * 2.0), false, Color(1.0, 0.85, 0.75, 0.9 * _led_clarao))
+		_brilhos.draw_texture_rect(brilho, Rect2(g - Vector2(r2, r2), Vector2(r2, r2) * 2.0), false, Color(1, 1, 1, _led_clarao))
+	if _giro > 0.0 and aceso > 0.0:
+		var forca = min(1.0, _giro / 0.4)
+		for k in 2:
+			var ang = _t * 7.5 + k * PI
+			var c3 = _giro_cor
+			if _giro_arco:
+				c3 = Color.from_hsv(fmod(_t * 0.9 + k * 0.5, 1.0), 0.85, 1.0)
+			var d = Vector2(cos(ang), sin(ang) * 0.45 + 0.35)
+			var ponta = g + d * 900.0 * esc
+			var lado = Vector2(-d.y, d.x) * 170.0 * esc
+			_brilhos.draw_polygon(PoolVector2Array([g, ponta + lado, ponta - lado]),
+				PoolColorArray([Color(c3.r, c3.g, c3.b, 0.20 * forca), Color(c3.r, c3.g, c3.b, 0.0), Color(c3.r, c3.g, c3.b, 0.0)]))
+		var cg = Color.white if _giro_arco else _giro_cor
+		var rg = 70.0 * esc * 2.0
+		_brilhos.draw_texture_rect(brilho, Rect2(g - Vector2(rg, rg), Vector2(rg, rg) * 2.0), false, Color(cg.r, cg.g, cg.b, 0.4 * forca))
+	# varredura colorida descendo a parede na troca de rodada
+	if _varre >= 0.0:
+		var y2 = lerp(tela(Vector2(0, 470)).y, tela(Vector2(0, 1300)).y, _varre)
+		var a3 = sin(_varre * PI)
+		for k3 in 5:
+			var c4 = CORES_FX[CORES_SEQ[k3]] if modo_fixo else Color(1.0, 0.15, 0.1)
+			var x0 = Tela.TELA.x * k3 / 5.0
+			_brilhos.draw_texture_rect(brilho, Rect2(Vector2(x0, y2 - 26), Vector2(Tela.TELA.x / 5.0, 52)), false, Color(c4.r, c4.g, c4.b, 0.35 * a3))
+			_brilhos.draw_rect(Rect2(Vector2(x0, y2 - 2.5), Vector2(Tela.TELA.x / 5.0, 5)), Color(c4.r, c4.g, c4.b, 0.9 * a3))
+	_desenhar_ordem(esc, brilho)
+
+
+## Faixa da ordem: 5 luzes (1 a 5) embaixo dos furos; a próxima pulsa.
+func _desenhar_ordem(esc: float, brilho: Texture) -> void:
+	if estado != JOGO:
 		return
-	for filho in municao_panel.get_children():
-		if filho is ColorRect and str(filho.name).begins_with("BlocoMunicao_"):
-			filho.queue_free()
-	for i in range(capacidade_cartucho):
-		var bloco := ColorRect.new()
-		bloco.name  = "BlocoMunicao_%02d" % i
-		bloco.color = Color(0.20, 0.24, 0.30, 0.95)
-		municao_panel.add_child(bloco)
-		municao_blocos.append(bloco)
- 
- 
-func _atualizar_barra_municao_bar() -> void:
-	if municao_panel == null or municao_blocos.is_empty():
+	var total = sequencia.size()
+	if total <= 0:
 		return
-
-	var margem_x: float = 16.0
-	var margem_topo_b: float = 48.0
-	var largura_util: float = municao_panel.size.x - (margem_x * 2.0)
-	var espacamento: float = 3.0
-	var total_blocos: int = municao_blocos.size()
-
-	if total_blocos <= 0:
-		return
-
-	var largura_bloco: float = (largura_util - (espacamento * float(total_blocos - 1))) / float(total_blocos)
-	var altura_bloco: float = 38.0
-
-	for i in range(total_blocos):
-		var bloco := municao_blocos[i]
-		if bloco == null:
+	var ponto = Estilo.tex("fx_ponto")
+	var anel = Estilo.tex("fx_anel")
+	var y = tela(Vector2(0, Y_ORDEM)).y
+	var passo = 70.0 * esc
+	var x0 = Tela.TELA.x * 0.5 - passo * (CORES_SEQ.size() - 1) * 0.5
+	for i in CORES_SEQ.size():
+		var c: Color = CORES_FX[CORES_SEQ[i]]
+		var p = Vector2(x0 + passo * i, y)
+		var r = 15.0 * esc
+		if i >= total:
+			_brilhos.draw_texture_rect(ponto, Rect2(p - Vector2(r, r) * 0.7, Vector2(r, r) * 1.4), false, Color(c.r, c.g, c.b, 0.10))
 			continue
-
-		bloco.position = Vector2(
-			margem_x + (largura_bloco + espacamento) * float(i),
-			margem_topo_b
-		).round()
-
-		bloco.size = Vector2(max(largura_bloco, 2.0), altura_bloco)
-
-		var ativo: bool = i < municao_atual
-
-		if recarregando:
-			var pulso: float = 0.58 + (sin(aviso_recarga_t * 10.0 + float(i) * 0.18) * 0.5 + 0.5) * 0.42
-			bloco.color = Color(0.22, 0.92, 1.0, pulso)
-		elif not ativo:
-			bloco.color = Color(0.16, 0.18, 0.22, 0.42)
-		elif municao_atual <= alerta_baixa_municao_limite:
-			bloco.color = Color(1.0, 0.30, 0.12, 1.0)
-		else:
-			bloco.color = Color(0.92, 0.02, 0.02, 1.0)
- 
- 
-
-func _atualizar_hud() -> void:
-	if score_label != null:
-		score_label.text = str(pontuacao)
-		if pontuacao > 0:
-			score_label.modulate = Color(0.42, 1.0, 0.52, 1.0)
-		elif pontuacao < 0:
-			score_label.modulate = Color(1.0, 0.28, 0.28, 1.0)
-		else:
-			score_label.modulate = Color(1.0, 0.93, 0.25, 1.0)
-
-	if timer_label != null:
-		var minutos: int = int(tempo_restante) / 60
-		var segundos: int = int(tempo_restante) % 60
-		timer_label.text = "%02d:%02d" % [minutos, segundos]
-
-	if tiros_label != null:
-		tiros_label.text = str(tiros)
-
-	if acertos_label != null:
-		acertos_label.text = str(acertos)
-
-	if nivel_label != null:
-		nivel_label.text = str(nivel_sequencia)
-
-	if municao_panel != null and municao_label != null:
-		if recarregando:
-			var pulso_rec: float = 0.70 + (sin(aviso_recarga_t * 10.0) * 0.5 + 0.5) * 0.30
-			_set_estilo_panel_arena(municao_panel, Color(0.08, 0.22, 0.30, 0.98), Color(0.20, 0.85, 1.0), 0.70)
-			municao_label.text = "RECARREGANDO"
-			municao_label.modulate = Color(0.30, 0.92, 1.0, pulso_rec)
-			if recarga_label != null:
-				recarga_label.text = _texto_hud_recarregando()
-				recarga_label.modulate = Color(0.78, 0.96, 1.0, pulso_rec)
-
-		elif municao_atual <= 0:
-			var pulso_vazio: float = 0.60 + (sin(aviso_recarga_t * 12.0) * 0.5 + 0.5) * 0.40
-			_set_estilo_panel_arena(municao_panel, Color(0.22, 0.04, 0.05, 1.0), COR_NEON_ARENA, 0.70)
-			municao_label.text = "RECARREGUE!"
-			municao_label.modulate = Color(1.0, 0.24, 0.22, pulso_vazio)
-			if recarga_label != null:
-				recarga_label.text = _texto_hud_sem_municao()
-				recarga_label.modulate = Color(1.0, 0.72, 0.72, pulso_vazio)
-
-		elif municao_atual <= alerta_baixa_municao_limite:
-			var pulso_crit: float = 0.72 + (sin(aviso_recarga_t * 9.0) * 0.5 + 0.5) * 0.28
-			_set_estilo_panel_arena(municao_panel, Color(0.20, 0.11, 0.03, 1.0), Color(1.0, 0.62, 0.12), 0.62)
-			municao_label.text = "MUNIÇÃO BAIXA"
-			municao_label.modulate = Color(1.0, 0.68, 0.18, pulso_crit)
-			if recarga_label != null:
-				recarga_label.text = _texto_hud_municao_baixa()
-				recarga_label.modulate = Color(1.0, 0.84, 0.48, pulso_crit)
-
-		else:
-			_set_estilo_panel_arena(municao_panel, COR_FUNDO_CARD_ARENA, COR_NEON_ARENA, 0.60)
-			municao_label.text = "%02d/%02d" % [municao_atual, capacidade_cartucho]
-			municao_label.modulate = Color.WHITE
-			if recarga_label != null:
-				recarga_label.text = _texto_hud_recarga_padrao()
-				recarga_label.modulate = Color(0.76, 0.88, 1.0, 0.95)
-
-	_atualizar_barra_municao_bar()
- 
-
-# ═══════════════════════════════════════════════════════════
-#  CONTAGEM REGRESSIVA (INTRO)
-# ═══════════════════════════════════════════════════════════
- 
-func _criar_intro_comeco() -> void:
-	countdown_layer = CanvasLayer.new()
-	countdown_layer.name = "CountdownLayer"
-	countdown_layer.layer = 110
-	add_child(countdown_layer)
-
-	countdown_root = Control.new()
-	countdown_root.set_anchors_preset(Control.PRESET_FULL_RECT)
-	countdown_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	countdown_root.visible = false
-	countdown_layer.add_child(countdown_root)
-
-	countdown_flash = ColorRect.new()
-	countdown_flash.color = Color(0.16, 0.0, 0.0, 0.48)
-	countdown_flash.set_anchors_preset(Control.PRESET_FULL_RECT)
-	countdown_flash.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	countdown_root.add_child(countdown_flash)
-
-	countdown_label = Label.new()
-	countdown_label.text = "3"
-	countdown_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	countdown_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	Leve.font_size(countdown_label, "font_size", 156)
-	Leve.color(countdown_label, "font_color", COR_NEON_ARENA_CLARO)
-	Leve.color(countdown_label, "font_outline_color", Color(0.18, 0.0, 0.0, 1.0))
-	Leve.constant(countdown_label, "outline_size", 16)
-	countdown_label.self_modulate = Color(1.0, 0.90, 0.90, 1.0)
-
-	var fonte_luckies := load("res://fonts/Exo2-ExtraBold.ttf")
-	if fonte_luckies:
-		Leve.font(countdown_label, "font", fonte_luckies)
-
-	countdown_label.visible = false
-	countdown_root.add_child(countdown_label)
-
-	_reposicionar_intro_comeco()
- 
- 
-func _reposicionar_intro_comeco() -> void:
-	if countdown_label == null:
-		return
-
-	var vp: Vector2 = get_viewport_rect().size
-	countdown_label.position = Vector2.ZERO
-	countdown_label.size = vp
-	countdown_label.pivot_offset = vp * 0.5
- 
- 
-
-func _iniciar_intro_comeco() -> void:
-	if intro_comeco_ativa:
-		return
-
-	intro_comeco_ativa = true
-	intro_comeco_t = 0.0
-	intro_contagem_valor = 3
-
-	if modal_layer != null:
-		modal_layer.visible = false
-
-	if info_inicio_texture != null:
-		info_inicio_texture.visible = false
-
-	if modal_atire_label != null:
-		modal_atire_label.visible = false
-
-	if countdown_root != null:
-		countdown_root.visible = true
-
-	if countdown_flash != null:
-		countdown_flash.visible = true
-		countdown_flash.color = Color(0.0, 0.0, 0.0, 0.42)
-
-	if countdown_label != null:
-		countdown_label.visible = true
-
-	_contagem_intro_async()
- 
+		var feita = i < indice
+		var vez = i == indice and not mostrando
+		var a = 0.35
+		if feita:
+			a = 0.9
+		elif vez:
+			a = 0.65 + 0.35 * sin(_t * 8.0)
+			_brilhos.draw_texture_rect(brilho, Rect2(p - Vector2(r, r) * 3.2, Vector2(r, r) * 6.4), false, Color(c.r, c.g, c.b, 0.45))
+			_brilhos.draw_texture_rect(anel, Rect2(p - Vector2(r, r) * 1.7, Vector2(r, r) * 3.4), false, Color(c.r, c.g, c.b, 0.9))
+		_brilhos.draw_texture_rect(brilho, Rect2(p - Vector2(r, r) * 1.9, Vector2(r, r) * 3.8), false, Color(c.r, c.g, c.b, a * 0.5))
+		_brilhos.draw_texture_rect(ponto, Rect2(p - Vector2(r, r), Vector2(r, r) * 2.0), false, Color(c.r, c.g, c.b, a))
+		_brilhos.draw_texture_rect(ponto, Rect2(p - Vector2(r, r) * 0.45, Vector2(r, r) * 0.9), false, Color(1, 1, 1, a * 0.8))
 
 
-func _contagem_intro_async() -> void:
-	var valores := ["3", "2", "1", "COMEÇOU!"]
-
-	for v in valores:
-		if not is_inside_tree():
-			return
-
-		if countdown_label != null:
-			countdown_label.text = v
-			countdown_label.visible = true
-			countdown_label.modulate = Color(1, 1, 1, 0.0)
-			Leve.color(countdown_label, "font_color", COR_NEON_ARENA_CLARO)
-			Leve.color(countdown_label, "font_outline_color", Color(0.18, 0.0, 0.0, 1.0))
-			Leve.constant(countdown_label, "outline_size", 16)
-
-			if v == "COMEÇOU!":
-				Leve.font_size(countdown_label, "font_size", 88)
-				countdown_label.scale = Vector2.ONE * 0.82
-			else:
-				Leve.font_size(countdown_label, "font_size", 156)
-				countdown_label.scale = Vector2.ONE * 0.62
-
-		var tw := create_tween()
-		tw.set_parallel(true)
-
-		if countdown_flash != null:
-			countdown_flash.color = Color(1.0, 0.02, 0.02, 0.0)
-			tw.tween_property(countdown_flash, "color:a", 0.20, 0.08)
-			tw.tween_property(countdown_flash, "color:a", 0.0, 0.24).set_delay(0.08)
-
-		if countdown_label != null:
-			tw.tween_property(countdown_label, "modulate:a", 1.0, 0.12)
-			tw.tween_property(countdown_label, "scale", Vector2.ONE * 1.06, 0.24).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-			tw.tween_property(countdown_label, "scale", Vector2.ONE, 0.18).set_delay(0.24).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-			tw.tween_property(countdown_label, "modulate:a", 0.0, 0.20).set_delay(0.58)
-
-		await get_tree().create_timer(0.84).timeout
-
-	if countdown_root != null:
-		countdown_root.visible = false
-
-	intro_comeco_ativa = false
-	_iniciar_partida()
-
-
- 
-func _rodar_intro_comeco_async() -> void:
-	for numero in [3, 2, 1]:
-		if not is_inside_tree():
-			return
-		intro_contagem_valor = numero
-		intro_comeco_t       = 0.0
- 
-		if countdown_label != null:
-			countdown_label.text     = str(numero)
-			countdown_label.visible  = true
-			countdown_label.modulate = Color(1, 1, 1, 0.0)
-			countdown_label.scale    = Vector2.ONE * 0.62
-			Leve.font_size(countdown_label, "font_size", 120)
- 
-		var tw_num := create_tween()
-		tw_num.set_parallel(true)
- 
-		if countdown_flash != null:
-			countdown_flash.color = Color(1.0, 1.0, 1.0, 0.0)
-			tw_num.tween_property(countdown_flash, "color:a", 0.10, 0.06)
-			tw_num.tween_property(countdown_flash, "color:a", 0.0,  0.16).set_delay(0.06)
- 
-		if countdown_label != null:
-			tw_num.tween_property(countdown_label, "modulate:a", 1.0, 0.10)
-			tw_num.tween_property(countdown_label, "scale", Vector2.ONE, 0.20).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-			tw_num.tween_property(countdown_label, "modulate:a", 0.0, 0.16).set_delay(0.46)
- 
-		await get_tree().create_timer(0.72).timeout
- 
-	if not is_inside_tree():
-		return
- 
-	intro_comeco_t = 0.0
- 
-	if countdown_label != null:
-		countdown_label.text     = "COMEÇOU!"
-		countdown_label.visible  = true
-		countdown_label.modulate = Color(1, 1, 1, 0.0)
-		countdown_label.scale    = Vector2.ONE * 0.82
-		Leve.font_size(countdown_label, "font_size", 76)
- 
-	var tw_go := create_tween()
-	tw_go.set_parallel(true)
- 
-	if countdown_flash != null:
-		countdown_flash.color = Color(1.0, 1.0, 1.0, 0.0)
-		tw_go.tween_property(countdown_flash, "color:a", 0.14, 0.08)
-		tw_go.tween_property(countdown_flash, "color:a", 0.0,  0.18).set_delay(0.08)
- 
-	if countdown_label != null:
-		tw_go.tween_property(countdown_label, "modulate:a", 1.0, 0.10)
-		tw_go.tween_property(countdown_label, "scale", Vector2.ONE * 0.92, 0.18).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-		tw_go.tween_property(countdown_label, "modulate:a", 0.0, 0.18).set_delay(0.34)
- 
-	await get_tree().create_timer(0.60).timeout
- 
-	if countdown_root != null:
-		countdown_root.visible = false
- 
-	_iniciar_partida()
- 
-
-func _tocar_bip(ordem: int = -1) -> void:
-	if audio_bip == null:
-		push_warning("audio_bip não foi criado.")
-		return
-
-	if audio_bip.stream == null:
-		push_warning("bip.mp3 não foi carregado. Confira: " + caminho_som_bip)
-		return
-
-	audio_bip.volume_db = 12.0
-	audio_bip.pitch_scale = TONS_BIP[ordem] if ordem >= 0 and ordem < TONS_BIP.size() else 1.0
-	audio_bip.stop()
-	audio_bip.play()
-
- 
-# ═══════════════════════════════════════════════════════════
-#  MODAL DE INÍCIO
-# ═══════════════════════════════════════════════════════════
- 
-func _criar_modal_inicio() -> void:
-	if modal_layer != null and is_instance_valid(modal_layer):
-		modal_layer.queue_free()
-
-	modal_layer = CanvasLayer.new()
-	modal_layer.name = "ModalInfoArenaLayer"
-	modal_layer.layer = 95
-	modal_layer.visible = true
-	add_child(modal_layer)
-
-	modal_root = Control.new()
-	modal_root.name = "ModalInfoArenaRoot"
-	modal_root.set_anchors_preset(Control.PRESET_FULL_RECT)
-	modal_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	modal_layer.add_child(modal_root)
-
-	var bg_escuro := ColorRect.new()
-	bg_escuro.name = "ArenaModalBgEscuro"
-	bg_escuro.color = Color(0.0, 0.0, 0.0, 0.72)
-	bg_escuro.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	bg_escuro.set_anchors_preset(Control.PRESET_FULL_RECT)
-	modal_root.add_child(bg_escuro)
-
-	var glow_img := ColorRect.new()
-	glow_img.name = "GlowImagemInicioArena"
-	glow_img.color = Color(1.0, 0.02, 0.02, 0.18)
-	glow_img.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	modal_root.add_child(glow_img)
-
-	var borda_img := ColorRect.new()
-	borda_img.name = "BordaImagemInicioArena"
-	borda_img.color = COR_NEON_ARENA
-	borda_img.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	modal_root.add_child(borda_img)
-
-	var fundo_img := ColorRect.new()
-	fundo_img.name = "FundoImagemInicioArena"
-	fundo_img.color = Color(0.060, 0.004, 0.004, 0.96)
-	fundo_img.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	modal_root.add_child(fundo_img)
-
-	info_inicio_texture = TextureRect.new()
-	info_inicio_texture.name = "InfoArena"
-	info_inicio_texture.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	info_inicio_texture.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	info_inicio_texture.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	info_inicio_texture.visible = true
-	info_inicio_texture.modulate = Color(1.0, 0.92, 0.92, 1.0)
-	modal_root.add_child(info_inicio_texture)
-
-	modal_atire_label = Label.new()
-	modal_atire_label.name = "LblAtire"
-	modal_atire_label.text = "ATIRE PARA COMEÇAR"
-	modal_atire_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	modal_atire_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	modal_atire_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	Leve.font_size(modal_atire_label, "font_size", 50)
-	Leve.color(modal_atire_label, "font_color", COR_NEON_ARENA_CLARO)
-	Leve.color(modal_atire_label, "font_outline_color", Color(0.18, 0.0, 0.0, 1.0))
-	Leve.constant(modal_atire_label, "outline_size", 12)
-	modal_atire_label.self_modulate = Color(1.0, 0.88, 0.88, 1.0)
-
-	var fonte_luckies := load("res://fonts/Exo2-ExtraBold.ttf")
-	if fonte_luckies:
-		Leve.font(modal_atire_label, "font", fonte_luckies)
-
-	modal_atire_label.modulate.a = 0.78
-	modal_root.add_child(modal_atire_label)
-
-	# COMO JOGAR grande (scripts/como_jogar.gd) no lugar da imagem antiga:
-	# a moldura, a imagem e o rodapé antigos ficam escondidos.
-	for n in [bg_escuro, glow_img, borda_img, fundo_img, modal_atire_label]:
-		(n as CanvasItem).visible = false
-	modal_root.add_child(ComoJogar.criar("arena"))
-
-	var tween_atire := create_tween()
-	tween_atire.set_loops()
-	tween_atire.tween_property(modal_atire_label, "scale", Vector2(1.07, 1.07), 0.65).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-	tween_atire.parallel().tween_property(modal_atire_label, "modulate:a", 1.0, 0.65)
-	tween_atire.tween_property(modal_atire_label, "scale", Vector2.ONE, 0.65).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-	tween_atire.parallel().tween_property(modal_atire_label, "modulate:a", 0.72, 0.65)
-
-	_reposicionar_modal()
- 
- 
-
-func _criar_preview_alvo() -> AnimatedSprite2D:
-	if not is_instance_valid(alvo_inicial):
+## Teste automático (robô): a próxima lanterna certa (ou o LED de vez em quando).
+func robo_alvo():
+	if estado != JOGO or mostrando or bloqueado or indice >= sequencia.size():
 		return null
-	var anim_original: AnimatedSprite2D = alvo_inicial.get_node_or_null("AnimatedSprite2D") as AnimatedSprite2D
-	if anim_original == null:
+	if _led <= 0.0 and int(_t) % 23 == 0:
+		return tela(GIROFLEX)
+	var l = lanternas[sequencia[indice]]
+	if l == null or l.quebrando or (modo_fixo and l.cor == "apagada"):
 		return null
-	var preview := AnimatedSprite2D.new()
-	preview.sprite_frames = anim_original.sprite_frames
-	preview.animation     = "idle"
-	preview.play("idle")
-	preview.scale = Vector2.ONE * escala_preview_modal
-	return preview
- 
- 
-func _criar_label_preview(texto: String) -> Label:
-	var lbl := Label.new()
-	lbl.text = texto
-	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	lbl.vertical_alignment   = VERTICAL_ALIGNMENT_CENTER
-	Leve.font_size(lbl, "font_size", 16)
-	Leve.color(lbl, "font_color", Color(1.0, 0.88, 0.25))
-	Leve.color(lbl, "font_outline_color", Color(0.0, 0.0, 0.0))
-	Leve.constant(lbl, "outline_size", 4)
-	return lbl
- 
-
- 
-func _reposicionar_modal() -> void:
-	if info_inicio_texture == null:
-		return
-
-	var tela: Vector2 = get_viewport_rect().size
-
-	var area_w: float = tela.x * 0.90
-	var area_h: float = tela.y * 0.58
-
-	var tex_size: Vector2 = Vector2(1000.0, 600.0)
-	if info_inicio_texture.texture != null:
-		tex_size = info_inicio_texture.texture.get_size()
-
-	var escala: float = min(area_w / tex_size.x, area_h / tex_size.y)
-	var final_w: float = tex_size.x * escala
-	var final_h: float = tex_size.y * escala
-
-	info_inicio_texture.size = Vector2(final_w, final_h)
-	info_inicio_texture.position = Vector2(
-		(tela.x - final_w) * 0.5,
-		(tela.y * 0.42) - (final_h * 0.5)
-	).round()
-
-	var neon_margem: float = 24.0
-	var borda_espessura: float = 6.0
-
-	if modal_root != null:
-		var glow_img := modal_root.get_node_or_null("GlowImagemInicioArena") as ColorRect
-		if glow_img != null:
-			glow_img.position = info_inicio_texture.position - Vector2(neon_margem, neon_margem)
-			glow_img.size = info_inicio_texture.size + Vector2(neon_margem * 2.0, neon_margem * 2.0)
-			glow_img.color = Color(1.0, 0.02, 0.02, 0.18)
-
-		var borda_img := modal_root.get_node_or_null("BordaImagemInicioArena") as ColorRect
-		if borda_img != null:
-			borda_img.position = info_inicio_texture.position - Vector2(borda_espessura, borda_espessura)
-			borda_img.size = info_inicio_texture.size + Vector2(borda_espessura * 2.0, borda_espessura * 2.0)
-			borda_img.color = COR_NEON_ARENA
-
-		var fundo_img := modal_root.get_node_or_null("FundoImagemInicioArena") as ColorRect
-		if fundo_img != null:
-			fundo_img.position = info_inicio_texture.position - Vector2(3.0, 3.0)
-			fundo_img.size = info_inicio_texture.size + Vector2(6.0, 6.0)
-
-	if modal_atire_label != null:
-		modal_atire_label.position = Vector2(
-			0.0,
-			info_inicio_texture.position.y + info_inicio_texture.size.y + 46.0
-		)
-		modal_atire_label.size = Vector2(tela.x, 80.0)
-		modal_atire_label.pivot_offset = Vector2(tela.x * 0.5, 40.0)
-
-# ═══════════════════════════════════════════════════════════
-#  BACKGROUND
-# ═══════════════════════════════════════════════════════════
- 
-func _configurar_background_fullscreen() -> void:
-	if background == null:
-		return
-	if textura_fundo != null:
-		if background is Sprite2D:
-			(background as Sprite2D).texture = textura_fundo
-		elif background is TextureRect:
-			(background as TextureRect).texture = textura_fundo
- 
-	if background is TextureRect:
-		var bg := background as TextureRect
-		bg.anchor_left   = 0.0
-		bg.anchor_top    = 0.0
-		bg.anchor_right  = 0.0
-		bg.anchor_bottom = 0.0
-		bg.offset_left   = 0.0
-		bg.offset_top    = 0.0
-		bg.offset_right  = 0.0
-		bg.offset_bottom = 0.0
-		bg.expand_mode   = TextureRect.EXPAND_IGNORE_SIZE
-		bg.stretch_mode  = TextureRect.STRETCH_SCALE
-		if bg.texture != null:
-			var vp_size: Vector2  = get_viewport_rect().size
-			var tex_size: Vector2 = bg.texture.get_size()
-			if tex_size.x > 0.0 and tex_size.y > 0.0:
-				var escala: float        = max(vp_size.x / tex_size.x, vp_size.y / tex_size.y)
-				var novo_tamanho: Vector2 = tex_size * escala
-				bg.size     = novo_tamanho
-				bg.position = (vp_size - novo_tamanho) * 0.5
-	elif background is Sprite2D:
-		var bg := background as Sprite2D
-		bg.centered = false
-		if bg.texture != null:
-			var vp_size: Vector2  = get_viewport_rect().size
-			var tex_size: Vector2 = bg.texture.get_size()
-			if tex_size.x > 0.0 and tex_size.y > 0.0:
-				var escala: float        = max(vp_size.x / tex_size.x, vp_size.y / tex_size.y)
-				var novo_tamanho: Vector2 = tex_size * escala
-				bg.scale    = Vector2(escala, escala)
-				bg.position = (vp_size - novo_tamanho) * 0.5
- 
- 
-# ═══════════════════════════════════════════════════════════
-#  PREPARAÇÃO DO ALVO INICIAL (HIDDEN)
-# ═══════════════════════════════════════════════════════════
- 
-func _preparar_alvo_inicial() -> void:
-	if not is_instance_valid(alvo_inicial):
-		return
-	alvo_inicial.visible      = false
-	alvo_inicial.process_mode = Node.PROCESS_MODE_DISABLED
-	alvo_inicial.monitoring   = false
-	alvo_inicial.monitorable  = false
-	alvo_inicial.input_pickable = false
-	alvo_inicial.position     = Vector2(-9999, -9999)
-	_resetar_visual_arco(alvo_inicial)
-	if alvo_inicial.has_method("resetar"):
-		alvo_inicial.resetar()
-		alvo_inicial.visible  = false
-		alvo_inicial.position = Vector2(-9999, -9999)
- 
- 
-# ═══════════════════════════════════════════════════════════
-#  ÁUDIO
-# ═══════════════════════════════════════════════════════════
- 
-func _configurar_audio() -> void:
-	audio_tiro = AudioStreamPlayer.new()
-	audio_tiro.name = "AudioTiro"
-	add_child(audio_tiro)
-	if caminho_som_tiro != "":
-		var s: AudioStream = load(caminho_som_tiro)
-		if s != null: audio_tiro.stream = s
- 
-	audio_recarga = AudioStreamPlayer.new()
-	audio_recarga.name = "AudioRecarga"
-	add_child(audio_recarga)
-	if caminho_som_recarga != "":
-		var s: AudioStream = load(caminho_som_recarga)
-		if s != null: audio_recarga.stream = s
- 
-	audio_sem_bala = AudioStreamPlayer.new()
-	audio_sem_bala.name = "AudioSemBala"
-	add_child(audio_sem_bala)
-	if caminho_som_sem_bala != "":
-		var s: AudioStream = load(caminho_som_sem_bala)
-		if s != null: audio_sem_bala.stream = s
- 
-	audio_musica_arena = AudioStreamPlayer.new()
-	audio_musica_arena.name = "AudioMusicaArena"
-	add_child(audio_musica_arena)
-	if caminho_musica_arena != "":
-		var s: AudioStream = load(caminho_musica_arena)
-		if s != null:
-			audio_musica_arena.stream = s
-			audio_musica_arena.bus    = "Master"
- 
-	audio_alvo_cash = AudioStreamPlayer.new()
-	audio_alvo_cash.name      = "AudioAlvoCash"
-	audio_alvo_cash.volume_db = volume_crash_db
-	add_child(audio_alvo_cash)
-	if caminho_som_alvo_cash != "":
-		var s: AudioStream = load(caminho_som_alvo_cash)
-		if s != null:
-			audio_alvo_cash.stream = s
-			audio_alvo_cash.bus    = "Master"
-	
-	audio_hit_lamp = AudioStreamPlayer.new()
-	audio_hit_lamp.name = "AudioHitLamp"
-	audio_hit_lamp.volume_db = volume_crash_db
-	add_child(audio_hit_lamp)
-
-	if ResourceLoader.exists(caminho_som_hit_lamp):
-		audio_hit_lamp.stream = load(caminho_som_hit_lamp)
-		
-		# BIP DA SEQUÊNCIA
-	audio_bip = AudioStreamPlayer.new()
-	audio_bip.name = "AudioBipSequencia"
-	audio_bip.bus = "Master"
-	audio_bip.volume_db = 12.0
-	add_child(audio_bip)
-
-	if ResourceLoader.exists(caminho_som_bip):
-		audio_bip.stream = load(caminho_som_bip)
-	else:
-		push_warning("Som bip não encontrado: " + caminho_som_bip)
-		
-	# BIP ERROR
-	audio_bip_error = AudioStreamPlayer.new()
-	audio_bip_error.name = "AudioBipError"
-	audio_bip_error.bus = "Master"
-	audio_bip_error.volume_db = 12.0
-	add_child(audio_bip_error)
-
-	if ResourceLoader.exists(caminho_som_bip_error):
-		audio_bip_error.stream = load(caminho_som_bip_error)
-	else:
-		push_warning("Som bip-error não encontrado: " + caminho_som_bip_error)
- 
- 
-func _tocar_som_tiro() -> void:
-	if audio_tiro == null or audio_tiro.stream == null:
-		return
-	audio_tiro.stop()
-	audio_tiro.play()
-
-
-func _tocar_bip_error() -> void:
-	if audio_bip_error == null:
-		return
-	if audio_bip_error.stream == null:
-		return
-
-	audio_bip_error.volume_db = 12.0
-	audio_bip_error.stop()
-	audio_bip_error.play()
-
- 
-
-func _tocar_som_hit_lamp() -> void:
-	if audio_hit_lamp == null:
-		return
-	if audio_hit_lamp.stream == null:
-		return
-
-	audio_hit_lamp.stop()
-	audio_hit_lamp.play()
-
- 
-func _tocar_musica_arena() -> void:
-	if audio_musica_arena == null or audio_musica_arena.stream == null:
-		return
-	if not audio_musica_arena.playing:
-		audio_musica_arena.play()
- 
- 
-
-func _parar_musica_arena() -> void:
-	if audio_musica_arena != null:
-		audio_musica_arena.stop()
-
-
-
-func _calcular_pontos_acerto_sequencia() -> int:
-	return (indice_sequencia + 1) * pontos_base_sequencia
-
-
-
-func _ranking_tentar_atirar_tecla(pos_mouse: Vector2) -> void:
-	if not ranking_nome_ativo or nome_ranking == null:
-		return
-	_tocar_som_tiro()
-	nome_ranking.tiro(pos_mouse)
-
-
-func _criar_nome_ranking() -> void:
-	nome_ranking = NomeRanking.new()
-	add_child(nome_ranking)
-	nome_ranking.confirmado.connect(_ao_confirmar_nome)
-
-
-func _ao_confirmar_nome(nome: String) -> void:
-	ranking_nome_digitado = "" if nome == "ANONIMO" else nome
-	_confirmar_nome_ranking(nome == "ANONIMO")
-
-
-func _abrir_modal_nome_ranking(pontos: int, cenario: String, precisao: int) -> void:
-	ranking_pontos_pendentes = pontos
-	ranking_cenario_pendente = cenario
-	ranking_precisao_pendente = clamp(precisao, 0, 100)
-	ranking_nome_ativo = true
-	ranking_ja_salvo = false
-	ranking_nome_digitado = ""
-
-	if mira_layer != null:
-		mira_layer.layer = 200
-		mira_layer.visible = true
-
-	if mira_root != null:
-		mira_root.visible = true
-		mira_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		mira_root.queue_redraw()
-
-	if nome_ranking != null:
-		nome_ranking.abrir(Color(1.0, 0.24, 0.20), pontos, ranking_precisao_pendente)
-
-
-func _confirmar_nome_ranking(usar_anonimo: bool = false) -> void:
-	if ranking_ja_salvo:
-		return
-
-	# confirmado por fora da tela de nome (ex.: START): vale o que já foi digitado
-	if nome_ranking != null and nome_ranking.ativo:
-		ranking_nome_digitado = nome_ranking.nome
-		nome_ranking.fechar()
-
-	var nome_final: String = "ANONIMO"
-	var modo_atual_ranking: String = _obter_modo_ranking()
-
-	if not usar_anonimo:
-		var digitado: String = ranking_nome_digitado.strip_edges().to_upper()
-		if digitado != "":
-			nome_final = digitado
-
-	if Engine.has_singleton("RankingManager"):
-		RankingManager.call(
-			"adicionar_resultado",
-			nome_final,
-			ranking_pontos_pendentes,
-			ranking_cenario_pendente,
-			ranking_precisao_pendente,
-			modo_atual_ranking
-		)
-	elif has_node("/root/RankingManager"):
-		var rm: Node = get_node("/root/RankingManager")
-		rm.call(
-			"adicionar_resultado",
-			nome_final,
-			ranking_pontos_pendentes,
-			ranking_cenario_pendente,
-			ranking_precisao_pendente,
-			modo_atual_ranking
-		)
-
-	ranking_ja_salvo = true
-	ranking_nome_ativo = false
-	ranking_nome_tempo = 0.0
-
-	if nome_ranking != null and nome_ranking.ativo:
-		nome_ranking.fechar()
-
-	if mira_layer != null:
-		mira_layer.layer = 100
-		mira_layer.visible = false
-
-	fim_tempo_voltar = Maquina.tempo_volta_menu()
-
-	if fim_titulo != null:
-		fim_titulo.text = "RECORDE SALVO!"
-
-	if fim_score_label != null:
-		fim_score_label.text = "PONTUAÇÃO\n%d" % ranking_pontos_pendentes
-
-	if fim_stats_label != null:
-		fim_stats_label.text = "RECORDE SALVO COMO:\n%s\n\nPONTUAÇÃO: %d\nPRECISÃO: %d%%\nCENÁRIO: %s" % [
-			nome_final,
-			ranking_pontos_pendentes,
-			ranking_precisao_pendente,
-			ranking_cenario_pendente
-		]
-		Leve.font_size(fim_stats_label, "font_size", 38)
-
-	if fim_footer != null:
-		_estilizar_botao_modal_final(fim_footer, Maquina.texto_jogar_novamente(), false)
-
-	if fim_contagem_label != null:
-		fim_contagem_label.text = "VOLTANDO AO INÍCIO EM %02d" % int(ceil(fim_tempo_voltar))
-
-	_ajustar_layout_modal_final()
-
-
-
-func _obter_modo_ranking() -> String:
-	var modo: String = str(get_tree().get_meta("modo_dificuldade", "facil")).strip_edges().to_lower()
-
-	if modo == "dificil" or modo == "difícil":
-		return "DIFICIL"
-
-	return "FACIL"
-
-func _texto_hud_recarga_padrao() -> String:
-	return "BOTÃO AUXILIAR RECARREGA"
-
-
-func _texto_hud_recarregando() -> String:
-	return "AGUARDE %.1fs" % reload_tempo_restante
-
-
-func _texto_hud_sem_municao() -> String:
-	return "BOTÃO AUXILIAR DA ARMA"
-
-
-func _texto_hud_municao_baixa() -> String:
-	return "PREPARE A RECARGA"
-
-# ═══════════════════════════════════════════════════════════
-#  CONTROLES DA ARMA EEFORTS / INPUT MAP
-# ═══════════════════════════════════════════════════════════
-
-var tempo_trava_input_arma: float = 0.0
-
-const ACAO_TIRO_ARMA: String = "input_shot"
-const ACAO_RECARGA_ARMA: String = "input_recharge"
-
-# GATILHO DA ARMA
-const BOTAO_GATILHO_1: int = MOUSE_BUTTON_RIGHT
-const BOTAO_GATILHO_2: int = MOUSE_BUTTON_LEFT
-
-# AUXILIARES = RECARGA
-const BOTAO_RECARGA_1: int = MOUSE_BUTTON_MIDDLE
-const BOTAO_RECARGA_2: int = MOUSE_BUTTON_XBUTTON1
-const BOTAO_RECARGA_3: int = MOUSE_BUTTON_XBUTTON2
-
-
-
-func _pos_arma() -> Vector2:
-	return MiraGlobal.mira()
-
-
-func _evento_tiro_arma(me: InputEventMouseButton) -> bool:
-	# Gatilho = clique esquerdo (Maquina cuida dos botões aprendidos da arma).
-	return Maquina.e_tiro_arma(me)
-
-
-func _evento_recarga_arma(me: InputEventMouseButton) -> bool:
-	# Recarga = botão aprendido na configuração (padrão: direito/meio/laterais).
-	return Maquina.e_recarga_arma(me)
-
-
-func _debug_botao_arma(me: InputEventMouseButton) -> void:
-	print("BOTAO ARMA: ", me.button_index)
-
-
-func _evento_action_arma(event: InputEvent, action_name: String) -> bool:
-	if event == null:
-		return false
-
-	if not InputMap.has_action(action_name):
-		return false
-
-	if event is InputEventMouseMotion:
-		return false
-
-	if event is InputEventKey:
-		var key_event: InputEventKey = event as InputEventKey
-		if key_event.echo:
-			return false
-
-	return event.is_action_pressed(action_name)
-
-
-func _evento_input_shot_arma(event: InputEvent) -> bool:
-	return _evento_action_arma(event, ACAO_TIRO_ARMA)
-
-
-func _evento_input_recharge_arma(event: InputEvent) -> bool:
-	return _evento_action_arma(event, ACAO_RECARGA_ARMA)
-
-
-func _executar_tiro_arma() -> void:
-	if tempo_trava_input_arma > 0.0:
-		return
-
-	tempo_trava_input_arma = 0.10
-
-	if ranking_nome_ativo:
-		_ranking_tentar_atirar_tecla(mira_pos)
-		return
-
-	if fim_ativo:
-		return
-
-	if intro_comeco_ativa:
-		return
-
-	if not jogo_iniciado:
-		_iniciar_intro_comeco()
-		return
-
-	if jogo_ativo:
-		_tentar_atirar(mira_pos)
-
-
-func _executar_recarga_arma() -> void:
-	if tempo_trava_input_arma > 0.0:
-		return
-
-	tempo_trava_input_arma = 0.10
-
-	if ranking_nome_ativo:
-		return
-
-	if fim_ativo:
-		return
-
-	if intro_comeco_ativa:
-		return
-
-	if jogo_ativo and not recarregando:
-		_iniciar_recarga()
-
-
-func _aplicar_config_admin_na_cena() -> void:
-	var cfg := ConfigFile.new()
-	var err: int = cfg.load("user://config_admin.cfg")
-
-	if err == OK:
-		tempo_total = float(cfg.get_value("jogo", "tempo_partida", tempo_total))
-		fim_tempo_voltar = Maquina.tempo_volta_menu()
-		ranking_nome_tempo = float(cfg.get_value("ranking", "tempo_nome", ranking_nome_tempo))
-
-		get_tree().set_meta("modo_dificuldade", "facil")
-
-	get_tree().set_meta("admin_tempo_partida", tempo_total)
-	get_tree().set_meta("admin_tempo_modal_final", fim_tempo_voltar)
-	get_tree().set_meta("admin_tempo_ranking_nome", ranking_nome_tempo)
-
-
-## Ao abrir a tela: monta as letras dos avisos e prepara os sons dos
-## efeitos antes do primeiro tiro (a TV box não engasga no começo).
-func _aquecer_fase() -> void:
-	if not is_inside_tree():
-		return
-	AvisoTiro.preparar(self)
-	if _vivo != null:
-		Maquina.aquecer([_vivo.SOM_LED, ArenaVivo.SOM_FAISCA, ArenaVivo.SOM_VAPOR, ArenaVivo.SOM_TROCA])
+	return l.no.position

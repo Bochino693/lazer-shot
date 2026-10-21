@@ -1,19 +1,15 @@
 [remap]
 
-importer="oggvorbisstr"
-type="AudioStreamOggVorbis"
-uid="uid://cyt1q1b541bhp"
-path="res://.godot/imported/arena_double.ogg-0d99c4f11fe1c93d0343000457bdbc04.oggvorbisstr"
+importer="ogg_vorbis"
+type="AudioStreamOGGVorbis"
+path="res://.import/arena_double.ogg-0d99c4f11fe1c93d0343000457bdbc04.oggstr"
 
 [deps]
 
 source_file="res://songs/voz/arena_double.ogg"
-dest_files=["res://.godot/imported/arena_double.ogg-0d99c4f11fe1c93d0343000457bdbc04.oggvorbisstr"]
+dest_files=[ "res://.import/arena_double.ogg-0d99c4f11fe1c93d0343000457bdbc04.oggstr" ]
 
 [params]
 
 loop=false
 loop_offset=0
-bpm=0
-beat_count=0
-bar_beats=4

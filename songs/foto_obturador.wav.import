@@ -1,24 +1,23 @@
 [remap]
 
 importer="wav"
-type="AudioStreamWAV"
-uid="uid://dnpe5lpckalca"
-path="res://.godot/imported/foto_obturador.wav-f9865d36eb74f2de3e30bf79460c8d80.sample"
+type="AudioStreamSample"
+path="res://.import/foto_obturador.wav-f9865d36eb74f2de3e30bf79460c8d80.sample"
 
 [deps]
 
 source_file="res://songs/foto_obturador.wav"
-dest_files=["res://.godot/imported/foto_obturador.wav-f9865d36eb74f2de3e30bf79460c8d80.sample"]
+dest_files=[ "res://.import/foto_obturador.wav-f9865d36eb74f2de3e30bf79460c8d80.sample" ]
 
 [params]
 
 force/8_bit=false
 force/mono=false
-force/max_rate=false
-force/max_rate_hz=44100
+force/max_rate=true
+force/max_rate_hz=32000
 edit/trim=false
 edit/normalize=false
 edit/loop_mode=0
 edit/loop_begin=0
 edit/loop_end=-1
-compress/mode=2
+compress/mode=1

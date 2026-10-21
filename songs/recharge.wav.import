@@ -1,24 +1,23 @@
 [remap]
 
 importer="wav"
-type="AudioStreamWAV"
-uid="uid://bbykk6mqtlq6b"
-path="res://.godot/imported/recharge.wav-e2b6b78a479f85ba2884e72c714b3945.sample"
+type="AudioStreamSample"
+path="res://.import/recharge.wav-e2b6b78a479f85ba2884e72c714b3945.sample"
 
 [deps]
 
 source_file="res://songs/recharge.wav"
-dest_files=["res://.godot/imported/recharge.wav-e2b6b78a479f85ba2884e72c714b3945.sample"]
+dest_files=[ "res://.import/recharge.wav-e2b6b78a479f85ba2884e72c714b3945.sample" ]
 
 [params]
 
 force/8_bit=false
 force/mono=false
-force/max_rate=false
-force/max_rate_hz=44100
+force/max_rate=true
+force/max_rate_hz=32000
 edit/trim=false
 edit/normalize=false
 edit/loop_mode=0
 edit/loop_begin=0
 edit/loop_end=-1
-compress/mode=2
+compress/mode=1

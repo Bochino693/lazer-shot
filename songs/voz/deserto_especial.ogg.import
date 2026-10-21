@@ -1,19 +1,15 @@
 [remap]
 
-importer="oggvorbisstr"
-type="AudioStreamOggVorbis"
-uid="uid://cgtqfbnr0vvno"
-path="res://.godot/imported/deserto_especial.ogg-8927bd728c7b8e7da2404244c432fba0.oggvorbisstr"
+importer="ogg_vorbis"
+type="AudioStreamOGGVorbis"
+path="res://.import/deserto_especial.ogg-8927bd728c7b8e7da2404244c432fba0.oggstr"
 
 [deps]
 
 source_file="res://songs/voz/deserto_especial.ogg"
-dest_files=["res://.godot/imported/deserto_especial.ogg-8927bd728c7b8e7da2404244c432fba0.oggvorbisstr"]
+dest_files=[ "res://.import/deserto_especial.ogg-8927bd728c7b8e7da2404244c432fba0.oggstr" ]
 
 [params]
 
 loop=false
 loop_offset=0
-bpm=0
-beat_count=0
-bar_beats=4

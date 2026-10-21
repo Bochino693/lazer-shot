@@ -1,249 +1,173 @@
+extends Node2D
 class_name FundoVivo
-extends Control
 
-## FUNDO VIVO: imagem parada que ganha vida na placa de vídeo.
+## FUNDO VIVO das telas de fora da partida (inicial, escolha de cenário e
+## ranking), sem vídeo e sem shader de tela cheia (Mali-450).
 ##
-## Os fundos em vídeo (back_init e as prévias do menu) eram decodificados
-## pelo processador a cada quadro; na TV Box isso era o grosso das travadas
-## do menu. Aqui cada fundo é uma imagem + máscara (shaders/fundo_vivo.gdshader):
-## luzes piscando e pulsando com a música, chão/água ondulando, brilho na
-## batida, zoom lento e uma faixa de brilho de tempos em tempos. Por cima,
-## faíscas subindo (poucas, um único desenho). Custo de processador ~zero.
+## "init" é o corredor do estande (fundo_menu): o título, o alvo e o logo
+## acendem na batida da música e as luzes do corredor piscam com o grave
+## (duas camadas de luz somada, de meia resolução, tiradas do próprio fundo
+## por tools/preparar_mali.py). Os cenários ("deserto", "mar", "bar",
+## "arena") são as artes das fases. Por cima de todos, brasas subindo e uma
+## faixa de brilho que cruza a tela de tempos em tempos; o fundo "respira"
+## (zoom lento, pouco: o logo da Lazer & Sport encosta na borda).
 ##
 ## Uso:
-##   var fundo := FundoVivo.new()
-##   add_child(fundo)
-##   fundo.mostrar("init")            # troca com cruzamento suave
-##   fundo.mostrar("deserto")         # pedidos seguidos: vale o último
+##   var f = FundoVivo.new()
+##   add_child(f)
+##   f.mostrar("init")         # troca com cruzamento suave
+##   f.mostrar("mar")          # pedidos seguidos: vale o último
 
-const SHADER := preload("res://shaders/fundo_vivo.gdshader")
-const SHADER_DESERTO := preload("res://shaders/deserto_fundo.gdshader")
-## Qualidade leve (TV Box mais fraca, Maquina.qualidade_leve): a mesma
-## imagem e máscara com menos contas, em todos os fundos.
-const SHADER_LEVE := preload("res://shaders/fundo_vivo_leve.gdshader")
-
-## img, máscara e cor de destaque de cada fundo.
-const FUNDOS := {
-	"init": ["res://sprites/fundo_init.png", "res://sprites/fundo_init_mascara.png", Color(1.0, 0.24, 0.16)],
-	"deserto": ["res://sprites/deserto_sol.png", "res://sprites/deserto_sol_mascara.png", Color(1.0, 0.74, 0.34)],
-	"mar": ["res://sprites/atlantis.png", "res://sprites/atlantis_mascara.png", Color(0.30, 0.80, 1.0)],
-	"bar": ["res://sprites/back_new.png", "res://sprites/back_new_mascara.png", Color(1.0, 0.66, 0.28)],
-	"arena": ["res://sprites/arena.png", "res://sprites/arena_mascara.png", Color(1.0, 0.18, 0.30)],
+const FUNDOS = {
+	"init": "fundo_menu",
+	"deserto": "fundo_egito_sol",
+	"mar": "fundo_mar",
+	"bar": "fundo_bar",
+	"arena": "fundo_arena",
 }
+## Espera o pedido parar antes de trocar (a mira passando por vários cartões
+## não fica trocando de fundo) e a duração do cruzamento.
+const ATRASO_TROCA = 0.18
+const TEMPO_TROCA = 0.35
 
-## Espera o pedido "parar" antes de trocar (a mira passando por cima de
-## vários cartões não fica trocando de fundo) e duração do cruzamento.
-const ATRASO_TROCA := 0.18
-const TEMPO_TROCA := 0.35
-## Tela cheia sempre: a imagem (2:3) corta no máximo isto de cada lateral e o
-## resto vira escala, como os vídeos faziam (os logos das bordas não somem).
-const CORTE_MAX := 0.03
+var escurecer = 1.0 setget _set_escurecer
 
-var _camadas: Dictionary = {}   # chave -> TextureRect
-var _atual := ""
-var _desejado := ""
-var _espera := 0.0
-var _tw: Tween = null
-var _faiscas: CPUParticles2D = null
-var _aquecendo := 0
-var _onda := 9.0
-
-
-## chaves: quais fundos esta tela usa (todos já ficam prontos).
-func _init(chaves: Array = ["init"]) -> void:
-	name = "FundoVivo"
-	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	focus_mode = Control.FOCUS_NONE
-	for chave in chaves:
-		if FUNDOS.has(chave):
-			_criar_camada(chave)
-	_criar_faiscas()
+var _t = 0.0
+var _vivo: Node2D
+var _camadas = {}
+var _brilho: Sprite
+var _luzes: Sprite
+var _faixa: Sprite
+var _faixa_t = 4.0
+var _brasas: Particulas
+var _atual = ""
+var _desejado = ""
+var _espera = 0.0
+var _tw: SceneTreeTween
 
 
-func _ready() -> void:
-	ajustar()
-	get_viewport().size_changed.connect(ajustar)
-	# Desenha todos os fundos (por baixo do atual, quase transparentes) nos
-	# primeiros quadros, ainda sob a transição: o shader é montado e as
-	# imagens sobem para a placa agora, e não no primeiro passar da mira por
-	# um cartão. (Abaixo de ~0,01 de opacidade o Godot nem desenha.)
-	_aquecendo = 3
-	for c: TextureRect in _camadas.values():
-		c.visible = true
-		if c.name != "Fundo_" + _atual:
-			c.modulate.a = 0.02
+func _init() -> void:
+	_vivo = Node2D.new()
+	_vivo.position = Tela.TELA * 0.5
+	add_child(_vivo)
+	_faixa = Sprite.new()
+	_faixa.texture = Estilo.tex("fx_feixe")
+	_faixa.material = Estilo.material_soma()
+	_faixa.rotation = deg2rad(-28.0)
+	_faixa.scale = Vector2(5.0, 9.5)
+	_faixa.modulate = Color(1.0, 0.9, 0.9, 0.0)
+	_faixa.visible = false
+	_faixa.add_to_group("efeito_opcional")
+	add_child(_faixa)
+	_brasas = Particulas.new()
+	_brasas.somar = true
+	_brasas.add_to_group("efeito_opcional")
+	add_child(_brasas)
 
 
-func _criar_camada(chave: String) -> void:
-	var dados: Array = FUNDOS[chave]
-	var camada := TextureRect.new()
-	camada.name = "Fundo_" + chave
-	camada.texture = Hd.textura(dados[0])
-	camada.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	camada.stretch_mode = TextureRect.STRETCH_SCALE
-	camada.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	camada.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
-	camada.visible = false
-	var cor: Color = dados[2]
-	var mat := ShaderMaterial.new()
-	if Maquina.qualidade_leve():
-		mat.shader = SHADER_LEVE
-		mat.set_shader_parameter("cor", Vector3(cor.r, cor.g, cor.b))
-	elif chave == "deserto":
-		mat.shader = SHADER_DESERTO
-		mat.set_shader_parameter("cor_energia", Vector3(cor.r, cor.g, cor.b))
-	else:
-		mat.shader = SHADER
-		mat.set_shader_parameter("cor", Vector3(cor.r, cor.g, cor.b))
-	mat.set_shader_parameter("mascara", load(dados[1]))
-	mat.set_shader_parameter("fase", float(_camadas.size()) * 7.3)
-	if chave == "init":
-		mat.set_shader_parameter("respiro", 0.5)   # títulos e logos perto das bordas
-	camada.material = mat
-	add_child(camada)
-	_camadas[chave] = camada
-
-
-func _criar_faiscas() -> void:
-	var p := CPUParticles2D.new()
-	p.name = "Faiscas"
-	p.amount = 14 if Maquina.qualidade_leve() else 34
-	p.lifetime = 6.0
-	p.preprocess = 6.0
-	p.emission_shape = CPUParticles2D.EMISSION_SHAPE_RECTANGLE
-	p.direction = Vector2(0, -1)
-	p.spread = 14.0
-	p.gravity = Vector2(0, -6)
-	p.initial_velocity_min = 55.0
-	p.initial_velocity_max = 150.0
-	p.scale_amount_min = 0.25
-	p.scale_amount_max = 0.95
-	p.texture = brilho_redondo()
-	var rampa := Gradient.new()
-	rampa.offsets = PackedFloat32Array([0.0, 0.15, 0.7, 1.0])
-	rampa.colors = PackedColorArray([Color(1, 1, 1, 0), Color(1, 1, 1, 0.9), Color(1, 1, 1, 0.5), Color(1, 1, 1, 0)])
-	p.color_ramp = rampa
-	var mat := CanvasItemMaterial.new()
-	mat.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
-	p.material = mat
-	add_child(p)
-	_faiscas = p
-
-
-## Pontinho de luz redondo (32 px) para as faíscas.
-static func brilho_redondo() -> Texture2D:
-	if Engine.has_meta("brilho_redondo"):
-		return Engine.get_meta("brilho_redondo")
-	var g := Gradient.new()
-	g.offsets = PackedFloat32Array([0.0, 0.25, 1.0])
-	g.colors = PackedColorArray([Color(1, 1, 1, 1), Color(1, 1, 1, 0.45), Color(1, 1, 1, 0)])
-	var t := GradientTexture2D.new()
-	t.gradient = g
-	t.width = 32
-	t.height = 32
-	t.fill = GradientTexture2D.FILL_RADIAL
-	t.fill_from = Vector2(0.5, 0.5)
-	t.fill_to = Vector2(0.5, 0.0)
-	Engine.set_meta("brilho_redondo", t)
-	return t
-
-
-func ajustar() -> void:
-	var tela := get_viewport_rect().size
-	position = Vector2.ZERO
-	size = tela
-	for c: TextureRect in _camadas.values():
-		var img: Vector2 = c.texture.get_size()
-		var tam := tela
-		var largura_cheia := tela.y * img.x / img.y
-		if largura_cheia > tela.x:
-			tam.x = minf(largura_cheia, tela.x / (1.0 - 2.0 * CORTE_MAX))
-		else:
-			tam.y = minf(tela.x * img.y / img.x, tela.y / (1.0 - 2.0 * CORTE_MAX))
-		c.position = ((tela - tam) * 0.5).round()
-		c.size = tam.round()
-	if _faiscas != null:
-		_faiscas.position = Vector2(tela.x * 0.5, tela.y + 12.0)
-		_faiscas.emission_rect_extents = Vector2(tela.x * 0.5, 16.0)
-
-
-## Pede um fundo. imediato = troca já (sem esperar o pedido parar).
+## Mostra o fundo `chave` (cruzando com o atual). imediato: sem a espera.
 func mostrar(chave: String, imediato: bool = false) -> void:
-	if not _camadas.has(chave):
+	if not FUNDOS.has(chave):
 		return
+	_desejado = chave
+	_espera = 0.0 if imediato or _atual == "" else ATRASO_TROCA
 	if _atual == "":
-		_trocar(chave, false)
-		return
-	if chave != _desejado:
-		_desejado = chave
-		_espera = 0.0
-	if imediato:
-		_espera = maxf(_espera, ATRASO_TROCA)
+		_trocar(chave, true)
 
 
 func atual() -> String:
 	return _atual
 
 
-func _process(delta: float) -> void:
-	if _aquecendo > 0:
-		_aquecendo -= 1
-		if _aquecendo == 0:
-			for chave: String in _camadas:
-				var c: TextureRect = _camadas[chave]
-				if chave != _atual:
-					c.visible = false
-					c.modulate.a = 0.0
-
-	if _desejado != "" and _desejado != _atual:
-		_espera += delta
-		if _espera >= ATRASO_TROCA and not (_tw != null and _tw.is_valid() and _tw.is_running()):
-			_trocar(_desejado, true)
-	else:
-		_espera = 0.0
-
-	# música -> shader (só nas camadas à mostra: no máximo duas)
-	var som := Maquina.pulso_vivo()
-	if som.y > 0.55 and _onda > 0.62:
-		_onda = 0.0
-	_onda = minf(_onda + delta * 0.85, 9.0)
-	for c: TextureRect in _camadas.values():
-		if c.visible and c.modulate.a > 0.01:
-			var mat := c.material as ShaderMaterial
-			mat.set_shader_parameter("grave", som.x)
-			mat.set_shader_parameter("batida", som.y)
-			if c.name == "Fundo_deserto":
-				mat.set_shader_parameter("onda", _onda)
-	if _faiscas != null:
-		_faiscas.speed_scale = 1.0 + som.y * 0.9
+func _set_escurecer(v: float) -> void:
+	escurecer = v
+	_vivo.modulate = Color(v, v, v)
 
 
-func _trocar(chave: String, suave: bool) -> void:
-	var novo: TextureRect = _camadas[chave]
-	var velho: TextureRect = _camadas.get(_atual)
+func _camada(chave: String) -> Sprite:
+	if _camadas.has(chave):
+		return _camadas[chave]
+	var s = Sprite.new()
+	s.texture = Estilo.tex(FUNDOS[chave])
+	s.scale = Vector2.ONE * (Tela.TELA.x / s.texture.get_width())
+	s.modulate.a = 0.0
+	_vivo.add_child(s)
+	_camadas[chave] = s
+	if chave == "init":
+		_luzes = _luz("menu_luzes", s)
+		_brilho = _luz("menu_brilho", s)
+	return s
+
+
+## Camada de luz somada presa ao fundo (meia resolução: escala dobrada).
+func _luz(nome: String, fundo: Sprite) -> Sprite:
+	var l = Sprite.new()
+	l.texture = Estilo.tex(nome)
+	l.material = Estilo.material_soma()
+	l.scale = Vector2.ONE * (fundo.texture.get_width() / float(l.texture.get_width()))
+	l.modulate.a = 0.0
+	fundo.add_child(l)
+	return l
+
+
+func _trocar(chave: String, imediato: bool) -> void:
+	var novo = _camada(chave)
+	var velho = _camadas.get(_atual, null)
 	_atual = chave
-	_desejado = chave
-	_espera = 0.0
-	var cor: Color = FUNDOS[chave][2]
-	if _faiscas != null:
-		_faiscas.color = cor.lerp(Color.WHITE, 0.35)
-
-	move_child(novo, _faiscas.get_index() - 1 if _faiscas != null else -1)
+	_vivo.move_child(novo, _vivo.get_child_count() - 1)
 	novo.visible = true
-	if not suave or velho == null or velho == novo:
-		novo.modulate.a = 1.0
-		for c: TextureRect in _camadas.values():
-			if c != novo and _aquecendo == 0:
-				c.visible = false
-		return
-	novo.modulate.a = 0.0
 	if _tw != null and _tw.is_valid():
 		_tw.kill()
+	if imediato:
+		novo.modulate.a = 1.0
+		_so_o_atual()
+		return
 	_tw = create_tween()
-	_tw.tween_property(novo, "modulate:a", 1.0, TEMPO_TROCA).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-	_tw.tween_callback(func() -> void:
-		for c: TextureRect in _camadas.values():
-			if c != novo:
-				c.visible = false
-				c.modulate.a = 0.0
-	)
+	_tw.tween_property(novo, "modulate:a", 1.0, TEMPO_TROCA).set_trans(Tween.TRANS_SINE)
+	_tw.tween_callback(self, "_so_o_atual")
+	if velho != null and velho != novo:
+		velho.modulate.a = 1.0
+
+
+## As camadas cobertas nem são desenhadas (todas opacas).
+func _so_o_atual() -> void:
+	for k in _camadas:
+		var s: Sprite = _camadas[k]
+		s.visible = k == _atual
+		if k != _atual:
+			s.modulate.a = 0.0
+
+
+func _process(delta: float) -> void:
+	_t += delta
+	if _desejado != _atual and _desejado != "":
+		_espera -= delta
+		if _espera <= 0.0:
+			_trocar(_desejado, false)
+	var som = Maquina.pulso_vivo()
+	# o fundo respira (zoom sempre acima de 1: a borda nunca aparece)
+	var z = 1.0 + 0.007 + 0.004 * sin(_t * 0.19) + 0.004 * som.y
+	_vivo.scale = Vector2(z, z)
+	_vivo.position = Tela.TELA * 0.5 + Vector2(2.0 * sin(_t * 0.13), 4.0 * cos(_t * 0.11))
+	if _brilho != null and _brilho.is_visible_in_tree():
+		# título/alvo/logo na batida; luzes do corredor piscando com o grave
+		_brilho.modulate.a = clamp(0.10 + 0.85 * som.y + 0.25 * som.x, 0.0, 1.0)
+		var pisca = 0.5 + 0.5 * sin(_t * 9.0) * sin(_t * 5.3)
+		_luzes.modulate.a = clamp(0.15 + 0.6 * som.x + 0.3 * pisca + 0.35 * som.y, 0.0, 1.0)
+	# faixa de brilho na diagonal (~12 s por passagem)
+	_faixa_t += delta
+	if _faixa_t > 12.0:
+		_faixa_t = 0.0
+	var k = _faixa_t / 2.2
+	if k <= 1.0:
+		_faixa.visible = true
+		_faixa.position = Vector2(lerp(-500.0, Tela.TELA.x + 500.0, k), Tela.TELA.y * 0.5)
+		_faixa.modulate.a = 0.10 * sin(k * PI) * escurecer
+	elif _faixa.visible:
+		_faixa.visible = false
+	# brasas subindo do chão
+	if randf() < delta * 9.0 * Maquina.fator_efeitos():
+		var p = Vector2(rand_range(0.0, Tela.TELA.x), Tela.TELA.y + 10.0)
+		var v = Vector2(rand_range(-20.0, 20.0), rand_range(-110.0, -45.0))
+		_brasas.soltar(p, v, rand_range(4.0, 7.0), rand_range(4.0, 8.0), 1.5, Color(1.0, 0.45, 0.2, 0.9 * escurecer),
+			Color(1.0, 0.15, 0.05, 0.0), Estilo.tex("fx_ponto"), -6.0, 0.1)

@@ -1,19 +1,15 @@
 [remap]
 
-importer="oggvorbisstr"
-type="AudioStreamOggVorbis"
-uid="uid://owhcecnx7l4c"
-path="res://.godot/imported/deserto_imparavel.ogg-bad3de4dc5cae63e95b6b7d4d3f997b2.oggvorbisstr"
+importer="ogg_vorbis"
+type="AudioStreamOGGVorbis"
+path="res://.import/deserto_imparavel.ogg-bad3de4dc5cae63e95b6b7d4d3f997b2.oggstr"
 
 [deps]
 
 source_file="res://songs/voz/deserto_imparavel.ogg"
-dest_files=["res://.godot/imported/deserto_imparavel.ogg-bad3de4dc5cae63e95b6b7d4d3f997b2.oggvorbisstr"]
+dest_files=[ "res://.import/deserto_imparavel.ogg-bad3de4dc5cae63e95b6b7d4d3f997b2.oggstr" ]
 
 [params]
 
 loop=false
 loop_offset=0
-bpm=0
-beat_count=0
-bar_beats=4
