@@ -9,9 +9,12 @@ extends "res://scripts/fase.gd"
 ## Combo de acertos seguidos em até 2,2 s.
 ##
 ## O cenário responde a cada tiro: a madeira lasca e fica o furo; o BARRIL é
-## bônus (+40 por furo, até 6) e o vinho jorra pelo furo; a JANELA estilhaça
-## e o sol entra mais forte. O sol pela janela é um feixe que respira, com
-## poeira brilhando dentro.
+## bônus (+40 por furo, até 6) e o vinho jorra pelo furo; a JANELA tem
+## desenho próprio (scripts/bar_janela.gd): cada tiro estoura o vidro de
+## verdade (trincas, cacos caindo, pontas presas na moldura) e o sol entra
+## mais forte. Os 5 primeiros tiros na janela valem +50 cada; no 5º o que
+## sobrou do vidro desaba e a janela não dá mais pontos. O sol pela janela é
+## um feixe que respira, com poeira brilhando dentro.
 
 const JANELA = 2.2
 const X_COLUNAS = {
@@ -32,6 +35,9 @@ const VIDRO = {"gin": Color(0.75, 0.9, 1.0), "rum": Color(0.65, 0.35, 0.12), "vo
 const PENA_FALSA = 500
 const BONUS_BARRIL = 40
 const BARRIL_FUROS = 6
+const BONUS_JANELA = 50
+const JANELA_TIROS = 5          # só os 5 primeiros tiros na janela valem pontos
+const JanelaBar = preload("res://scripts/bar_janela.gd")
 # px de back_new.png (a imagem 1024x1536 da 4.6)
 const CARTAZ = [Vector2(797, 1022), Vector2(992, 1027), Vector2(1002, 1360), Vector2(800, 1335)]
 const BARRIL = [Vector2(800, 995), Vector2(1024, 995), Vector2(1024, 1435), Vector2(810, 1425),
@@ -74,7 +80,8 @@ var _poca = 0.0
 var _feixe_a: Polygon2D
 var _feixe_b: Polygon2D
 var _poeira_sol: Particulas
-var _vidracas = []
+var _janela: Node2D             # JanelaBar
+var _janela_pagos = 0
 var _furos: Node2D
 var _t = 0.0
 var _sol_forca = 1.0
@@ -83,7 +90,6 @@ var _som_vidro: AudioStream
 var _som_falsa: AudioStream
 var _som_pousa: AudioStream
 var _som_vinho: AudioStream
-var _som_janela: AudioStream
 var _som_madeira: AudioStream
 var _som_papel: AudioStream
 
@@ -115,7 +121,6 @@ func _montar_cenario() -> void:
 	_som_falsa = load("res://songs/fail.wav")
 	_som_pousa = load("res://songs/garrafa_pousa.wav")
 	_som_vinho = load("res://songs/vinho_jorra.wav")
-	_som_janela = load("res://songs/janela_quebra.wav")
 	_som_madeira = load("res://songs/madeira_tiro.wav")
 	_som_papel = load("res://songs/papel_tiro.wav")
 	fundo_sprite("fundo_bar")
@@ -125,11 +130,17 @@ func _montar_cenario() -> void:
 	_vinho = Node2D.new()
 	_vinho.connect("draw", self, "_desenhar_vinho")
 	cenario.add_child(_vinho)
-	# vidraças da janela (o estado de cada uma)
+	# a janela: as vidraças levam tiro (antes do sol: o feixe soma por cima
+	# dos buracos)
+	var vidracas = []
 	for r in VIDRACAS:
 		var a = tela(r.position)
 		var b = tela(r.end)
-		_vidracas.append({"rect": Rect2(a, b - a), "quebrada": false, "luz": null})
+		vidracas.append(Rect2(a, b - a))
+	_janela = JanelaBar.new()
+	cenario.add_child(_janela)
+	_janela.configurar(vidracas, Estilo.tex("fundo_bar"), Tela.TELA.x / 1080.0, K_FUNDO, tela(Vector2(0, 279)).y,
+		Vector3(tela(Vector2(58, 0)).x, tela(Vector2(338, 0)).x, tela(Vector2(0, 205)).y))
 	# o sol pela janela: o feixe com listras de poeira (duas imagens somadas,
 	# o peso troca devagar e as listras andam) e a poeira brilhando
 	_feixe_a = _feixe("bar_raios_a")
@@ -418,13 +429,16 @@ func _tiro(p: Vector2) -> void:
 	if no_barril and _barril_furos < BARRIL_FUROS:
 		_tiro_no_barril(p, em_cartaz)
 		return
+	var vidro = _janela.tiro(p)
+	if vidro == JanelaBar.QUEBROU:
+		_sol_forca = min(2.2, 1.0 + 0.15 * _janela.quebradas())
+		if _janela_pagos < JANELA_TIROS:
+			_tiro_na_janela(p)
+			return
 	erros_seguidos += 1
 	errar(p, "ERROU!")
-	for v in _vidracas:
-		if v["rect"].has_point(p):
-			_quebrar_vidraca(v, p)
-			return
-	_lascar(p, "papel" if em_cartaz else "madeira")
+	if vidro == JanelaBar.FORA:
+		_lascar(p, "papel" if em_cartaz else "madeira")
 
 
 func _acertar(g: Garrafa, p: Vector2) -> void:
@@ -493,31 +507,18 @@ func _tiro_no_barril(p: Vector2, cartaz: bool) -> void:
 		avisos.instrucao("BARRIL ESGOTADO", Color(1.0, 0.72, 0.76))
 
 
-func _quebrar_vidraca(v: Dictionary, p: Vector2) -> void:
-	Maquina.efeito(_som_janela, -3.0, rand_range(0.95, 1.05))
-	var r: Rect2 = v["rect"]
-	if v["quebrada"]:
-		particulas.explosao(p, {"n": 5, "tex": Estilo.tex("fx_caco"), "vel": [60.0, 160.0], "ang": [60.0, 120.0], "vida": [0.6, 1.0],
-			"tam": [6.0, 12.0], "cor": Color(0.85, 0.95, 1.0, 0.8), "grav": 1200.0, "chao": tela(Vector2(0, 279)).y, "giro": [-12.0, 12.0]})
-		return
-	v["quebrada"] = true
-	# o vidro se parte em cacos da própria pintura da janela
-	var esc = Tela.TELA.x / 1080.0
-	var px = r.position / esc
-	var tam = r.size / esc
-	cacos.estourar(Estilo.tex("fundo_bar"), Rect2(px, tam), Transform2D(Vector2(esc, 0), Vector2(0, esc), r.position + r.size * 0.5), p,
-		{"n": 10, "forca": 0.8, "grav": 1400.0, "chao": tela(Vector2(0, 279)).y, "vida": 1.6, "sobe": 120.0, "cor": Color(1, 1, 1, 0.95)})
-	particulas_luz.explosao(p, {"n": 12, "vel": [80.0, 260.0], "vida": [0.3, 0.6], "tam": [6.0, 12.0], "cor": Color(1.0, 0.95, 0.8)})
-	# o buraco: a luz de fora entra mais forte
-	var luz_buraco = Sprite.new()
-	luz_buraco.texture = Estilo.tex("fx_brilho")
-	luz_buraco.material = Estilo.material_soma()
-	luz_buraco.position = r.position + r.size * 0.5
-	luz_buraco.scale = r.size / 70.0
-	luz_buraco.modulate = Color(1.0, 0.9, 0.65, 0.85)
-	cenario.add_child(luz_buraco)
-	v["luz"] = luz_buraco
-	_sol_forca = min(2.2, _sol_forca + 0.15)
+## Tiro na janela que destruiu vidro: os 5 primeiros valem pontos (bônus,
+## sem mexer no combo); no 5º o que sobrou do vidro desaba e acabou.
+func _tiro_na_janela(p: Vector2) -> void:
+	_janela_pagos += 1
+	bonus(BONUS_JANELA, p + Vector2(0, 40), Color(0.78, 0.93, 1.0), 1.1)
+	if _janela_pagos == 1:
+		avisos.instrucao("JANELA! +%d NOS %d PRIMEIROS TIROS" % [BONUS_JANELA, JANELA_TIROS], Color(0.82, 0.94, 1.0))
+	if _janela_pagos >= JANELA_TIROS:
+		_janela.desabar(p)
+		_sol_forca = 2.2
+		tremer(5.0, 0.25)
+		avisos.instrucao("JANELA DESTRUÍDA!", Color(0.82, 0.94, 1.0))
 
 
 func _lascar(p: Vector2, material: String) -> void:
@@ -560,7 +561,8 @@ func _sempre(delta: float) -> void:
 	var e = Maquina.pulso_vivo()
 	# o sol respira como se nuvens passassem lá fora; as listras andam
 	var nuvem = 0.86 + 0.14 * sin(_t * 0.21) * sin(_t * 0.137 + 1.3)
-	var forca_sol = 0.5 * nuvem * _sol_forca
+	var c = _janela.clarao()
+	var forca_sol = 0.5 * nuvem * (_sol_forca + 0.9 * c * c)
 	var w = 0.5 + 0.5 * sin(_t * 0.55)
 	_feixe_a.modulate.a = forca_sol * w
 	_feixe_b.modulate.a = forca_sol * (1.0 - w)
@@ -570,9 +572,7 @@ func _sempre(delta: float) -> void:
 		var p = tela(q) + Vector2(rand_range(-12, 12), rand_range(-12, 12))
 		_poeira_sol.soltar(p, Vector2(rand_range(-4, 8), rand_range(-2, 9)), rand_range(3.0, 5.0), rand_range(4.0, 7.0), 2.0,
 			Color(1.0, 0.9, 0.6, 0.6), Color(1.0, 0.9, 0.6, 0.0), Estilo.tex("fx_ponto"))
-	for v in _vidracas:
-		if v["luz"] != null:
-			v["luz"].modulate.a = 0.6 + 0.25 * sin(_t * 1.3)
+	_janela.respirar(_t)
 	if not _jatos.empty():
 		for j in _jatos:
 			j["t"] += delta
