@@ -25,7 +25,7 @@ extends Node
 ## e os quadros por segundo; a CONFIGURAÇÃO mostra como a sessão anterior
 ## terminou (diagnóstico da TV Box sem cabo nem computador).
 
-const VERSAO = "2.0.0"
+const VERSAO = "2.0.1"
 const TELA = Vector2(1024, 1820)
 const CAIXA = "user://caixa_preta.cfg"
 
