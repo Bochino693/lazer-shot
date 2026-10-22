@@ -5,6 +5,12 @@ param(
     [ValidateSet(1, -1, 0)][int]$Giro = 1,
     # A mira anda de lado quando a arma sobe? Gere de novo com -MiraGirada.
     [switch]$MiraGirada,
+    # Quem gira a imagem para o monitor em pe. Padrao: o app abre deitado e
+    # pede ao ANDROID a tela em pe; se a TV Box girar de verdade, a seta do
+    # mouse anda no sentido da arma; se nao girar (ou puser o app numa faixa
+    # no meio), o jogo gira por dentro sozinho. Com -JogoGira nem pede.
+    # (Tambem da para trocar depois na CONFIGURACAO: "Quem gira a tela".)
+    [switch]$JogoGira,
     # Instala na TV Box pelo adb depois de gerar (TV Box ligada no adb).
     [switch]$Instalar,
     # So puxa o registro do Android (logcat) da TV Box pelo adb, sem gerar APK:
@@ -360,11 +366,17 @@ if ($Projeto.Length -gt 120) {
     Diz "AVISO: o caminho desta pasta e comprido ($($Projeto.Length) letras). Se der erro, mova para C:\LazerShotMali." "Yellow"
 }
 
-# O giro da tela e a mira (project.godot): vale para este APK; o arquivo
-# volta como estava no fim. A tela de quando o app abre (a marca Lazer &
-# Sport, no lugar do simbolo do Godot) sai ja girada para o mesmo lado.
+# O giro da tela, quem gira e a mira (project.godot): vale para este APK; o
+# arquivo volta como estava no fim. O app sempre abre deitado (muitas TV Box
+# Amlogic poem app em pe numa faixa no meio da tela, sem girar) e a tela de
+# quando o app abre (a marca Lazer & Sport, no lugar do simbolo do Godot) sai
+# ja girada para o lado do giro. Depois o jogo pede ao Android a tela em pe e
+# confere; com -JogoGira nem pede.
 $ConfigNovo = [Regex]::Replace($ConfigTexto, '(?m)^tela/giro=.*$', "tela/giro=$Giro")
 $ConfigNovo = [Regex]::Replace($ConfigNovo, '(?m)^tela/mira_direta=.*$', "tela/mira_direta=$(if ($MiraGirada) { 'false' } else { 'true' })")
+$Rotacao = if ($JogoGira) { "jogo" } else { "android" }
+$ConfigNovo = [Regex]::Replace($ConfigNovo, '(?m)^tela/rotacao=.*$', "tela/rotacao=`"$Rotacao`"")
+$ConfigNovo = [Regex]::Replace($ConfigNovo, '(?m)^window/handheld/orientation=.*$', 'window/handheld/orientation="landscape"')
 $Splash = @{ 1 = "splash_giro_1.png"; -1 = "splash_giro_m1.png"; 0 = "splash_giro_0.png" }[$Giro]
 if (-not (Test-Path -LiteralPath (Join-Path $Projeto "splash\$Splash"))) {
     throw "Falta splash\$Splash (a tela de abertura do app). Baixe a branch tvbox-mali450 de novo, inteira."
@@ -375,6 +387,7 @@ if ($ConfigNovo -ne $ConfigTexto) {
     [IO.File]::WriteAllText($ProjectGodot, $ConfigNovo, $Utf8)
 }
 Diz "Giro da tela: $Giro  (tambem se troca na CONFIGURACAO do jogo)"
+Diz "Quem gira a tela: $(if ($JogoGira) { 'o JOGO (nem pede ao Android)' } else { 'o ANDROID se a TV Box girar de verdade; senao o JOGO, sozinho' })"
 Diz "Mira: $(if ($MiraGirada) { 'girada com o HDMI' } else { 'direta (monitor em pe)' })"
 
 # ------------------------------------------------------------------

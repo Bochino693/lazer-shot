@@ -38,7 +38,6 @@ const TONS_BIP = [0.84, 0.94, 1.06, 1.19, 1.34]
 const FUROS = [Vector2(226, 782), Vector2(538, 781), Vector2(842, 781),
 	Vector2(226, 1098), Vector2(538, 1098), Vector2(842, 1098),
 	Vector2(226, 1418), Vector2(538, 1418), Vector2(842, 1417)]
-const ESCALA_LANTERNA = 0.66 / 0.70      # a lanterna da 4.6 (0,66) na folha de 70%
 const SUBIDA = 190.0
 const PONTOS_BASE = 20
 const PENA_ORDEM = 100
@@ -84,6 +83,7 @@ var _repetindo = false
 var _aviso_espera = 0.0
 
 var _f: Dictionary
+var _esc_lanterna = 0.66 / 0.70      # a lanterna da 4.6 (0,66) na folha de 70% (o "fator" da folha nítida desconta)
 var _furos_tela = []
 var _fundo: Sprite
 var _fundo_fixa: Sprite
@@ -154,6 +154,7 @@ func _icones() -> Dictionary:
 # ------------------------------------------------------------ cenário
 func _montar_cenario() -> void:
 	_f = folha("lanterna")
+	_esc_lanterna = 0.66 / 0.70 / float(_f.get("fator", 1.0))
 	_som_lampada = load("res://songs/hit-lamp.wav")
 	_som_bip = load("res://songs/bip.wav")
 	_som_bip_erro = load("res://songs/bip-error.wav")
@@ -629,7 +630,7 @@ func _nascer(slot: int, nome_cor: String, com_som: bool = true) -> void:
 	l.spr.texture = _f["tex"]
 	l.spr.hframes = _f["quadros"]
 	l.spr.frame = QUADRO_COR[nome_cor]
-	l.spr.scale = Vector2.ONE * ESCALA_LANTERNA
+	l.spr.scale = Vector2.ONE * _esc_lanterna
 	l.no.add_child(l.spr)
 	lanternas[slot] = l
 	if not com_som:
@@ -653,7 +654,7 @@ func _trocar_cor(slot: int, nome_cor: String) -> void:
 	l.cor = nome_cor
 	l.spr.frame = QUADRO_COR[nome_cor]
 	l.spr.modulate = Color.white
-	l.spr.scale = Vector2.ONE * ESCALA_LANTERNA
+	l.spr.scale = Vector2.ONE * _esc_lanterna
 
 
 ## Todas descem para dentro dos furos e somem. true = havia alguma.
@@ -704,9 +705,9 @@ func _quebrar_vidro(l: Lanterna, c: Color, p: Vector2) -> void:
 	l.spr.frame = _f["acerto"][QUADRO_COR[l.cor]]
 	l.spr.modulate = Color(1.0 + c.r, 1.0 + c.g, 1.0 + c.b)
 	var tw = l.no.create_tween().set_parallel(true)
-	tw.tween_property(l.spr, "scale", Vector2.ONE * ESCALA_LANTERNA * 1.22, 0.06)
+	tw.tween_property(l.spr, "scale", Vector2.ONE * _esc_lanterna * 1.22, 0.06)
 	tw.tween_property(l.spr, "modulate", Color.white, 0.20)
-	tw.chain().tween_property(l.spr, "scale", Vector2.ONE * ESCALA_LANTERNA, 0.14)
+	tw.chain().tween_property(l.spr, "scale", Vector2.ONE * _esc_lanterna, 0.14)
 	var centro = l.no.position
 	particulas.explosao(centro, {"n": 22, "tex": Estilo.tex("fx_caco"), "vel": [220.0, 620.0], "vida": [0.45, 1.1], "tam": [8.0, 18.0],
 		"cor": c.linear_interpolate(Color.white, 0.15), "grav": 1100.0, "arrasto": 0.4, "giro": [-14.0, 14.0], "espalha": 22.0})
@@ -725,11 +726,11 @@ func _brilho_sequencia(slot: int, c: Color) -> void:
 	if l == null:
 		return
 	l.spr.modulate = Color(1.7, 1.7, 1.7)
-	l.spr.scale = Vector2.ONE * ESCALA_LANTERNA
+	l.spr.scale = Vector2.ONE * _esc_lanterna
 	var tw = l.no.create_tween().set_parallel(true)
-	tw.tween_property(l.spr, "scale", Vector2.ONE * ESCALA_LANTERNA * 1.18, 0.08)
+	tw.tween_property(l.spr, "scale", Vector2.ONE * _esc_lanterna * 1.18, 0.08)
 	tw.tween_property(l.spr, "modulate", Color.white, 0.22)
-	tw.chain().tween_property(l.spr, "scale", Vector2.ONE * ESCALA_LANTERNA, 0.14)
+	tw.chain().tween_property(l.spr, "scale", Vector2.ONE * _esc_lanterna, 0.14)
 	particulas_luz.explosao(l.no.position, {"n": 14, "vel": [160.0, 480.0], "vida": [0.4, 0.9], "tam": [6.0, 14.0], "cor": c, "arrasto": 1.2})
 	luz_sprite_breve(l.no.position, 320.0, Color(c.r, c.g, c.b, 0.75), 0.5)
 	_pisca = 1.0

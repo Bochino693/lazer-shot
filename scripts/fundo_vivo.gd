@@ -2,12 +2,17 @@ extends Node2D
 class_name FundoVivo
 
 ## FUNDO VIVO das telas de fora da partida (inicial, escolha de cenário e
-## ranking), sem vídeo e sem shader de tela cheia (Mali-450).
+## ranking), sem shader de tela cheia (Mali-450).
 ##
-## "init" é o corredor do estande (fundo_menu): o título, o alvo e o logo
-## acendem na batida da música e as luzes do corredor piscam com o grave
-## (duas camadas de luz somada, de meia resolução, tiradas do próprio fundo
-## por tools/preparar_mali.py). Os cenários ("deserto", "mar", "bar",
+## "init" é o corredor do estande: o VÍDEO da tela inicial da 4.6
+## (videos/back_init.webm, VP8 540x960 sem som: a TV Box decodifica VP8 com
+## NEON, leve) tocando em volta, por cima do quadro parado (fundo_menu). O
+## vídeo pausa quando não aparece (demonstração por cima, outro cenário na
+## frente) e some sozinho se a tela pesar (grupo "efeito_opcional", ver
+## MiraGlobal) ou se estiver desligado na CONFIGURAÇÃO; aí fica o quadro
+## parado vivo: o título, o alvo e o logo acendem na batida da música e as
+## luzes do corredor piscam com o grave (duas camadas de luz somada, de meia
+## resolução, tiradas do próprio fundo por tools/preparar_mali.py). Os cenários ("deserto", "mar", "bar",
 ## "arena") são as artes das fases. Por cima de todos, brasas subindo e uma
 ## faixa de brilho que cruza a tela de tempos em tempos; o fundo "respira"
 ## (zoom lento, pouco: o logo da Lazer & Sport encosta na borda).
@@ -29,6 +34,7 @@ const FUNDOS = {
 ## não fica trocando de fundo) e a duração do cruzamento.
 const ATRASO_TROCA = 0.18
 const TEMPO_TROCA = 0.35
+const VIDEO_INIT = "res://videos/back_init.webm"
 
 var escurecer = 1.0 setget _set_escurecer
 
@@ -44,6 +50,8 @@ var _atual = ""
 var _desejado = ""
 var _espera = 0.0
 var _tw: SceneTreeTween
+var _video: VideoPlayer
+var _video_pausado = false
 
 
 func _init() -> void:
@@ -96,7 +104,41 @@ func _camada(chave: String) -> Sprite:
 	if chave == "init":
 		_luzes = _luz("menu_luzes", s)
 		_brilho = _luz("menu_brilho", s)
+		_video = _criar_video(s)
 	return s
+
+
+## O vídeo do corredor por cima do quadro parado (cobre a imagem inteira).
+func _criar_video(fundo: Sprite) -> VideoPlayer:
+	if not bool(Maquina.valor("video/video_inicial")):
+		return null
+	var stream = load(VIDEO_INIT)
+	if stream == null:
+		return null
+	var v = VideoPlayer.new()
+	v.stream = stream
+	v.expand = true
+	v.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var tam = fundo.texture.get_size()
+	v.rect_position = -tam * 0.5
+	v.rect_size = tam
+	v.connect("finished", self, "_video_de_novo")
+	v.add_to_group("efeito_opcional")
+	fundo.add_child(v)
+	fundo.move_child(v, 0)
+	v.play()
+	return v
+
+
+## Em volta: acabou, começa de novo.
+func _video_de_novo() -> void:
+	if _video != null and is_instance_valid(_video) and _video.is_visible_in_tree():
+		_video.play()
+
+
+## A tela cobriu o fundo (demonstração por cima): o vídeo pausa.
+func pausar_video(sim: bool) -> void:
+	_video_pausado = sim
 
 
 ## Camada de luz somada presa ao fundo (meia resolução: escala dobrada).
@@ -149,6 +191,15 @@ func _process(delta: float) -> void:
 	var z = 1.0 + 0.007 + 0.004 * sin(_t * 0.19) + 0.004 * som.y
 	_vivo.scale = Vector2(z, z)
 	_vivo.position = Tela.TELA * 0.5 + Vector2(2.0 * sin(_t * 0.13), 4.0 * cos(_t * 0.11))
+	# o vídeo toca só quando aparece; tocando, as luzes do quadro parado somem
+	var com_video = false
+	if _video != null and is_instance_valid(_video):
+		com_video = _video.is_visible_in_tree() and not _video_pausado
+		if _video.paused == com_video:
+			_video.paused = not com_video
+		if _brilho != null:
+			_brilho.visible = not com_video
+			_luzes.visible = not com_video
 	if _brilho != null and _brilho.is_visible_in_tree():
 		# título/alvo/logo na batida; luzes do corredor piscando com o grave
 		_brilho.modulate.a = clamp(0.10 + 0.85 * som.y + 0.25 * som.x, 0.0, 1.0)

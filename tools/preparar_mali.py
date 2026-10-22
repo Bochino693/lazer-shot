@@ -105,13 +105,16 @@ def mascara(im, n=24):
 
 def folha(nome, quadros, escala, centrar=True, aparar_quadros=True, cel=None):
     """Junta os quadros (imagens RGBA) numa folha de uma linha, células do
-    mesmo tamanho, cada quadro escalado por `escala` e centrado na célula."""
+    mesmo tamanho, cada quadro escalado por `escala` e centrado na célula.
+    Ampliado (escala > 1, original pequeno), ganha um pouco de nitidez."""
     prontos = []
     for q in quadros:
         if aparar_quadros:
             q = aparar(q)
         if escala != 1.0:
             q = q.resize((max(1, round(q.width * escala)), max(1, round(q.height * escala))), Image.LANCZOS)
+            if escala > 1.0:
+                q = q.filter(ImageFilter.UnsharpMask(radius=1.2, percent=55, threshold=2))
         prontos.append(q)
     if cel is None:
         cw = max(q.width for q in prontos)
@@ -497,6 +500,43 @@ def feixe_laser():
     salvar_alfa("fx_laser", np.tile(a[:, None], (1, w)))
 
 
+# O cartucho do placar (a munição em balas, no lugar da palavra MUNIÇÃO):
+# em pé, ponta de cobre ogival, corpo de latão e o aro embaixo, com a luz de
+# cilindro (brilho à esquerda) e a borda escura para ler em qualquer fundo.
+# Desenhado 4x maior e reduzido (bordas lisas); no placar sai com ~60% do
+# tamanho da imagem (nítido sem mipmaps).
+def bala_hud():
+    s = 4
+    w, h = 24 * s, 68 * s
+    yy, xx = np.mgrid[0:h, 0:w].astype(np.float32)
+    u = (xx + 0.5) / w - 0.5                     # -0,5..0,5 de lado a lado
+    v = (yy + 0.5) / h                           # 0 no topo .. 1 embaixo
+    ponta_fim, corpo_fim = 0.38, 0.92
+    t = np.clip(v / ponta_fim, 0.0, 1.0)
+    meia = np.where(v < ponta_fim, 0.31 * np.sqrt(np.clip(1.0 - (1.0 - t) ** 2.2, 0.0, 1.0)), 0.36)
+    meia = np.where(v >= corpo_fim, 0.42, meia)
+    meia = np.where((v >= ponta_fim) & (v < ponta_fim + 0.03), 0.33, meia)   # o friso da boca do estojo
+    dentro = (np.abs(u) <= meia) & (v > 0.01) & (v < 0.995)
+    lado = np.clip(u / np.maximum(meia, 1e-3), -1.0, 1.0)
+    luz = 0.62 + 0.48 * np.clip(np.cos((lado + 0.38) * np.pi / 1.7), 0.0, 1.0)
+    brilho = np.exp(-((lado + 0.45) / 0.16) ** 2) * 0.6
+    cobre = np.array([0.86, 0.46, 0.24], np.float32)
+    latao = np.array([0.98, 0.78, 0.30], np.float32)
+    aro = np.array([0.80, 0.60, 0.22], np.float32)
+    base = np.where((v < ponta_fim)[..., None], cobre, np.where((v >= corpo_fim)[..., None], aro, latao))
+    cor = np.clip(base * luz[..., None] + brilho[..., None], 0.0, 1.0)
+    # borda escura (fina) para destacar do painel
+    borda = np.clip((np.abs(lado) - 0.86) / 0.14, 0.0, 1.0)
+    cor = cor * (1.0 - 0.75 * borda[..., None])
+    rgba = np.zeros((h, w, 4), np.float32)
+    rgba[..., :3] = cor
+    rgba[..., 3] = dentro.astype(np.float32)
+    img = Image.fromarray((rgba * 255.0 + 0.5).astype(np.uint8), "RGBA")
+    img = img.resize((24, 68), Image.LANCZOS)
+    img.save(SAIDA / "hud_bala.png", optimize=True)
+    print("cartucho do placar", img.size)
+
+
 # O risco da bala traçante do Bar: fraco no rabo e forte na ponta (a ponta
 # fica à direita, redonda), macio dos lados.
 def rastro_bala():
@@ -506,6 +546,60 @@ def rastro_bala():
     ao_longo = u ** 1.6 * np.clip((1.0 - u) / 0.08, 0.0, 1.0) ** 0.5
     de_lado = np.exp(-(v / 0.45) ** 2)
     salvar_alfa("fx_rastro", de_lado[:, None] * ao_longo[None, :])
+
+
+# ------------------------------------------------------------------ nítidas
+# As folhas que aparecem GRANDES na tela (águas-vivas, baú e bomba do Mar e as
+# lanternas da Arena): em resolução maior, para não sair borrado/pixelizado
+# numa TV 1080p. "fator" é quanto a folha cresceu em relação à de antes: o
+# jogo divide o tamanho por ele (a mesma figura na tela, só mais nítida).
+ESC_AGUAVIVA = 0.85     # antes 0,62
+ESC_BAU = 1.5           # o original é pequeno (125 px): Lanczos e nitidez
+ESC_BOMBA = 1.35        # o original é pequeno (166 px)
+ESC_LANTERNA = 0.85     # antes 0,70
+
+
+def folhas_nitidas(dados):
+    agua = regioes("aguaaa.png", [(0, 0, 272, 336), (272, 0, 272, 336), (0, 336, 272, 336), (272, 336, 272, 336),
+                                  (759, 0, 253, 319), (1012, 0, 253, 319), (1265, 0, 253, 319)])
+    dados["aguaviva"] = folha("alvo_aguaviva", agua, ESC_AGUAVIVA)
+    dados["aguaviva"].update({"parado": [0, 1, 2, 3], "acerto": [4, 5, 6], "fator": round(ESC_AGUAVIVA / 0.62, 4)})
+    agua_a = regioes("aguaaa.png", [(514, 666, 257, 333), (0, 666, 257, 333), (0, 662, 272, 331),
+                                    (759, 638, 253, 319), (1012, 638, 253, 319), (1265, 638, 253, 319)])
+    dados["aguaviva_a"] = folha("alvo_aguaviva_a", agua_a, ESC_AGUAVIVA)
+    dados["aguaviva_a"].update({"parado": [0, 1, 2], "acerto": [3, 4, 5], "fator": round(ESC_AGUAVIVA / 0.62, 4)})
+    bau = regioes("hit_bau.png", [(0, 0, 125, 125), (125, 0, 125, 125), (250, 0, 125, 125), (375, 0, 125, 125), (375, 250, 125, 125), (250, 250, 125, 125)])
+    dados["bau"] = folha("alvo_bau", bau, ESC_BAU, aparar_quadros=False)
+    dados["bau"].update({"parado": [0], "acerto": [1, 2, 3, 4, 5], "fator": ESC_BAU})
+    bomba = regioes("bomba.png", [(0, 0, 166, 166), (166, 0, 166, 166), (332, 0, 166, 166), (0, 166, 166, 166), (166, 166, 166, 166),
+                                  (332, 166, 166, 166), (0, 332, 166, 166), (166, 332, 166, 166), (332, 332, 166, 166)])
+    dados["bomba"] = folha("alvo_bomba", bomba, ESC_BOMBA, aparar_quadros=False)
+    dados["bomba"].update({"parado": [0], "acerto": [1, 2, 3, 4, 5, 6, 7, 8], "fator": ESC_BOMBA})
+    # lanternas da Arena: 6 cores (apagada + 5) x (parada, acerto)
+    lan = Image.open(ORIG / "arena_lanternas.png").convert("RGBA")
+    q = []
+    for linha in range(2):
+        for i in range(6):
+            q.append(lan.crop((i * 369, linha * 358, i * 369 + 369, linha * 358 + 358)))
+    dados["lanterna"] = folha("alvo_lanterna", q, ESC_LANTERNA, aparar_quadros=False)
+    dados["lanterna"].update({"parado": [0, 1, 2, 3, 4, 5], "acerto": [6, 7, 8, 9, 10, 11], "fator": round(ESC_LANTERNA / 0.70, 4)})
+
+
+def so_nitidas():
+    """Refaz só as folhas nítidas e troca as entradas delas em
+    scripts/dados_arte.gd (o resto do arquivo fica igual)."""
+    caminho = RAIZ / "scripts" / "dados_arte.gd"
+    texto = caminho.read_text(encoding="utf-8")
+    ini = texto.index("const FOLHAS = ") + len("const FOLHAS = ")
+    fim = texto.index("\n\nconst MAR_FRENTE")
+    folhas = json.loads(texto[ini:fim])
+    novas = {}
+    folhas_nitidas(novas)
+    folhas.update(novas)
+    texto = texto[:ini] + json.dumps(folhas, ensure_ascii=False, indent="\t") + texto[fim:]
+    caminho.write_text(texto, encoding="utf-8")
+    print("scripts/dados_arte.gd (folhas nítidas)")
+    escrever_imports()
 
 
 # ------------------------------------------------------------------ main
@@ -552,24 +646,10 @@ def main():
     print("águias")
 
     # ---- alvos do Mar
-    agua = regioes("aguaaa.png", [(0, 0, 272, 336), (272, 0, 272, 336), (0, 336, 272, 336), (272, 336, 272, 336),
-                                  (759, 0, 253, 319), (1012, 0, 253, 319), (1265, 0, 253, 319)])
-    dados["aguaviva"] = folha("alvo_aguaviva", agua, 0.62)
-    dados["aguaviva"].update({"parado": [0, 1, 2, 3], "acerto": [4, 5, 6]})
-    agua_a = regioes("aguaaa.png", [(514, 666, 257, 333), (0, 666, 257, 333), (0, 662, 272, 331),
-                                    (759, 638, 253, 319), (1012, 638, 253, 319), (1265, 638, 253, 319)])
-    dados["aguaviva_a"] = folha("alvo_aguaviva_a", agua_a, 0.62)
-    dados["aguaviva_a"].update({"parado": [0, 1, 2], "acerto": [3, 4, 5]})
+    folhas_nitidas(dados)
     vaso = regioes("sprites_vaso.png", [(0, 341, 307, 341), (307, 341, 307, 341), (614, 321, 307, 321), (921, 321, 307, 321), (1228, 341, 307, 341)])
     dados["vaso"] = folha("alvo_vaso", vaso, 0.62)
     dados["vaso"].update({"parado": [0], "acerto": [1, 2, 3, 4]})
-    bau = regioes("hit_bau.png", [(0, 0, 125, 125), (125, 0, 125, 125), (250, 0, 125, 125), (375, 0, 125, 125), (375, 250, 125, 125), (250, 250, 125, 125)])
-    dados["bau"] = folha("alvo_bau", bau, 1.0, aparar_quadros=False)
-    dados["bau"].update({"parado": [0], "acerto": [1, 2, 3, 4, 5]})
-    bomba = regioes("bomba.png", [(0, 0, 166, 166), (166, 0, 166, 166), (332, 0, 166, 166), (0, 166, 166, 166), (166, 166, 166, 166),
-                                  (332, 166, 166, 166), (0, 332, 166, 166), (166, 332, 166, 166), (332, 332, 166, 166)])
-    dados["bomba"] = folha("alvo_bomba", bomba, 1.0, aparar_quadros=False)
-    dados["bomba"].update({"parado": [0], "acerto": [1, 2, 3, 4, 5, 6, 7, 8]})
     copiar("mar_cavalo.png", "mar_cavalo.png", 0.5)
     copiar("mar_navio_cor.png", "mar_navio.png")
     for n in ["mar_peixe_dourado.png", "mar_peixe.png", "mar_baleia_1.png", "mar_baleia_2.png", "mar_bolha.png", "mar_raios.png", "mar_farpa.png"]:
@@ -592,14 +672,7 @@ def main():
     copiar("bar_furo_madeira.png", "bar_furo_madeira.png", 0.5)
     copiar("bar_furo_papel.png", "bar_furo_papel.png", 0.5)
 
-    # ---- lanternas da Arena: 6 cores (apagada + 5) x (parada, acerto)
-    lan = Image.open(ORIG / "arena_lanternas.png").convert("RGBA")
-    q = []
-    for linha in range(2):
-        for i in range(6):
-            q.append(lan.crop((i * 369, linha * 358, i * 369 + 369, linha * 358 + 358)))
-    dados["lanterna"] = folha("alvo_lanterna", q, 0.70, aparar_quadros=False)
-    dados["lanterna"].update({"parado": [0, 1, 2, 3, 4, 5], "acerto": [6, 7, 8, 9, 10, 11]})
+    # ---- lanternas da Arena: em folhas_nitidas()
 
     # ---- comuns
     copiar("logo_lazer_sport.png")
@@ -608,6 +681,7 @@ def main():
     splash()
     feixe_laser()
     rastro_bala()
+    bala_hud()
     copiar("foto_vazia.png")
     for n in ["fx_fumaca.png", "fx_onda.png", "fx_furo_areia.png", "fx_furo_pedra.png", "egito_estrela.png"]:
         copiar(n)
@@ -804,9 +878,12 @@ if __name__ == "__main__":
     elif os.environ.get("SO_SPLASH") == "1":
         splash()
         escrever_imports()
+    elif os.environ.get("SO_NITIDAS") == "1":
+        so_nitidas()
     elif os.environ.get("SO_EFEITOS") == "1":
         feixe_laser()
         rastro_bala()
+        bala_hud()
         escrever_imports()
     elif os.environ.get("SO_CARTOES") == "1":
         cartoes()

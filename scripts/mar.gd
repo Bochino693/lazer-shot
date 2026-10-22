@@ -286,6 +286,8 @@ func _spawnar(tipo: String) -> void:
 	o.esc = rand_range(faixa[0], faixa[1]) * rand_range(0.88, 1.12)
 	if tipo == "bomba":
 		o.esc += nivel * 0.07
+	# a folha nítida é maior que a de antes: a mesma figura na tela
+	o.esc /= float(o.f.get("fator", 1.0))
 	var mult = 1.0 + nivel * 0.07
 	o.dur = QUEDA[tipo] / mult
 	var tela_v = Tela.TELA
