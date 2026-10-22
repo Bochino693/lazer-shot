@@ -1,19 +1,15 @@
 [remap]
 
-importer="oggvorbisstr"
-type="AudioStreamOggVorbis"
-uid="uid://d16iolt21c3ie"
-path="res://.godot/imported/arena_super.ogg-26148223e9f9895e09384b5fc2ed2df1.oggvorbisstr"
+importer="ogg_vorbis"
+type="AudioStreamOGGVorbis"
+path="res://.import/arena_super.ogg-26148223e9f9895e09384b5fc2ed2df1.oggstr"
 
 [deps]
 
 source_file="res://songs/voz/arena_super.ogg"
-dest_files=["res://.godot/imported/arena_super.ogg-26148223e9f9895e09384b5fc2ed2df1.oggvorbisstr"]
+dest_files=[ "res://.import/arena_super.ogg-26148223e9f9895e09384b5fc2ed2df1.oggstr" ]
 
 [params]
 
 loop=false
 loop_offset=0
-bpm=0
-beat_count=0
-bar_beats=4

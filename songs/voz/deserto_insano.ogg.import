@@ -1,19 +1,15 @@
 [remap]
 
-importer="oggvorbisstr"
-type="AudioStreamOggVorbis"
-uid="uid://dukduxqfoulh5"
-path="res://.godot/imported/deserto_insano.ogg-2b144e5f255051d363d7c153b7a84674.oggvorbisstr"
+importer="ogg_vorbis"
+type="AudioStreamOGGVorbis"
+path="res://.import/deserto_insano.ogg-2b144e5f255051d363d7c153b7a84674.oggstr"
 
 [deps]
 
 source_file="res://songs/voz/deserto_insano.ogg"
-dest_files=["res://.godot/imported/deserto_insano.ogg-2b144e5f255051d363d7c153b7a84674.oggvorbisstr"]
+dest_files=[ "res://.import/deserto_insano.ogg-2b144e5f255051d363d7c153b7a84674.oggstr" ]
 
 [params]
 
 loop=false
 loop_offset=0
-bpm=0
-beat_count=0
-bar_beats=4

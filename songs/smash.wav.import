@@ -1,24 +1,23 @@
 [remap]
 
 importer="wav"
-type="AudioStreamWAV"
-uid="uid://crarqicye60x4"
-path="res://.godot/imported/smash.wav-fd45459bad4d5d09fdafda9c2e0644a1.sample"
+type="AudioStreamSample"
+path="res://.import/smash.wav-fd45459bad4d5d09fdafda9c2e0644a1.sample"
 
 [deps]
 
 source_file="res://songs/smash.wav"
-dest_files=["res://.godot/imported/smash.wav-fd45459bad4d5d09fdafda9c2e0644a1.sample"]
+dest_files=[ "res://.import/smash.wav-fd45459bad4d5d09fdafda9c2e0644a1.sample" ]
 
 [params]
 
 force/8_bit=false
 force/mono=false
-force/max_rate=false
-force/max_rate_hz=44100
+force/max_rate=true
+force/max_rate_hz=32000
 edit/trim=false
 edit/normalize=false
 edit/loop_mode=0
 edit/loop_begin=0
 edit/loop_end=-1
-compress/mode=2
+compress/mode=1

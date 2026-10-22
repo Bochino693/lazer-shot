@@ -1,19 +1,15 @@
 [remap]
 
-importer="oggvorbisstr"
-type="AudioStreamOggVorbis"
-uid="uid://cgxv0fa4altta"
-path="res://.godot/imported/bar_insano.ogg-b84a8d40d67990903962276644e525c5.oggvorbisstr"
+importer="ogg_vorbis"
+type="AudioStreamOGGVorbis"
+path="res://.import/bar_insano.ogg-b84a8d40d67990903962276644e525c5.oggstr"
 
 [deps]
 
 source_file="res://songs/voz/bar_insano.ogg"
-dest_files=["res://.godot/imported/bar_insano.ogg-b84a8d40d67990903962276644e525c5.oggvorbisstr"]
+dest_files=[ "res://.import/bar_insano.ogg-b84a8d40d67990903962276644e525c5.oggstr" ]
 
 [params]
 
 loop=false
 loop_offset=0
-bpm=0
-beat_count=0
-bar_beats=4

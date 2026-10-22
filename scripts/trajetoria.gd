@@ -1,204 +1,164 @@
-class_name Trajetoria
 extends CanvasLayer
+class_name Trajetoria
 
-## O tiro visto de quem atira (primeira pessoa): a arma está logo abaixo da
-## vista e a bala vai PARA DENTRO da tela, na linha da mira. Por isso ela
-## não cruza a tela nem nasce no meio dela: aparece só no ponto da mira,
-## grande e desfocada saindo da arma e encolhendo até o ponto enquanto vai
-## para longe (anéis fechando, como um zoom), e o clarão da boca da arma
-## acende de leve a beirada de baixo da tela. No ponto, o impacto de cada
-## cenário (o recuo sai dali também, no MiraGlobal):
+## O TIRO VISTO DE QUEM ATIRA (primeira pessoa): a bala vai PARA DENTRO da
+## tela na linha da mira. Ela aparece no ponto da mira grande e desfocada
+## saindo da arma e fecha até o ponto (anéis fechando, como um zoom), e o
+## clarão da boca da arma acende de leve a beirada de baixo da tela. No
+## ponto, o impacto de cada cenário:
 ##
-##   laser  (Arena)  anéis vermelhos fechando e núcleo branco; no ponto o
-##                   clarão do laser e um anel de choque
-##   sol    (Egito)  anéis de ouro fechando; no ponto a estrela de luz de
-##                   quatro pontas finas girando e brilhos soltos subindo
-##   lua    (Egito)  anéis de prata azulada; no ponto um anel frio abrindo e
-##                   pó de estrela
-##   mar    (Mar)    a bala empurra a água: anéis de água fechando, no ponto
-##                   ondas abrindo e bolhas subindo
-##   bar    (Bar)    traçante: um ponto quente encolhendo rápido; no ponto a
-##                   faísca e um fio de fumaça
+##   laser (Arena)  anéis vermelhos e núcleo branco; clarão e anel de choque
+##   sol   (Egito)  anéis de ouro; estrela de luz girando e brilhos subindo
+##   lua   (Egito)  anéis de prata azulada; anel frio abrindo e pó de estrela
+##   mar   (Mar)    anéis de água; ondas abrindo e bolhas subindo
+##   bar   (Bar)    traçante: ponto quente fechando rápido; faísca e fumaça
 ##
-##   Trajetoria.disparar(fase, ponto_na_tela, "laser")
-##
-## Uma camada por fase (criada no primeiro tiro), um desenho para a luz
-## (mistura somada) e um para a fumaça; só redesenha enquanto há tiro no ar.
-## Tudo com as formas macias do Pincel (nada de risco com ponta reta).
+## Um desenho para a luz (somada), um para a fumaça/bolhas; só redesenha
+## enquanto há tiro no ar.
 
-const Pincel := preload("res://scripts/pincel.gd")
-const MAX_TIROS := 8
-const IMPACTO := 0.35          # s do impacto no ponto, depois que a bala chega
-# por estilo: tempo de voo (s), raio de saída (px), cor dos anéis, cor do
-# núcleo, cor do clarão da arma
-const ESTILOS := {
+const IMPACTO = 0.35
+# voo (s), raio de saída (px), cor dos anéis, cor do núcleo, cor do clarão
+const ESTILOS = {
 	"laser": [0.07, 96.0, Color(1.0, 0.16, 0.10), Color(1.0, 0.75, 0.70), Color(1.0, 0.25, 0.18)],
 	"sol": [0.10, 118.0, Color(1.0, 0.70, 0.22), Color(1.0, 0.95, 0.75), Color(1.0, 0.70, 0.30)],
 	"lua": [0.10, 112.0, Color(0.55, 0.75, 1.0), Color(0.92, 0.97, 1.0), Color(0.60, 0.78, 1.0)],
 	"mar": [0.12, 106.0, Color(0.55, 0.90, 1.0), Color(0.90, 0.99, 1.0), Color(0.40, 0.80, 1.0)],
 	"bar": [0.06, 74.0, Color(1.0, 0.55, 0.15), Color(1.0, 0.92, 0.65), Color(1.0, 0.62, 0.25)],
+	"menu": [0.07, 90.0, Color(1.0, 0.20, 0.22), Color(1.0, 0.85, 0.80), Color(1.0, 0.30, 0.25)],
 }
-# (o som é o estampido de cada fase: raio de sol, de luar, arpão no mar,
-# laser na arena, pistola no bar; o tiro não toca nada por cima)
 
-var _tiros: Array = []         # {para, t, voo, estilo}
-var _parts: Array = []         # {pos, vel, t, vida, tam, tipo, cor}
-var _soma: Node2D
-var _normal: Node2D
+var _luz: Node2D
+var _tiros = []
+var _brilhos: Particulas
+var _fumaca: Particulas
+var _t_anel: Texture
+var _t_ponto: Texture
+var _t_brilho: Texture
+var _t_estrela: Texture
 
 
-static func disparar(fase: Node, para: Vector2, estilo: String) -> void:
-	if fase == null or not fase.is_inside_tree():
-		return
-	var tr := fase.get_node_or_null("Trajetoria") as Trajetoria
-	if tr == null:
-		tr = Trajetoria.new()
-		tr.name = "Trajetoria"
-		tr.layer = 15
-		fase.add_child(tr)
-	tr._novo(para, estilo)
+static func criar(pai: Node, camada: int = 15) -> Trajetoria:
+	var t = load("res://scripts/trajetoria.gd").new()
+	t.layer = camada
+	pai.add_child(t)
+	return t
 
 
 func _ready() -> void:
-	_normal = Node2D.new()
-	_normal.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
-	_normal.draw.connect(_desenhar_normal)
-	add_child(_normal)
-	_soma = Node2D.new()
-	_soma.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
-	var m := CanvasItemMaterial.new()
-	m.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
-	_soma.material = m
-	_soma.draw.connect(_desenhar_soma)
-	add_child(_soma)
+	_t_anel = Estilo.tex("fx_anel")
+	_t_ponto = Estilo.tex("fx_ponto")
+	_t_brilho = Estilo.tex("fx_brilho")
+	_t_estrela = Estilo.tex("fx_estrela")
+	_fumaca = Particulas.new()
+	add_child(_fumaca)
+	_luz = Node2D.new()
+	_luz.material = Estilo.material_soma()
+	_luz.connect("draw", self, "_desenhar")
+	add_child(_luz)
+	_brilhos = Particulas.new()
+	_brilhos.somar = true
+	add_child(_brilhos)
+	set_process(false)
 
 
-func _novo(para: Vector2, estilo: String) -> void:
-	if not is_node_ready():
-		await ready
-	if not ESTILOS.has(estilo):
-		estilo = "laser"
-	var voo: float = ESTILOS[estilo][0]
-	_tiros.append({"para": para, "t": 0.0, "voo": voo, "estilo": estilo})
-	while _tiros.size() > MAX_TIROS:
+## Um tiro em `p` (ponto da tela) no estilo do cenário.
+func disparar(p: Vector2, estilo: String) -> void:
+	var e: Array = ESTILOS.get(estilo, ESTILOS["laser"])
+	_tiros.append({"p": p, "t": 0.0, "e": e, "estilo": estilo, "giro": randf() * TAU, "impacto": false})
+	while _tiros.size() > 8:
 		_tiros.pop_front()
-	# o que sai do ponto depois que a bala chega (t negativo = ainda no voo)
-	match estilo:
-		"sol":
-			for i in 6:
-				_parts.append({"pos": para + Vector2(randf_range(-6, 6), randf_range(-6, 6)),
-					"vel": Vector2.from_angle(randf_range(-PI, 0.0)) * randf_range(60.0, 170.0), "t": -voo,
-					"vida": randf_range(0.35, 0.65), "tam": randf_range(7.0, 13.0), "tipo": "estrela", "cor": Color(1.0, 0.85, 0.45)})
-		"lua":
-			for i in 8:
-				_parts.append({"pos": para + Vector2(randf_range(-10, 10), randf_range(-10, 10)),
-					"vel": Vector2.from_angle(randf() * TAU) * randf_range(30.0, 110.0), "t": -voo,
-					"vida": randf_range(0.4, 0.8), "tam": randf_range(5.0, 9.0), "tipo": "estrela", "cor": Color(0.78, 0.9, 1.0)})
-		"mar":
-			for i in 9:
-				var lado := Vector2.from_angle(randf() * TAU) * randf_range(4.0, 26.0)
-				_parts.append({"pos": para + lado, "vel": Vector2(randf_range(-18, 18), randf_range(-110, -45)), "t": -voo - randf() * 0.12,
-					"vida": randf_range(0.6, 1.0), "tam": randf_range(4.0, 10.0), "tipo": "bolha", "cor": Color(0.85, 0.97, 1.0)})
-		"bar":
-			for i in 2:
-				_parts.append({"pos": para + Vector2(randf_range(-4, 4), 0.0), "vel": Vector2(randf_range(-10, 10), randf_range(-30, -14)),
-					"t": -voo - i * 0.06, "vida": randf_range(0.55, 0.85), "tam": randf_range(12.0, 18.0), "tipo": "fumaca",
-					"cor": Color(0.75, 0.72, 0.68)})
-	while _parts.size() > 120:
-		_parts.pop_front()
 	set_process(true)
 
 
+func _impacto(s: Dictionary) -> void:
+	var p: Vector2 = s["p"]
+	var e: Array = s["e"]
+	match s["estilo"]:
+		"sol":
+			_brilhos.explosao(p, {"n": 10, "vel": [60.0, 220.0], "ang": [200.0, 340.0], "vida": [0.4, 0.8], "tam": [8.0, 16.0],
+				"cor": Color(1.0, 0.85, 0.4), "grav": -60.0, "arrasto": 2.0})
+		"lua":
+			_brilhos.explosao(p, {"n": 12, "vel": [40.0, 170.0], "vida": [0.5, 0.9], "tam": [6.0, 12.0],
+				"cor": Color(0.75, 0.88, 1.0), "grav": 40.0, "arrasto": 2.5})
+		"mar":
+			_fumaca.explosao(p, {"n": 7, "tex": Estilo.tex("mar_bolha"), "vel": [30.0, 110.0], "ang": [220.0, 320.0],
+				"vida": [0.6, 1.1], "tam": [10.0, 22.0], "fim": 0.9, "cor": Color(0.85, 0.97, 1.0, 0.85), "grav": -220.0, "arrasto": 1.5, "espalha": 10.0})
+		"bar":
+			_brilhos.explosao(p, {"n": 8, "vel": [180.0, 420.0], "vida": [0.15, 0.32], "tam": [5.0, 9.0],
+				"cor": Color(1.0, 0.75, 0.35), "grav": 600.0, "estica": 0.05, "arrasto": 1.0})
+			_fumaca.explosao(p, {"n": 3, "tex": Estilo.tex("fx_fumaca"), "vel": [10.0, 40.0], "ang": [240.0, 300.0],
+				"vida": [0.7, 1.2], "tam": [26.0, 40.0], "fim": 2.2, "cor": Color(0.75, 0.72, 0.68, 0.45), "grav": -40.0, "arrasto": 1.0})
+		_:
+			_brilhos.explosao(p, {"n": 9, "vel": [120.0, 360.0], "vida": [0.18, 0.4], "tam": [5.0, 10.0],
+				"cor": e[2].linear_interpolate(Color.white, 0.3), "estica": 0.04, "arrasto": 2.0})
+
+
 func _process(delta: float) -> void:
-	for t in _tiros:
-		t["t"] += delta
-	while not _tiros.is_empty() and _tiros[0]["t"] > _tiros[0]["voo"] + IMPACTO:
-		_tiros.pop_front()
-	for p in _parts:
-		p["t"] += delta
-		if p["t"] > 0.0:
-			p["vel"] = p["vel"] * pow(0.6, delta)
-			p["pos"] += p["vel"] * delta
-	while not _parts.is_empty() and _parts[0]["t"] > _parts[0]["vida"]:
-		_parts.pop_front()
-	_soma.queue_redraw()
-	_normal.queue_redraw()
-	if _tiros.is_empty() and _parts.is_empty():
+	var i = 0
+	while i < _tiros.size():
+		var s: Dictionary = _tiros[i]
+		s["t"] += delta
+		var voo: float = s["e"][0]
+		if not s["impacto"] and s["t"] >= voo:
+			s["impacto"] = true
+			_impacto(s)
+		if s["t"] > voo + IMPACTO:
+			_tiros.remove(i)
+			continue
+		i += 1
+	_luz.update()
+	if _tiros.empty():
 		set_process(false)
 
 
-func _desenhar_normal() -> void:
-	for p in _parts:
-		if p["tipo"] != "fumaca" or p["t"] <= 0.0:
-			continue
-		var k: float = p["t"] / p["vida"]
-		Pincel.forma(_normal, Pincel.FUMACA, p["pos"], p["tam"] * (0.7 + 1.3 * k), Color(p["cor"], 0.28 * (1.0 - k)), k)
-
-
-## A bala indo para longe na linha da mira: anéis fechando no ponto (o zoom
-## de quem vê a bala se afastar), o núcleo encolhendo e o clarão da arma
-## embaixo da tela.
-func _voo(para: Vector2, idade: float, voo: float, e: Array) -> void:
-	var r0: float = e[1]
-	var cor_anel: Color = e[2]
-	var k := clampf(idade / voo, 0.0, 1.0)
-	var vai := 1.0 - (1.0 - k) * (1.0 - k)
-	var forcas := [1.0, 0.6, 0.3]
-	for j in 3:
-		var kj := clampf((idade - j * 0.014) / voo, 0.0, 1.0)
-		if kj >= 1.0:
-			continue
-		var vj := 1.0 - (1.0 - kj) * (1.0 - kj)
-		Pincel.anel(_soma, para, lerpf(r0, 5.0, vj), lerpf(14.0, 2.5, vj), Color(cor_anel, forcas[j] * (1.0 - 0.3 * kj)))
-	Pincel.brilho(_soma, para, lerpf(r0 * 0.6, 12.0, vai), Color(e[3], 0.85))
-	Pincel.circulo(_soma, para, lerpf(8.0, 2.5, vai), Color(1, 1, 1, 0.95))
-	var tela := get_viewport().get_visible_rect().size
-	var arma := Vector2(tela.x * 0.5 + (para.x - tela.x * 0.5) * 0.35, tela.y + 70.0)
-	Pincel.brilho(_soma, arma, 460.0 * (1.0 - 0.4 * k), Color(e[4], 0.20 * (1.0 - k)))
-
-
-func _desenhar_soma() -> void:
-	for t in _tiros:
-		var idade: float = t["t"]
-		var voo: float = t["voo"]
-		var para: Vector2 = t["para"]
-		var e: Array = ESTILOS[t["estilo"]]
-		if idade < voo:
-			_voo(para, idade, voo, e)
-			continue
-		var di := clampf((idade - voo) / IMPACTO, 0.0, 1.0)
-		var fa := 1.0 - di
-		match t["estilo"]:
-			"laser":
-				Pincel.brilho(_soma, para, 22.0 + 70.0 * di, Color(1.0, 0.25, 0.15, 0.55 * fa))
-				Pincel.brilho(_soma, para, 10.0 + 18.0 * di, Color(1.0, 0.9, 0.85, 0.8 * fa))
-				Pincel.anel(_soma, para, 12.0 + 58.0 * di, 3.0, Color(1.0, 0.4, 0.3, 0.7 * fa))
-			"sol":
-				Pincel.brilho(_soma, para, 40.0 + 34.0 * di, Color(1.0, 0.75, 0.3, 0.55 * fa))
-				var giro := idade * 2.2
-				Pincel.forma(_soma, Pincel.FAISCA, para, 64.0 * (1.0 - 0.35 * di), Color(1.0, 0.92, 0.65, 0.95 * fa), giro)
-				Pincel.forma(_soma, Pincel.FAISCA, para, 38.0 * (1.0 - 0.35 * di), Color(1.0, 0.8, 0.45, 0.6 * fa), giro + PI * 0.25)
-			"lua":
-				Pincel.brilho(_soma, para, 36.0, Color(0.6, 0.8, 1.0, 0.5 * fa))
-				Pincel.anel(_soma, para, 18.0 + 48.0 * di, 3.0, Color(0.85, 0.93, 1.0, 0.7 * fa))
-				Pincel.forma(_soma, Pincel.FAISCA, para, 44.0 * (1.0 - 0.3 * di), Color(0.9, 0.96, 1.0, 0.85 * fa), PI * 0.25)
-			"mar":
-				Pincel.anel(_soma, para, 10.0 + 60.0 * di, 3.0, Color(0.75, 0.95, 1.0, 0.6 * fa))
-				Pincel.anel(_soma, para, 6.0 + 34.0 * di, 2.0, Color(0.75, 0.95, 1.0, 0.5 * fa))
-				Pincel.brilho(_soma, para, 24.0, Color(0.5, 0.85, 1.0, 0.35 * fa))
-			"bar":
-				Pincel.brilho(_soma, para, 26.0, Color(1.0, 0.6, 0.2, 0.5 * fa))
-				Pincel.forma(_soma, Pincel.FAISCA, para, 48.0 * fa + 8.0, Color(1.0, 0.85, 0.5, 0.95 * fa), 0.4)
-				Pincel.anel(_soma, para, 8.0 + 40.0 * di, 2.5, Color(1.0, 0.75, 0.4, 0.6 * fa))
-	for p in _parts:
-		if p["t"] <= 0.0:
-			continue
-		var k4: float = p["t"] / p["vida"]
-		match p["tipo"]:
-			"estrela":
-				var b := sin(k4 * PI)
-				Pincel.forma(_soma, Pincel.FAISCA, p["pos"], p["tam"] * 1.6, Color(p["cor"], 0.8 * b), k4 * 3.0)
-			"bolha":
-				var tam: float = p["tam"] * (0.6 + 0.6 * k4)
-				var b2 := minf(1.0, (1.0 - k4) * 3.0)
-				Pincel.forma(_soma, Pincel.BOLHA, p["pos"], tam, Color(p["cor"], 0.85 * b2))
+func _desenhar() -> void:
+	for s in _tiros:
+		var e: Array = s["e"]
+		var t: float = s["t"]
+		var voo: float = e[0]
+		var p: Vector2 = s["p"]
+		var cor_anel: Color = e[2]
+		var cor_nucleo: Color = e[3]
+		if t < voo:
+			# a bala indo para dentro: anéis fechando até o ponto
+			var k = t / voo
+			var r: float = lerp(e[1], 10.0, k * k)
+			var a = 0.35 + 0.65 * k
+			_luz.draw_texture_rect(_t_anel, Rect2(p - Vector2(r, r), Vector2(r, r) * 2.0), false, Color(cor_anel.r, cor_anel.g, cor_anel.b, a * 0.8))
+			var r2 = r * 0.6
+			_luz.draw_texture_rect(_t_anel, Rect2(p - Vector2(r2, r2), Vector2(r2, r2) * 2.0), false, Color(cor_anel.r, cor_anel.g, cor_anel.b, a * 0.5))
+			var rn = 10.0 + 18.0 * (1.0 - k)
+			_luz.draw_texture_rect(_t_ponto, Rect2(p - Vector2(rn, rn), Vector2(rn, rn) * 2.0), false, cor_nucleo)
+			# o clarão da boca da arma na beirada de baixo
+			var bx: float = clamp(p.x, 160.0, Tela.TELA.x - 160.0)
+			var f = (1.0 - k) * 0.55
+			_luz.draw_texture_rect(_t_brilho, Rect2(Vector2(bx - 330.0, Tela.TELA.y - 230.0), Vector2(660.0, 460.0)), false, Color(e[4].r, e[4].g, e[4].b, f))
+		else:
+			var k = (t - voo) / IMPACTO
+			var fade = 1.0 - k
+			match s["estilo"]:
+				"sol":
+					var r = 40.0 + 70.0 * k
+					_luz.draw_set_transform(p, s["giro"] + k * 2.0, Vector2.ONE)
+					_luz.draw_texture_rect(_t_estrela, Rect2(Vector2(-r, -r), Vector2(r, r) * 2.0), false, Color(1.0, 0.9, 0.55, fade))
+					_luz.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+					var rb = 34.0 * fade + 10.0
+					_luz.draw_texture_rect(_t_brilho, Rect2(p - Vector2(rb, rb), Vector2(rb, rb) * 2.0), false, Color(1.0, 0.8, 0.35, fade))
+				"lua":
+					var r = 16.0 + 70.0 * k
+					_luz.draw_texture_rect(_t_anel, Rect2(p - Vector2(r, r), Vector2(r, r) * 2.0), false, Color(0.7, 0.85, 1.0, fade))
+					var rb = 30.0 * fade + 8.0
+					_luz.draw_texture_rect(_t_brilho, Rect2(p - Vector2(rb, rb), Vector2(rb, rb) * 2.0), false, Color(0.85, 0.92, 1.0, fade))
+				"mar":
+					for j in 2:
+						var kk: float = clamp(k * 1.2 - j * 0.25, 0.0, 1.0)
+						var r = 14.0 + 80.0 * kk
+						_luz.draw_texture_rect(_t_anel, Rect2(p - Vector2(r, r * 0.8), Vector2(r, r * 0.8) * 2.0), false, Color(0.6, 0.9, 1.0, (1.0 - kk) * 0.7))
+				"bar":
+					var rb = 26.0 * fade + 4.0
+					_luz.draw_texture_rect(_t_brilho, Rect2(p - Vector2(rb, rb), Vector2(rb, rb) * 2.0), false, Color(1.0, 0.7, 0.3, fade))
+				_:
+					var r = 12.0 + 64.0 * k
+					_luz.draw_texture_rect(_t_anel, Rect2(p - Vector2(r, r), Vector2(r, r) * 2.0), false, Color(cor_anel.r, cor_anel.g, cor_anel.b, fade))
+					var rb = 30.0 * fade + 6.0
+					_luz.draw_texture_rect(_t_brilho, Rect2(p - Vector2(rb, rb), Vector2(rb, rb) * 2.0), false, Color(cor_nucleo.r, cor_nucleo.g, cor_nucleo.b, fade))

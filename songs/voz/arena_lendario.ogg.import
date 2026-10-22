@@ -1,19 +1,15 @@
 [remap]
 
-importer="oggvorbisstr"
-type="AudioStreamOggVorbis"
-uid="uid://dst1lxtri8ri7"
-path="res://.godot/imported/arena_lendario.ogg-c052cfd0060c163c02e59a711c773660.oggvorbisstr"
+importer="ogg_vorbis"
+type="AudioStreamOGGVorbis"
+path="res://.import/arena_lendario.ogg-c052cfd0060c163c02e59a711c773660.oggstr"
 
 [deps]
 
 source_file="res://songs/voz/arena_lendario.ogg"
-dest_files=["res://.godot/imported/arena_lendario.ogg-c052cfd0060c163c02e59a711c773660.oggvorbisstr"]
+dest_files=[ "res://.import/arena_lendario.ogg-c052cfd0060c163c02e59a711c773660.oggstr" ]
 
 [params]
 
 loop=false
 loop_offset=0
-bpm=0
-beat_count=0
-bar_beats=4

@@ -1,19 +1,15 @@
 [remap]
 
-importer="oggvorbisstr"
-type="AudioStreamOggVorbis"
-uid="uid://v8rc1sccuwmc"
-path="res://.godot/imported/mar_lendario.ogg-affe574a545abaa58249aa65be5f21ae.oggvorbisstr"
+importer="ogg_vorbis"
+type="AudioStreamOGGVorbis"
+path="res://.import/mar_lendario.ogg-affe574a545abaa58249aa65be5f21ae.oggstr"
 
 [deps]
 
 source_file="res://songs/voz/mar_lendario.ogg"
-dest_files=["res://.godot/imported/mar_lendario.ogg-affe574a545abaa58249aa65be5f21ae.oggvorbisstr"]
+dest_files=[ "res://.import/mar_lendario.ogg-affe574a545abaa58249aa65be5f21ae.oggstr" ]
 
 [params]
 
 loop=false
 loop_offset=0
-bpm=0
-beat_count=0
-bar_beats=4

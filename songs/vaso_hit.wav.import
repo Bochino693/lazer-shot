@@ -1,24 +1,23 @@
 [remap]
 
 importer="wav"
-type="AudioStreamWAV"
-uid="uid://bmkutd5f6h6pg"
-path="res://.godot/imported/vaso_hit.wav-35c3660dd51f666c023132c431e07de0.sample"
+type="AudioStreamSample"
+path="res://.import/vaso_hit.wav-35c3660dd51f666c023132c431e07de0.sample"
 
 [deps]
 
 source_file="res://songs/vaso_hit.wav"
-dest_files=["res://.godot/imported/vaso_hit.wav-35c3660dd51f666c023132c431e07de0.sample"]
+dest_files=[ "res://.import/vaso_hit.wav-35c3660dd51f666c023132c431e07de0.sample" ]
 
 [params]
 
 force/8_bit=false
 force/mono=false
-force/max_rate=false
-force/max_rate_hz=44100
+force/max_rate=true
+force/max_rate_hz=32000
 edit/trim=false
 edit/normalize=false
 edit/loop_mode=0
 edit/loop_begin=0
 edit/loop_end=-1
-compress/mode=2
+compress/mode=1

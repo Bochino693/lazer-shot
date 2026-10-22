@@ -1,24 +1,23 @@
 [remap]
 
 importer="wav"
-type="AudioStreamWAV"
-uid="uid://dja2kywkpipqp"
-path="res://.godot/imported/tiro_sol.wav-b770054baa2b9d64c739c1a87d566ec0.sample"
+type="AudioStreamSample"
+path="res://.import/tiro_sol.wav-b770054baa2b9d64c739c1a87d566ec0.sample"
 
 [deps]
 
 source_file="res://songs/tiro_sol.wav"
-dest_files=["res://.godot/imported/tiro_sol.wav-b770054baa2b9d64c739c1a87d566ec0.sample"]
+dest_files=[ "res://.import/tiro_sol.wav-b770054baa2b9d64c739c1a87d566ec0.sample" ]
 
 [params]
 
 force/8_bit=false
 force/mono=false
-force/max_rate=false
-force/max_rate_hz=44100
+force/max_rate=true
+force/max_rate_hz=32000
 edit/trim=false
 edit/normalize=false
 edit/loop_mode=0
 edit/loop_begin=0
 edit/loop_end=-1
-compress/mode=2
+compress/mode=1

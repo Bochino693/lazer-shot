@@ -1,24 +1,23 @@
 [remap]
 
 importer="wav"
-type="AudioStreamWAV"
-uid="uid://bu5xwj1f6sd6j"
-path="res://.godot/imported/ouro_ping.wav-1b5d481fee39bc40c043ccc0439d9486.sample"
+type="AudioStreamSample"
+path="res://.import/ouro_ping.wav-1b5d481fee39bc40c043ccc0439d9486.sample"
 
 [deps]
 
 source_file="res://songs/ouro_ping.wav"
-dest_files=["res://.godot/imported/ouro_ping.wav-1b5d481fee39bc40c043ccc0439d9486.sample"]
+dest_files=[ "res://.import/ouro_ping.wav-1b5d481fee39bc40c043ccc0439d9486.sample" ]
 
 [params]
 
 force/8_bit=false
 force/mono=false
-force/max_rate=false
-force/max_rate_hz=44100
+force/max_rate=true
+force/max_rate_hz=32000
 edit/trim=false
 edit/normalize=false
 edit/loop_mode=0
 edit/loop_begin=0
 edit/loop_end=-1
-compress/mode=2
+compress/mode=1

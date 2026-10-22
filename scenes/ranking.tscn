@@ -1,8 +1,6 @@
-[gd_scene format=3 uid="uid://cgupxeiegsovk"]
+[gd_scene load_steps=2 format=2]
 
-[ext_resource type="Script" uid="uid://cschcnuw0ho0r" path="res://scripts/ranking.gd" id="1_tmhu6"]
+[ext_resource path="res://scripts/ranking.gd" type="Script" id=1]
 
-[node name="Ranking" type="Control" unique_id=930942095]
-layout_mode = 3
-anchors_preset = 0
-script = ExtResource("1_tmhu6")
+[node name="Ranking" type="Node2D"]
+script = ExtResource( 1 )
