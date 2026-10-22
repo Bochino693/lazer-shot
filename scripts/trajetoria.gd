@@ -11,7 +11,10 @@ class_name Trajetoria
 ##   sol   (Egito)  anéis de ouro; estrela de luz girando e brilhos subindo
 ##   lua   (Egito)  anéis de prata azulada; anel frio abrindo e pó de estrela
 ##   mar   (Mar)    anéis de água; ondas abrindo e bolhas subindo
-##   bar   (Bar)    traçante: ponto quente fechando rápido; faísca e fumaça
+##   bar   (Bar)    LASER E BALA (como na 4.6 de antes): o feixe quente sai
+##                  da arma, embaixo da tela, e corre até a mira com a bala
+##                  traçante na ponta; chegando, o feixe apaga num instante
+##                  e ficam a faísca, o clarão e um fio de fumaça no caminho
 ##
 ## Um desenho para a luz (somada), um para a fumaça/bolhas; só redesenha
 ## enquanto há tiro no ar.
@@ -23,7 +26,7 @@ const ESTILOS = {
 	"sol": [0.10, 118.0, Color(1.0, 0.70, 0.22), Color(1.0, 0.95, 0.75), Color(1.0, 0.70, 0.30)],
 	"lua": [0.10, 112.0, Color(0.55, 0.75, 1.0), Color(0.92, 0.97, 1.0), Color(0.60, 0.78, 1.0)],
 	"mar": [0.12, 106.0, Color(0.55, 0.90, 1.0), Color(0.90, 0.99, 1.0), Color(0.40, 0.80, 1.0)],
-	"bar": [0.06, 74.0, Color(1.0, 0.55, 0.15), Color(1.0, 0.92, 0.65), Color(1.0, 0.62, 0.25)],
+	"bar": [0.075, 74.0, Color(1.0, 0.55, 0.15), Color(1.0, 0.92, 0.65), Color(1.0, 0.62, 0.25)],
 	"menu": [0.07, 90.0, Color(1.0, 0.20, 0.22), Color(1.0, 0.85, 0.80), Color(1.0, 0.30, 0.25)],
 }
 
@@ -35,6 +38,8 @@ var _t_anel: Texture
 var _t_ponto: Texture
 var _t_brilho: Texture
 var _t_estrela: Texture
+var _t_laser: Texture
+var _t_faisca: Texture
 
 
 static func criar(pai: Node, camada: int = 15) -> Trajetoria:
@@ -49,6 +54,8 @@ func _ready() -> void:
 	_t_ponto = Estilo.tex("fx_ponto")
 	_t_brilho = Estilo.tex("fx_brilho")
 	_t_estrela = Estilo.tex("fx_estrela")
+	_t_laser = Estilo.tex("fx_laser")
+	_t_faisca = Estilo.tex("fx_faisca")
 	_fumaca = Particulas.new()
 	add_child(_fumaca)
 	_luz = Node2D.new()
@@ -64,7 +71,11 @@ func _ready() -> void:
 ## Um tiro em `p` (ponto da tela) no estilo do cenário.
 func disparar(p: Vector2, estilo: String) -> void:
 	var e: Array = ESTILOS.get(estilo, ESTILOS["laser"])
-	_tiros.append({"p": p, "t": 0.0, "e": e, "estilo": estilo, "giro": randf() * TAU, "impacto": false})
+	var s = {"p": p, "t": 0.0, "e": e, "estilo": estilo, "giro": randf() * TAU, "impacto": false}
+	if estilo == "bar":
+		# laser e bala: sai da arma (embaixo da tela, puxada para o lado da mira)
+		s["de"] = Vector2(lerp(Tela.TELA.x * 0.5, p.x, 0.3), Tela.TELA.y + 40.0)
+	_tiros.append(s)
 	while _tiros.size() > 8:
 		_tiros.pop_front()
 	set_process(true)
@@ -88,6 +99,11 @@ func _impacto(s: Dictionary) -> void:
 				"cor": Color(1.0, 0.75, 0.35), "grav": 600.0, "estica": 0.05, "arrasto": 1.0})
 			_fumaca.explosao(p, {"n": 3, "tex": Estilo.tex("fx_fumaca"), "vel": [10.0, 40.0], "ang": [240.0, 300.0],
 				"vida": [0.7, 1.2], "tam": [26.0, 40.0], "fim": 2.2, "cor": Color(0.75, 0.72, 0.68, 0.45), "grav": -40.0, "arrasto": 1.0})
+			# o fio de fumaça que a bala deixou no caminho
+			var de: Vector2 = s.get("de", p)
+			for j in 5:
+				_fumaca.explosao(de.linear_interpolate(p, 0.38 + j * 0.13), {"n": 1, "tex": Estilo.tex("fx_fumaca"), "vel": [4.0, 16.0],
+					"ang": [250.0, 290.0], "vida": [0.45, 0.8], "tam": [12.0, 20.0], "fim": 2.4, "cor": Color(0.82, 0.78, 0.72, 0.22), "grav": -16.0})
 		_:
 			_brilhos.explosao(p, {"n": 9, "vel": [120.0, 360.0], "vida": [0.18, 0.4], "tam": [5.0, 10.0],
 				"cor": e[2].linear_interpolate(Color.white, 0.3), "estica": 0.04, "arrasto": 2.0})
@@ -113,6 +129,9 @@ func _process(delta: float) -> void:
 
 func _desenhar() -> void:
 	for s in _tiros:
+		if s.has("de"):
+			_desenhar_bala(s)
+			continue
 		var e: Array = s["e"]
 		var t: float = s["t"]
 		var voo: float = e[0]
@@ -162,3 +181,42 @@ func _desenhar() -> void:
 					_luz.draw_texture_rect(_t_anel, Rect2(p - Vector2(r, r), Vector2(r, r) * 2.0), false, Color(cor_anel.r, cor_anel.g, cor_anel.b, fade))
 					var rb = 30.0 * fade + 6.0
 					_luz.draw_texture_rect(_t_brilho, Rect2(p - Vector2(rb, rb), Vector2(rb, rb) * 2.0), false, Color(cor_nucleo.r, cor_nucleo.g, cor_nucleo.b, fade))
+
+
+## Bar: LASER E BALA. O feixe quente nasce na arma (embaixo da tela) e corre
+## até a mira com a bala na ponta (um risco quente com brilho); chegando, o
+## feixe apaga num instante e fica o clarão no ponto. Poucos quadrados
+## esticados, luz somada: leve para a Mali-450.
+func _desenhar_bala(s: Dictionary) -> void:
+	var voo: float = s["e"][0]
+	var t: float = s["t"]
+	var de: Vector2 = s["de"]
+	var p: Vector2 = s["p"]
+	var k = clamp(t / voo, 0.0, 1.0)
+	var cabeca = de.linear_interpolate(p, k)
+	var a = 1.0 if t < voo else clamp(1.0 - (t - voo) / 0.12, 0.0, 1.0)
+	var v = cabeca - de
+	var comp = v.length()
+	if a > 0.0 and comp > 1.0:
+		_luz.draw_set_transform(de, v.angle(), Vector2.ONE)
+		# halo vermelho-alaranjado, faixa quente e miolo quase branco
+		_luz.draw_texture_rect(_t_laser, Rect2(0.0, -36.0, comp, 72.0), false, Color(1.0, 0.30, 0.08, 0.50 * a))
+		_luz.draw_texture_rect(_t_laser, Rect2(0.0, -11.0, comp, 22.0), false, Color(1.0, 0.62, 0.22, 0.85 * a))
+		_luz.draw_texture_rect(_t_laser, Rect2(0.0, -3.5, comp, 7.0), false, Color(1.0, 0.97, 0.88, a))
+		if t < voo:
+			# a bala: o risco quente na ponta do feixe (duas vezes: mais forte)
+			_luz.draw_texture_rect(_t_faisca, Rect2(comp - 116.0, -14.0, 128.0, 28.0), false, Color(1.0, 0.80, 0.40))
+			_luz.draw_texture_rect(_t_faisca, Rect2(comp - 96.0, -7.0, 104.0, 14.0), false, Color(1.0, 0.98, 0.85))
+		_luz.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	if t < voo:
+		var rb = 50.0
+		_luz.draw_texture_rect(_t_brilho, Rect2(cabeca - Vector2(rb, rb), Vector2(rb, rb) * 2.0), false, Color(1.0, 0.62, 0.24, 0.95))
+		var rn = 14.0
+		_luz.draw_texture_rect(_t_ponto, Rect2(cabeca - Vector2(rn, rn), Vector2(rn, rn) * 2.0), false, Color(1.0, 1.0, 0.92))
+		# o clarão da boca da arma na beirada de baixo
+		_luz.draw_texture_rect(_t_brilho, Rect2(Vector2(de.x - 300.0, Tela.TELA.y - 230.0), Vector2(600.0, 460.0)), false,
+			Color(1.0, 0.62, 0.25, (1.0 - k) * 0.6))
+	else:
+		var fade = 1.0 - (t - voo) / IMPACTO
+		var rb2 = 32.0 * fade + 6.0
+		_luz.draw_texture_rect(_t_brilho, Rect2(p - Vector2(rb2, rb2), Vector2(rb2, rb2) * 2.0), false, Color(1.0, 0.72, 0.32, fade))

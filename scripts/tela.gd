@@ -25,7 +25,7 @@ extends Node
 ## e os quadros por segundo; a CONFIGURAÇÃO mostra como a sessão anterior
 ## terminou (diagnóstico da TV Box sem cabo nem computador).
 
-const VERSAO = "2.0.2"
+const VERSAO = "2.1.0"
 const TELA = Vector2(1024, 1820)
 const CAIXA = "user://caixa_preta.cfg"
 
@@ -146,6 +146,27 @@ func jogo_para_hdmi_direto(p: Vector2) -> Vector2:
 ## Pixels do HDMI por pixel do jogo.
 func escala() -> float:
 	return _escala if giro != 0 else 1.0
+
+
+## Pixels da janela por pixel do jogo, com ou sem giro (o tamanho real de um
+## ponto do jogo na tela: a mira da arma de giroscópio anda nessa escala).
+func px_por_ponto() -> float:
+	if giro != 0:
+		return _escala
+	if _janela.x <= 0.0 or _janela.y <= 0.0:
+		return 1.0
+	return min(_janela.x / TELA.x, _janela.y / TELA.y)
+
+
+## Movimento no HDMI -> movimento no jogo. Mira direta (o padrão): a arma
+## para a direita é a mira para a direita, para cima é para cima. Mira
+## girada: o movimento gira junto com a imagem.
+func movimento_para_jogo(d: Vector2) -> Vector2:
+	if giro == 0 or mira_direta:
+		return d
+	if giro > 0:
+		return Vector2(-d.y, d.x)
+	return Vector2(d.y, -d.x)
 
 
 func janela() -> Vector2:

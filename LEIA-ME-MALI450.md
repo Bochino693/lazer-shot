@@ -1,6 +1,23 @@
-# Lazer Shot 2.0 — TV Box Mali-450
+# Lazer Shot 2.1 — TV Box Mali-450
 
 Esta pasta é o **Lazer Shot para a TV Box da placa Mali-450** (S905L / S905W, Android 7.1). A placa de vídeo dela só tem OpenGL ES 2.0, por isso este jogo é feito no **Godot 3.6.2 (GLES2)**. A versão 4.6 (Pro Ultra / TX9) é outro projeto, na branch `tvbox-ultra-pro`.
+
+## Novidades da 2.1
+
+- **A mira anda junto com a arma de giroscópio.** Ela não foge mais para os cantos: o jogo usa o movimento da arma (não a posição da seta do Android), desfaz a aceleração do ponteiro do Android e, quando a seta encosta na beirada do HDMI, a mira desliza até a mesma beirada da tela.
+- **Ajuste da arma na própria TV Box:** CONFIGURAÇÃO → BOTÕES → **Arma e mira** → AJUSTAR.
+  - Tipo de arma (GIROSCÓPIO ou ABSOLUTA), sensibilidade e a compensação da aceleração do Android.
+  - **CALIBRAR:** atire nos 4 alvos que aparecem. O jogo mede quanto a arma anda e acerta a sensibilidade sozinho.
+  - Alvos de teste nos cantos e no meio: atire neles para conferir.
+- **A seta do mouse não aparece mais** por cima do jogo.
+- **START na arma, como antes:** o botão do lado direito dá START fora da partida e, durante a partida, recarrega. Não precisa aprender nada. Dá para trocar na tela Arma e mira.
+- **Abertura sem o símbolo do Godot:** ao abrir o jogo aparece o logo da Lazer & Sport, já em pé no monitor.
+- **Bar:** o tiro é um **laser com a bala** na ponta, saindo da arma embaixo da tela até a mira, e deixa um fio de fumaça.
+- **Deserto: o cristal quebrado corta a energia.**
+  - A energia já cai e pisca a cada tiro no cristal.
+  - Quebrado, os feixes estalam e apagam, os cristais dos obeliscos e as pontas de ouro das pirâmides escurecem e o cristal não carrega (sem POWER OF RA!).
+  - Quando ele se refaz, a energia volta correndo do cristal até os obeliscos.
+  - Cristal de um obelisco quebrado corta só aquele lado.
 
 ## O que muda em relação à versão 4.6
 
@@ -39,7 +56,7 @@ Esta pasta é o **Lazer Shot para a TV Box da placa Mali-450** (S905L / S905W, A
 
    Tudo aparece na janela na hora e fica gravado em `build\android\GERACAO-COMPLETA.log`. A janela termina sozinha.
 
-3. O APK fica em **`APK-Pronto\LazerShot-Mali450-2.0.2.apk`** (a versão vai no nome do arquivo). Copie para o pendrive, use **Ejetar** no Windows antes de tirar o pendrive e instale na TV Box.
+3. O APK fica em **`APK-Pronto\LazerShot-Mali450-2.1.0.apk`** (a versão vai no nome do arquivo). Copie para o pendrive, use **Ejetar** no Windows antes de tirar o pendrive e instale na TV Box.
 
    No fim aparece **APK PRONTO E CONFERIDO**, com a linha **Assinatura: v1 + v2**. Antes disso o gerador confere o APK por dentro: o motor ARM 32 e 64 bits, os scripts e as imagens em ETC1. As mensagens técnicas do Godot que não são problema (PC sem placa de som, por exemplo) não aparecem na janela; ficam só no histórico.
 
@@ -78,7 +95,8 @@ O giro também se troca **na própria TV Box**, na CONFIGURAÇÃO do jogo, em "G
 ## Na TV Box
 
 - O HDMI fica **deitado (1920x1080)**. O jogo gira a imagem por dentro para o monitor em pé.
-- A **arma** é o mouse: o gatilho atira e o botão perto do gatilho recarrega.
+- A **arma** é o mouse: o gatilho atira, o botão perto do gatilho recarrega e o botão do lado direito dá START (na partida, ele também recarrega).
+- **Arma de giroscópio:** se a mira andar demais ou de menos, use CALIBRAR (CONFIGURAÇÃO → BOTÕES → Arma e mira). Se a mira correr demais mesmo com a sensibilidade baixa, diminua a **Velocidade do ponteiro** nas configurações do Android (Idioma e entrada) e calibre de novo.
 - **Zero Delay:** START = botão 0, RECARGA = 1, TIRO = 2, SELECT = 4.
   - O SELECT soma crédito no modo crédito.
   - Os botões podem ser aprendidos de novo na CONFIGURAÇÃO.
@@ -98,3 +116,5 @@ O giro também se troca **na própria TV Box**, na CONFIGURAÇÃO do jogo, em "G
   - máscaras de acerto em `scripts/dados_arte.gd`;
   - sons em IMA-ADPCM.
 - Depois de mudar a arte, abra o projeto no Godot 3.6.2 uma vez, para reimportar.
+- A mira da arma está em `scripts/mira_global.gd` (giroscópio, aceleração do Android e beiradas) e o ajuste dela em `scripts/config.gd` (página Arma e mira).
+- A abertura do Android (no lugar do símbolo do Godot) está em `splash/`, uma imagem para cada giro, feita por `tools/preparar_mali.py`. O gerador escolhe a do giro pedido.

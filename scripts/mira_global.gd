@@ -5,13 +5,29 @@ extends Node
 ## Há UMA mira, aqui; cada tela lê `MiraGlobal.mira()` e desenha/acerta
 ## exatamente ali.
 ##
-## A ARMA é um mouse absoluto: a posição do ponteiro do Android vira a mira.
-## No HDMI deitado com o monitor em pé (Tela.giro), a arma mede no sentido do
-## monitor em pé: a fração da largura do HDMI é a fração da largura do jogo
-## (Tela.hdmi_para_jogo_direto). No Android 7.1 o Godot 3.6 não esconde nem
-## captura o ponteiro (isso só existe do Android 8 em diante): a seta do
-## sistema vira uma imagem transparente (cursor próprio, Android 7.0+), e a
-## mira desenhada pela tela é o que aparece.
+## A ARMA DE GIROSCÓPIO (a da máquina, como na versão 4.6): ela é um mouse
+## que manda o MOVIMENTO da arma, e a mira soma esse movimento, na mesma
+## medida nos dois eixos (arma para a direita = mira para a direita; para
+## cima = para cima) e na escala da tela (um pixel do HDMI anda um ponto do
+## jogo do mesmo tamanho), vezes a SENSIBILIDADE (CONFIGURAÇÃO -> ARMA E
+## MIRA, onde também se calibra atirando em quatro alvos).
+## No Android 8 em diante a 4.6 capturava o ponteiro e recebia o movimento
+## cru. No Android 7.1 da TV Box não existe captura: o movimento vem do
+## ponteiro do sistema, com duas manias que a mira corrige:
+##   - ACELERAÇÃO: o Android multiplica o movimento rápido (até 3x acima de
+##     3000 px/s). A mira desfaz a conta pela velocidade do ponteiro, e o
+##     movimento volta a ser proporcional ao giro da arma.
+##   - BORDA: o ponteiro para na borda do HDMI (e a borda curta do HDMI
+##     deitado é a altura do jogo em pé). Ponteiro parado numa borda = a arma
+##     apontando além dela: a mira vai para a mesma borda do jogo, e arma e
+##     mira voltam a casar (o "encostar na borda" de toda arma de giroscópio).
+## Tipo ABSOLUTA (CONFIGURAÇÃO): para a arma que marca o ponto da tela; a
+## mira é o ponto do ponteiro (a fração do HDMI é a fração do jogo).
+##
+## A SETA DO SISTEMA: no Android 7.1 o Godot 3.6 não esconde o ponteiro (só
+## do Android 8 em diante); ela vira uma imagem transparente (cursor
+## próprio, Android 7.0+) em todos os formatos, refeita a cada tela nova e
+## quando o jogo volta ao foco. A tela desenha a mira; a seta não aparece.
 ##
 ## RECUO (como nos jogos de tiro): o primeiro tiro vai exatamente na mira;
 ## tiros em sequência levantam a arma (um tranco para cima e um pouco para o
@@ -31,6 +47,15 @@ const RECUO_SEQUENCIA = 0.45
 const RECUO_MAX = 110.0
 const RECUO_VOLTA = 4.5
 
+# a aceleração do ponteiro do Android (VelocityControl, igual do 4.1 ao 7.1)
+const ACEL_BAIXA = 500.0       # px/s: até aqui o Android não acelera
+const ACEL_ALTA = 3000.0       # px/s: daqui para cima acelera o máximo
+const ACEL_MAX = 3.0
+const BORDA_PX = 0.75          # ponteiro a até isto da borda da janela = parado nela
+const BORDA_VOLTA = 16.0       # 1/s: a mira indo para a borda (rápido, sem pulo)
+const SENS_MIN = 0.2
+const SENS_MAX = 4.0
+
 const RITMO_ARQUIVO = "user://ritmo.cfg"
 const RITMO_JANELA = 2.0
 const RITMO_LENTO_MS = 20.0
@@ -42,9 +67,29 @@ var pos = Vector2(512, 910)
 var recuo = Vector2.ZERO
 var ativa = true              # false: a tela não mostra mira (abertura)
 
+## A arma manda movimento (giroscópio) ou o ponto da tela (absoluta)?
+var giroscopio = true
+var sensibilidade = 1.0
+var compensar = true
+## Soma do movimento da arma em pontos do jogo, sem a sensibilidade e sem a
+## aceleração do Android (a calibragem mede a arma por aqui).
+var movimento = Vector2.ZERO
+## O ponteiro encostou numa borda da janela desde `zerar_borda()`?
+var bateu_borda = false
+## Em que eixo do jogo foi a borda (1 no eixo tocado): preso numa borda, o
+## ponteiro só deixa de andar naquele sentido.
+var bordas_eixos = Vector2.ZERO
+## Último ponto do ponteiro do sistema (pixels da janela).
+var ponteiro = Vector2(-1, -1)
+
 var _seguidos = 0
 var _ultimo_coice_ms = -100000
 var _android = false
+var _seta: ImageTexture
+var _seta_cena = 0
+var _ultimo = Vector2(INF, INF)
+var _quadro_d = Vector2.ZERO   # o quanto o ponteiro andou neste quadro (pixels da janela)
+var _na_borda = Vector2.ZERO   # borda do jogo para onde a arma passou (-1, 0, 1 em cada eixo)
 
 var _ritmo_lento = {}
 var _telas_leves = {}
@@ -66,33 +111,62 @@ func _ready() -> void:
 	Engine.target_fps = 0
 	Engine.iterations_per_second = 30
 	_ritmo_carregar()
-	_esconder_seta()
+	_esconder_seta(true)
+	aplicar_config()
+	Maquina.connect("config_mudou", self, "aplicar_config")
+
+
+## Lê o tipo de arma, a sensibilidade e a correção da aceleração.
+func aplicar_config() -> void:
+	var tipo = str(Maquina.valor("arma/tipo"))
+	if OS.has_environment("LAZER_ARMA"):
+		tipo = OS.get_environment("LAZER_ARMA")
+	elif not _android:
+		tipo = "absoluta"      # no PC o mouse marca o ponto
+	giroscopio = tipo != "absoluta"
+	sensibilidade = clamp(float(Maquina.valor("arma/sensibilidade")), SENS_MIN, SENS_MAX)
+	compensar = bool(Maquina.valor("arma/compensar_aceleracao"))
 
 
 ## A seta do sistema some: no PC o modo escondido; no Android 7 (onde o Godot
-## 3.6 não esconde o ponteiro) uma seta transparente própria.
-func _esconder_seta() -> void:
-	var img = Image.new()
-	img.create(4, 4, false, Image.FORMAT_RGBA8)
-	img.fill(Color(0, 0, 0, 0))
-	var caminho = "user://seta_vazia.png"
-	img.save_png(caminho)
-	var tex = ImageTexture.new()
-	tex.create_from_image(img, 0)
-	# o Android lê a imagem pelo caminho do arquivo (PointerIcon)
-	tex.resource_path = caminho
-	Input.set_custom_mouse_cursor(tex, Input.CURSOR_ARROW, Vector2.ZERO)
+## 3.6 não esconde o ponteiro) uma seta transparente própria. O Godot 3.6
+## aplica a imagem no formato ATUAL e depois troca para o pedido: com
+## `todos`, duas chamadas por formato deixam todos transparentes.
+func _esconder_seta(todos: bool = false) -> void:
+	if _seta == null:
+		var img = Image.new()
+		img.create(8, 8, false, Image.FORMAT_RGBA8)
+		img.fill(Color(0, 0, 0, 0))
+		var caminho = "user://seta_vazia.png"
+		img.save_png(caminho)
+		_seta = ImageTexture.new()
+		_seta.create_from_image(img, 0)
+		# o Android lê a imagem pelo caminho do arquivo (PointerIcon)
+		_seta.resource_path = caminho
+		Tela.marca("seta do sistema transparente")
+	if todos:
+		for f in range(Input.CURSOR_HELP + 1):
+			Input.set_custom_mouse_cursor(_seta, f, Vector2.ZERO)
+			Input.set_custom_mouse_cursor(_seta, f, Vector2.ZERO)
+	Input.set_custom_mouse_cursor(_seta, Input.CURSOR_ARROW, Vector2.ZERO)
+	Input.set_custom_mouse_cursor(_seta, Input.CURSOR_ARROW, Vector2.ZERO)
 	Input.set_mouse_mode(Input.MOUSE_MODE_HIDDEN)
-	Tela.marca("seta do sistema transparente")
 
 
 func _notification(what: int) -> void:
 	if what == MainLoop.NOTIFICATION_WM_FOCUS_IN:
-		Input.set_mouse_mode(Input.MOUSE_MODE_HIDDEN)
+		_esconder_seta()
+		# voltando ao foco o ponteiro pode ter andado por fora: recomeça a
+		# conta do movimento a partir do próximo evento
+		_ultimo = Vector2(INF, INF)
 
 
 func _input(event: InputEvent) -> void:
 	if not (event is InputEventMouseMotion or event is InputEventMouseButton):
+		return
+	if giroscopio:
+		if event is InputEventMouseMotion:
+			_mover(event.global_position)
 		return
 	var tela = Tela.TELA
 	var p: Vector2
@@ -104,11 +178,96 @@ func _input(event: InputEvent) -> void:
 	pos = Vector2(clamp(p.x, 0.0, tela.x), clamp(p.y, 0.0, tela.y))
 
 
+## Arma de giroscópio: guarda o quanto o ponteiro andou (a mira anda no
+## `_process`, com a velocidade do quadro) e vê se ele parou numa borda.
+func _mover(p: Vector2) -> void:
+	ponteiro = p
+	if _ultimo.x != INF:
+		_quadro_d += p - _ultimo
+	_ultimo = p
+	_na_borda = _borda(p)
+	if _na_borda != Vector2.ZERO:
+		bateu_borda = true
+		bordas_eixos = Vector2(max(bordas_eixos.x, abs(_na_borda.x)), max(bordas_eixos.y, abs(_na_borda.y)))
+
+
+## O movimento do quadro vai para a mira: sem a aceleração do Android (pela
+## velocidade do ponteiro no quadro: os eventos chegam juntos, um lote por
+## quadro), na escala da tela e vezes a sensibilidade.
+func _andar(delta: float) -> void:
+	var d = _quadro_d
+	_quadro_d = Vector2.ZERO
+	if d == Vector2.ZERO:
+		return
+	if compensar:
+		d /= fator_aceleracao(d.length() / max(delta, 0.004))
+	var dj = Tela.movimento_para_jogo(d) / Tela.px_por_ponto()
+	movimento += dj
+	var tela = Tela.TELA
+	pos += dj * sensibilidade
+	pos = Vector2(clamp(pos.x, 0.0, tela.x), clamp(pos.y, 0.0, tela.y))
+
+
+## Quanto o Android multiplicou o movimento nesta velocidade do ponteiro
+## (px/s): 1 devagar, até 3 rápido. É a conta do Android ao contrário: ele
+## acelera pela velocidade de antes da aceleração, e aqui só se vê a de
+## depois.
+static func fator_aceleracao(veloc: float) -> float:
+	if veloc <= ACEL_BAIXA:
+		return 1.0
+	if veloc >= ACEL_ALTA * ACEL_MAX:
+		return ACEL_MAX
+	# v * (1 + (v - baixa) * k) = veloc, com k = (max - 1) / (alta - baixa)
+	var k = (ACEL_MAX - 1.0) / (ACEL_ALTA - ACEL_BAIXA)
+	var b = 1.0 - k * ACEL_BAIXA
+	var v = (-b + sqrt(b * b + 4.0 * k * veloc)) / (2.0 * k)
+	return veloc / v
+
+
+## A borda do jogo para onde a arma passou, pelo ponteiro parado numa borda
+## da janela (a mesma borda, no sentido do movimento da mira).
+func _borda(p: Vector2) -> Vector2:
+	var j = Tela.janela()
+	if j.x <= 0.0 or j.y <= 0.0:
+		return Vector2.ZERO
+	var b = Vector2.ZERO
+	if p.x <= BORDA_PX:
+		b.x = -1.0
+	elif p.x >= j.x - 1.0 - BORDA_PX:
+		b.x = 1.0
+	if p.y <= BORDA_PX:
+		b.y = -1.0
+	elif p.y >= j.y - 1.0 - BORDA_PX:
+		b.y = 1.0
+	return Tela.movimento_para_jogo(b)
+
+
+## A calibragem começa a medir: esquece as bordas tocadas até aqui.
+func zerar_borda() -> void:
+	bateu_borda = false
+	bordas_eixos = Vector2.ZERO
+
+
 func _process(delta: float) -> void:
 	if recuo != Vector2.ZERO:
 		recuo *= exp(-RECUO_VOLTA * delta)
 		if recuo.length_squared() < 0.04:
 			recuo = Vector2.ZERO
+	if giroscopio:
+		_andar(delta)
+	if giroscopio and _na_borda != Vector2.ZERO:
+		# a arma passou da borda: a mira vai para a mesma borda do jogo
+		var k = 1.0 - exp(-BORDA_VOLTA * delta)
+		var tela = Tela.TELA
+		if _na_borda.x != 0.0:
+			pos.x = lerp(pos.x, 0.0 if _na_borda.x < 0.0 else tela.x, k)
+		if _na_borda.y != 0.0:
+			pos.y = lerp(pos.y, 0.0 if _na_borda.y < 0.0 else tela.y, k)
+	var cena = get_tree().current_scene
+	var id = cena.get_instance_id() if cena != null else 0
+	if id != _seta_cena:
+		_seta_cena = id
+		_esconder_seta()
 	_ritmo()
 
 

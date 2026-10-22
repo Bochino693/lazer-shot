@@ -14,6 +14,12 @@ extends "res://scripts/fase.gd"
 ## obeliscos em todos os brasões certos da tela. Tiro no cristal o trinca
 ## (9 tiros quebram: +300) e tiro nos cristais das pontas dos obeliscos
 ## (4 tiros: +150); quebrados, apagam e voltam sozinhos depois.
+## A ENERGIA sai do cristal do meio: cai um pouco com as trincas e pisca a
+## cada tiro nele. Quebrado, ele CORTA A ENERGIA de tudo: os feixes estalam e
+## apagam, os cristais dos obeliscos e as pontas de ouro das pirâmides
+## escurecem e o cristal não carrega nem descarrega, até se refazer (aí a
+## energia volta correndo do cristal até os obeliscos). Quebrado o cristal
+## de um obelisco, corta só aquele lado (feixes, ponta de ouro e raios).
 ## O cenário responde a cada tiro: a areia levanta e fica o furo, a pedra
 ## lasca, o ouro das pirâmides solta faíscas.
 
@@ -31,6 +37,8 @@ const TIROS_CRISTAL = 9
 const TIROS_PONTA = 4
 const CRISTAL_VOLTA = 30.0
 const PONTA_VOLTA = 22.0
+const REFAZ = 2.2              # s para a energia voltar inteira
+const CORTE = 0.4              # s do curto (a luz estala antes de apagar)
 
 # px da imagem 1024x1536 (versão 4.6)
 const CENTRO_ASTRO = Vector2(512, 300)
@@ -132,6 +140,15 @@ var _raios = []
 var _pontas = [{"danos": 0, "quebrada": false, "volta": 0.0}, {"danos": 0, "quebrada": false, "volta": 0.0}]
 var _pontas_brilho = []
 var _pontas_mortas = []
+var _energia = 1.0             # do cristal do meio: 1 acesa .. 0 cortada
+var _cristal_tremor = 0.0      # a energia pisca depois de cada tiro no cristal
+var _refaz = -1.0              # 0..1 enquanto a energia volta (cristal refeito)
+var _chegou = true             # a energia que volta já chegou nos obeliscos
+var _corte = 0.0               # o curto da quebra (s)
+var _luz_lado = [1.0, 1.0]     # energia chegando em cada obelisco
+var _acendendo = [false, false]
+var _halos_ouro = []           # brilho das pontas de ouro das pirâmides
+var _som_faisca: AudioStream
 var _furos: Node2D
 var _poeira: Particulas
 var _brilhos = []
@@ -181,6 +198,7 @@ func _montar_cenario() -> void:
 	_som_trinca = load("res://songs/cristal_trinca.wav")
 	_som_quebra = load("res://songs/cristal_quebra.wav")
 	_som_volta = load("res://songs/cristal_volta.wav")
+	_som_faisca = load("res://songs/arena_faisca.wav")
 	_som_areia = load("res://songs/areia_tiro.wav")
 	_som_pedra = load("res://songs/pedra_lasca.wav")
 	_som_ouro = load("res://songs/ouro_ping.wav")
@@ -234,9 +252,13 @@ func _montar_cenario() -> void:
 		cenario.add_child(m)
 		_pontas_mortas.append(m)
 
-	# brilhos que piscam nas pontas de ouro e no cristal
+	# as pontas de ouro das pirâmides acesas pela energia do cristal
 	for q in BRILHOS_PONTAS:
-		_brilhos.append({"no": luz_sprite("egito_estrela", cenario, tela(q), 70.0, Color(1, 0.95, 0.75, 0.0)), "t": rand_range(0.5, 4.0), "tipo": "ouro"})
+		_halos_ouro.append(luz_sprite("fx_brilho", cenario, tela(q), 180.0, Color(1.0, 0.80, 0.42, 0.0)))
+	# brilhos que piscam nas pontas de ouro e no cristal
+	for i in BRILHOS_PONTAS.size():
+		_brilhos.append({"no": luz_sprite("egito_estrela", cenario, tela(BRILHOS_PONTAS[i]), 70.0, Color(1, 0.95, 0.75, 0.0)),
+			"t": rand_range(0.5, 4.0), "tipo": "ouro", "i": i})
 	for q in BRILHOS_CRISTAL:
 		_brilhos.append({"no": luz_sprite("egito_estrela", cenario, tela(q), 54.0, Color(1, 0.85, 1.0, 0.0)), "t": rand_range(0.5, 3.0), "tipo": "cristal"})
 
@@ -672,10 +694,13 @@ func _encerrou() -> void:
 
 
 # ------------------------------------------------------------ cristal
-## Cada acerto certo carrega o cristal; cheio e inteiro, ele descarrega.
+## Cada acerto certo carrega o cristal; cheio, ele descarrega. Quebrado, a
+## energia está cortada: não carrega.
 func _carregar_cristal() -> void:
+	if _cristal_quebrado:
+		return
 	carga = min(1.0, carga + CARGA_POR_ACERTO)
-	if carga < 1.0 or _cristal_quebrado:
+	if carga < 1.0:
 		return
 	carga = 0.0
 	var pegos = []
@@ -689,7 +714,7 @@ func _carregar_cristal() -> void:
 	tremer(10.0, 0.35)
 	var origens = []
 	for k in 2:
-		if not _pontas[k]["quebrada"]:
+		if not _pontas[k]["quebrada"] and _luz_lado[k] > 0.3:
 			origens.append(tela(PONTAS_OBELISCO[k] - Vector2(0, 30)))
 	if origens.empty():
 		origens.append(tela(Vector2(506, 640)))
@@ -733,6 +758,7 @@ func _ferir_cristal(p: Vector2) -> void:
 		errar(p, "CRISTAL QUEBRADO")
 		return
 	_cristal_danos += 1
+	_cristal_tremor = 1.0
 	_reagir("surpreso", 0.8)
 	# trinca: 2 a 3 galhos saindo do ponto, presos dentro do cristal
 	var poli = poligono(POLI_CRISTAL)
@@ -762,8 +788,11 @@ func _ferir_cristal(p: Vector2) -> void:
 
 
 func _quebrar_cristal(p: Vector2) -> void:
+	_cortar_feixes([0, 1])
 	_cristal_quebrado = true
 	_cristal_volta = CRISTAL_VOLTA
+	_corte = CORTE
+	_refaz = -1.0
 	carga = 0.0
 	_trincas.clear()
 	_trincas_no.update()
@@ -802,6 +831,7 @@ func _ferir_ponta(k: int, p: Vector2) -> void:
 		"cor": c, "grav": 900.0, "giro": [-12.0, 12.0]})
 	luz_sprite_breve(p, 110.0, c)
 	if pt["danos"] >= TIROS_PONTA:
+		_cortar_feixes([k])
 		pt["quebrada"] = true
 		pt["volta"] = PONTA_VOLTA
 		var centro = tela(PONTAS_OBELISCO[k])
@@ -823,30 +853,129 @@ func _desenhar_trincas() -> void:
 
 
 ## Os quatro feixes do cristal aos obeliscos (luz somada): engrossam e
-## correm com a carga; apagam do lado da ponta quebrada e todos com o
-## cristal quebrado.
+## correm com a carga; somem com a energia (o lado do obelisco quebrado, ou
+## todos com o cristal do meio quebrado) e, quando ela volta, crescem do
+## cristal até o obelisco.
 func _desenhar_feixes() -> void:
-	if _cristal_quebrado:
+	if _energia <= 0.01:
 		return
 	var tex: Texture = Estilo.tex("fx_feixe")
+	var ponto: Texture = Estilo.tex("fx_ponto")
 	var e = Maquina.pulso_vivo()
 	var c = Color(1.0, 0.62, 0.95).linear_interpolate(Color(1.0, 0.3, 0.45), _noite)
+	var alcance = clamp(_refaz * 1.5, 0.0, 1.0) if _refaz >= 0.0 else 1.0
 	for i in FEIXES.size():
-		if _pontas[i % 2]["quebrada"]:
+		var lado = i % 2
+		var luz = _luz_lado[lado] * _energia
+		if luz <= 0.01:
 			continue
 		var de = tela(FEIXES[i][0])
 		var ate = tela(FEIXES[i][1])
-		var v = ate - de
+		var v = (ate - de) * alcance * (_luz_lado[lado] if _acendendo[lado] else 1.0)
+		if v.length() < 2.0:
+			continue
 		var larg = 10.0 + 16.0 * carga + 6.0 * e.y
 		_feixes_no.draw_set_transform(de, v.angle() - PI * 0.5, Vector2.ONE)
 		_feixes_no.draw_texture_rect_region(tex, Rect2(-larg * 0.5, 0.0, larg, v.length()), Rect2(0, 24, 64, 40),
-			Color(c.r, c.g, c.b, 0.30 + 0.45 * carga + 0.2 * e.x))
-		# o pulso de energia correndo do cristal até a ponta
-		var k = fmod(_t * (0.6 + 1.4 * carga) + i * 0.27, 1.0)
-		var tam = 26.0 + 30.0 * carga
+			Color(c.r, c.g, c.b, (0.30 + 0.45 * carga + 0.2 * e.x) * luz))
 		_feixes_no.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-		_feixes_no.draw_texture_rect(Estilo.tex("fx_ponto"), Rect2(de + v * k - Vector2(tam, tam) * 0.5, Vector2(tam, tam)), false, Color(1, 0.9, 1, 0.9))
-	_feixes_no.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+		if v.length() < (ate - de).length() - 1.0:
+			# a energia voltando: a frente correndo para o obelisco
+			_feixes_no.draw_texture_rect(ponto, Rect2(de + v - Vector2(17, 17), Vector2(34, 34)), false, Color(1, 0.92, 1, luz))
+		elif luz > 0.35:
+			# o pulso de energia correndo do cristal até a ponta
+			var k = fmod(_t * (0.6 + 1.4 * carga) + i * 0.27, 1.0)
+			var tam = 26.0 + 30.0 * carga
+			_feixes_no.draw_texture_rect(ponto, Rect2(de + v * k - Vector2(tam, tam) * 0.5, Vector2(tam, tam)), false, Color(1, 0.9, 1, 0.9 * luz))
+
+
+## O curto: faíscas nas duas pontas dos feixes que apagam e o estalo.
+func _cortar_feixes(lados: Array) -> void:
+	var c = Color(1.0, 0.78, 0.96).linear_interpolate(Color(1.0, 0.5, 0.55), _noite)
+	var algum = false
+	for i in FEIXES.size():
+		var lado = i % 2
+		if not lados.has(lado) or _luz_lado[lado] * _energia < 0.3:
+			continue
+		algum = true
+		for q in FEIXES[i]:
+			particulas_luz.explosao(tela(q), {"n": 6, "vel": [120.0, 340.0], "vida": [0.2, 0.45], "tam": [5.0, 10.0],
+				"cor": c, "grav": 700.0, "estica": 0.04, "arrasto": 1.0})
+	if algum:
+		Maquina.efeito(_som_faisca, -5.0, rand_range(0.8, 0.9))
+
+
+## A energia do cristal: cai com as trincas, pisca depois de cada tiro nele,
+## corta (estalando) quando ele quebra e volta aos poucos quando ele se
+## refaz. Cada obelisco só recebe a dele com o seu cristal inteiro (acende
+## devagar, apaga num tranco).
+func _atualizar_energia(delta: float, e: Vector2) -> void:
+	_cristal_tremor = max(0.0, _cristal_tremor - delta * 1.8)
+	var alvo = 1.0 - 0.45 * float(_cristal_danos) / TIROS_CRISTAL
+	if _cristal_quebrado:
+		alvo = 0.0
+		_cristal_volta -= delta
+		if _cristal_volta <= 0.0:
+			_regenerar_cristal()
+	if _refaz >= 0.0:
+		_refaz = min(1.0, _refaz + delta / REFAZ)
+		alvo = _refaz
+		if _refaz >= 0.67 and not _chegou:
+			_chegou = true
+			for k in 2:
+				if not _pontas[k]["quebrada"]:
+					particulas_luz.explosao(tela(PONTAS_OBELISCO[k]), {"n": 10, "vel": [40.0, 150.0], "vida": [0.4, 0.8],
+						"tam": [8.0, 14.0], "cor": Color(1.0, 0.75, 0.95), "grav": -60.0})
+		if _refaz >= 1.0:
+			_refaz = -1.0
+	var piscar = 0.0
+	if _cristal_danos > 0 and not _cristal_quebrado:
+		piscar = (0.25 * float(_cristal_danos) / TIROS_CRISTAL + 0.6 * _cristal_tremor) * randf()
+	_energia = clamp(alvo * (1.0 - piscar), 0.0, 1.0)
+	if _corte > 0.0:
+		# o curto: a luz estala umas vezes antes de apagar
+		_corte -= delta
+		_energia = (0.9 if randf() < 0.45 else 0.05) * clamp(_corte / CORTE, 0.0, 1.0)
+	var c = Color(1.0, 0.55, 0.9).linear_interpolate(Color(1.0, 0.25, 0.35), _noite)
+	_cristal_brilho.modulate = Color(c.r, c.g, c.b, (0.22 + 0.4 * carga + 0.18 * e.y) * _energia)
+	_feixes_no.update()
+	# os obeliscos: o brilho da ponta e o cristal escuro (quebrado) ou
+	# apagado (sem energia)
+	for k in 2:
+		var pt: Dictionary = _pontas[k]
+		if pt["quebrada"]:
+			pt["volta"] -= delta
+			if pt["volta"] <= 0.0:
+				pt["quebrada"] = false
+				pt["danos"] = 0
+				particulas_luz.explosao(tela(PONTAS_OBELISCO[k]), {"n": 12, "vel": [40.0, 140.0], "vida": [0.5, 0.9], "tam": [8.0, 14.0],
+					"cor": Color(1.0, 0.7, 0.95), "grav": -60.0})
+				Maquina.efeito(_som_volta, -8.0, 1.2)
+		var alvo_l = 0.0 if pt["quebrada"] else 1.0
+		_acendendo[k] = alvo_l > _luz_lado[k]
+		_luz_lado[k] = move_toward(_luz_lado[k], alvo_l, delta * (1.6 if _acendendo[k] else 9.0))
+		var luz = _luz_lado[k] * _energia
+		_pontas_brilho[k].modulate = Color(1.0, 0.45, 0.8, (0.45 + 0.35 * e.y) * luz)
+		var m: Polygon2D = _pontas_mortas[k]
+		var morte = 0.9 if pt["quebrada"] else 0.55 * (1.0 - luz)
+		m.modulate.a = move_toward(m.modulate.a, morte, delta * (6.0 if morte > m.modulate.a else 1.5))
+	# as pontas de ouro das pirâmides: acesas com a energia, respirando
+	var cor_ouro = Color(1.0, 0.80, 0.42).linear_interpolate(Color(0.72, 0.85, 1.0), _noite)
+	for i in 3:
+		var h: Sprite = _halos_ouro[i]
+		var acesa = _acesa_ouro(i)
+		h.visible = acesa > 0.02
+		if h.visible:
+			var resp = 0.80 + 0.20 * sin(_t * 1.9 + i * 2.1)
+			h.modulate = Color(cor_ouro.r, cor_ouro.g, cor_ouro.b, acesa * resp * 0.62)
+
+
+## Quanto a ponta de ouro i (0 esquerda, 1 meio, 2 direita) está acesa: o
+## cristal do meio manda nas três; as dos lados dependem do seu obelisco.
+func _acesa_ouro(i: int) -> float:
+	if i == 1:
+		return _energia
+	return _energia * _luz_lado[0 if i == 0 else 1]
 
 
 # ------------------------------------------------------------ cenário respondendo
@@ -914,37 +1043,14 @@ func _sempre(delta: float) -> void:
 		var c: Color = d["c"]
 		d["halo"].modulate = Color(c.r, c.g, c.b, 0.42 + 0.22 * e.x + 0.15 * e.y)
 		_animar_olho(d, delta)
-	# cristal
-	if _cristal_quebrado:
-		_cristal_volta -= delta
-		_cristal_brilho.modulate.a = max(0.0, _cristal_brilho.modulate.a - delta)
-		if _cristal_volta <= 0.0:
-			_regenerar_cristal()
-	else:
-		var c = Color(1.0, 0.55, 0.9).linear_interpolate(Color(1.0, 0.25, 0.35), _noite)
-		_cristal_brilho.modulate = Color(c.r, c.g, c.b, 0.22 + 0.4 * carga + 0.18 * e.y)
-	_feixes_no.update()
-	for k in 2:
-		var pt: Dictionary = _pontas[k]
-		var b: Sprite = _pontas_brilho[k]
-		if pt["quebrada"]:
-			b.modulate.a = 0.0
-			pt["volta"] -= delta
-			if pt["volta"] <= 0.0:
-				pt["quebrada"] = false
-				pt["danos"] = 0
-				var tw = create_tween()
-				tw.tween_property(_pontas_mortas[k], "modulate:a", 0.0, 0.8)
-				particulas_luz.explosao(tela(PONTAS_OBELISCO[k]), {"n": 12, "vel": [40.0, 140.0], "vida": [0.5, 0.9], "tam": [8.0, 14.0],
-					"cor": Color(1.0, 0.7, 0.95), "grav": -60.0})
-				Maquina.efeito(_som_volta, -8.0, 1.2)
-		else:
-			b.modulate = Color(1.0, 0.45, 0.8, 0.45 + 0.35 * e.y)
-	# brilhos que piscam
+	# cristal, feixes e obeliscos: a energia
+	_atualizar_energia(delta, e)
+	# brilhos que piscam (sem energia, o cristal e as pontas não cintilam)
 	for b in _brilhos:
 		b["t"] -= delta
 		if b["t"] <= 0.0:
-			if b["tipo"] == "cristal" and _cristal_quebrado:
+			var apagado = _energia < 0.6 if b["tipo"] == "cristal" else _acesa_ouro(b["i"]) < 0.6
+			if apagado:
 				b["t"] = 1.0
 				continue
 			b["t"] = rand_range(1.5, 4.5)
@@ -971,6 +1077,8 @@ func _sempre(delta: float) -> void:
 func _regenerar_cristal() -> void:
 	_cristal_quebrado = false
 	_cristal_danos = 0
+	_refaz = 0.0
+	_chegou = false
 	var centro = tela(Vector2(506, 797))
 	var tw = create_tween()
 	tw.tween_property(_cristal_morto, "modulate:a", 0.0, 0.8)

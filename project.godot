@@ -107,8 +107,9 @@ _global_script_class_icons={
 config/name="Lazer Shot"
 config/description="Lazer Shot - Lazer & Sport Games (TV Box Mali-450)"
 run/main_scene="res://scenes/abertura.tscn"
-boot_splash/show_image=false
-boot_splash/bg_color=Color( 0, 0, 0, 1 )
+boot_splash/image="res://splash/splash_giro_1.png"
+boot_splash/fullsize=false
+boot_splash/bg_color=Color( 0.0588235, 0.0509804, 0.054902, 1 )
 config/icon="res://sprites/icone_app.png"
 
 [audio]

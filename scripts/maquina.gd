@@ -14,7 +14,9 @@ extends Node
 ##
 ## Botões da Zero Delay no Android (Godot 3.6 e 4.6 numeram igual):
 ## START = 0, RECARGA = 1, TIRO = 2, SELECT = 4. O gatilho da arma é o
-## clique esquerdo do mouse; START e RECARGA da arma podem ser aprendidos.
+## clique esquerdo do mouse. Os outros botões da arma (os do lado direito),
+## sem nada aprendido: fora da partida são START, na partida são RECARGA.
+## START e RECARGA da arma também podem ser aprendidos (CONFIGURAÇÃO).
 
 const CONFIG = "user://config_admin.cfg"
 const CENA_CONFIG = "res://scenes/config.tscn"
@@ -36,9 +38,17 @@ const PADRAO = {
 	"botoes/start": 0,
 	"botoes/select": 4,
 	# Botões da arma: "mouse:N", "tecla:N", "voltar" (VOLTAR do Android) ou
-	# "" (nenhum). Recarga "padrao" = clique direito/meio/laterais/voltar.
-	"botoes/start_arma": "",
+	# "padrao": os botões do lado direito (clique direito/meio/laterais e o
+	# VOLTAR) dão START fora da partida e RECARGA na partida.
+	"botoes/start_arma": "padrao",
 	"botoes/recarga_arma": "padrao",
+	# ARMA E MIRA: "giroscopio" (a arma manda o movimento, como um mouse: a
+	# mira soma o deslocamento) ou "absoluta" (a arma marca o ponto da tela).
+	# Sensibilidade: multiplica o movimento (calibrada na CONFIGURAÇÃO).
+	# Aceleração: desfaz a aceleração que o Android põe no ponteiro.
+	"arma/tipo": "giroscopio",
+	"arma/sensibilidade": 1.0,
+	"arma/compensar_aceleracao": true,
 	"jogo/tempo_partida": 120,
 	"jogo/tempo_modal_final": 17,
 	"ranking/tempo_nome": 50,
@@ -77,9 +87,13 @@ var _bus_efeitos = -1
 func _ready() -> void:
 	pause_mode = Node.PAUSE_MODE_PROCESS
 	# O botão lateral da arma é o "voltar" do mouse; no Android isso vira o
-	# VOLTAR do sistema: aqui ele recarrega (nunca fecha o jogo).
+	# VOLTAR do sistema: aqui ele recarrega ou dá START (nunca fecha o jogo).
 	get_tree().set_quit_on_go_back(false)
 	cfg.load(CONFIG)
+	# até a 2.0.2 o START da arma vinha vazio ("nenhum"): agora o padrão é o
+	# botão do lado direito
+	if str(cfg.get_value("botoes", "start_arma", "padrao")) == "":
+		cfg.set_value("botoes", "start_arma", "padrao")
 	_criar_barramentos_de_audio()
 	_criar_rotulo()
 	aplicar()
@@ -239,18 +253,45 @@ func e_tiro_arma(ev: InputEvent) -> bool:
 	return d != str(valor("botoes/start_arma")) and d != str(valor("botoes/recarga_arma"))
 
 
-## Clique da arma que recarrega: o aprendido, ou no padrão o direito, o do
-## meio e os laterais (menos o que estiver como START da arma).
+## Os botões do lado direito da arma (tudo o que não é o gatilho nem a
+## rodinha).
+static func e_botao_lateral(ev: InputEvent) -> bool:
+	return ev is InputEventMouseButton and ev.pressed and \
+		ev.button_index in [BUTTON_RIGHT, BUTTON_MIDDLE, BUTTON_XBUTTON1, BUTTON_XBUTTON2]
+
+
+## A partida está correndo (contagem ou jogo): os botões do lado direito da
+## arma recarregam. Fora dela (abertura, menus, como jogar, resultado), dão
+## START.
+func em_partida() -> bool:
+	var cena = get_tree().current_scene
+	if cena == null or not cena.has_method("recarregar"):
+		return false
+	var e = cena.get("estado")
+	return e != null and int(e) in [1, 2]     # fase.gd: CONTAGEM, JOGO
+
+
+## Clique da arma que recarrega: o aprendido, ou no padrão os do lado
+## direito durante a partida (menos o que estiver como START da arma).
 func e_recarga_arma(ev: InputEvent) -> bool:
 	if not (ev is InputEventMouseButton) or not ev.pressed:
 		return false
 	var d = descrever(ev)
-	if d == str(valor("botoes/start_arma")):
+	var s = str(valor("botoes/start_arma"))
+	if d == s:
 		return false
 	var r = str(valor("botoes/recarga_arma"))
 	if r == "padrao":
-		return ev.button_index in [BUTTON_RIGHT, BUTTON_MIDDLE, BUTTON_XBUTTON1, BUTTON_XBUTTON2]
+		return e_botao_lateral(ev) and (s != "padrao" or em_partida())
 	return d == r
+
+
+## Clique da arma que dá START: o aprendido vem pelo mapa de ações; no
+## padrão, os do lado direito fora da partida (menos a RECARGA aprendida).
+func e_start_arma(ev: InputEvent) -> bool:
+	if str(valor("botoes/start_arma")) != "padrao" or not e_botao_lateral(ev) or em_partida():
+		return false
+	return descrever(ev) != str(valor("botoes/recarga_arma"))
 
 
 ## Qualquer jeito de atirar: o gatilho da arma, o TIRO da Zero Delay ou, no
@@ -269,9 +310,10 @@ func e_recarga(ev: InputEvent) -> bool:
 	return ev.is_action_pressed("input_recharge")
 
 
-## START da Zero Delay, da arma (aprendido) ou do teclado (1, ENTER, ESPAÇO).
+## START da Zero Delay, da arma (lado direito ou o aprendido) ou do teclado
+## (1, ENTER, ESPAÇO).
 func e_start(ev: InputEvent) -> bool:
-	if ev.is_action_pressed(ACAO_START):
+	if ev.is_action_pressed(ACAO_START) or e_start_arma(ev):
 		return true
 	if ev is InputEventKey and ev.pressed and not ev.echo:
 		return ev.scancode in [KEY_1, KEY_ENTER, KEY_KP_ENTER, KEY_SPACE]
@@ -345,7 +387,8 @@ func _voltar_vira_recarga() -> void:
 		return
 	_ultimo_voltar = agora
 	var acao = ""
-	if str(valor("botoes/start_arma")) == "voltar":
+	var s = str(valor("botoes/start_arma"))
+	if s == "voltar" or (s == "padrao" and not em_partida() and str(valor("botoes/recarga_arma")) != "voltar"):
 		acao = ACAO_START
 	elif str(valor("botoes/recarga_arma")) in ["padrao", "voltar"]:
 		acao = "input_recharge"
