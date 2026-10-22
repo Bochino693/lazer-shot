@@ -39,9 +39,13 @@ Esta pasta é o **Lazer Shot para a TV Box da placa Mali-450** (S905L / S905W, A
 
    Tudo aparece na janela na hora e fica gravado em `build\android\GERACAO-COMPLETA.log`. A janela termina sozinha.
 
-3. O APK fica em **`APK-Pronto\LazerShot-Mali450.apk`**. Copie para o pendrive e instale na TV Box.
+3. O APK fica em **`APK-Pronto\LazerShot-Mali450-2.0.2.apk`** (a versão vai no nome do arquivo). Copie para o pendrive, use **Ejetar** no Windows antes de tirar o pendrive e instale na TV Box.
 
-   No fim aparece **APK PRONTO E CONFERIDO**. Antes disso o gerador confere o APK por dentro (o motor ARM 32 e 64 bits, os scripts e as imagens em ETC1) e a assinatura, pelo próprio apksigner do Android SDK. As mensagens técnicas do Godot que não são problema (PC sem placa de som, por exemplo) não aparecem na janela; ficam só no histórico.
+   No fim aparece **APK PRONTO E CONFERIDO**, com a linha **Assinatura: v1 + v2**. Antes disso o gerador confere o APK por dentro: o motor ARM 32 e 64 bits, os scripts e as imagens em ETC1. As mensagens técnicas do Godot que não são problema (PC sem placa de som, por exemplo) não aparecem na janela; ficam só no histórico.
+
+   **A assinatura é feita pelo próprio gerador.** Ele chama o `apksigner.jar` do build-tools direto pelo Java e confere as assinaturas v1 e v2. Se o apksigner falhar, assina pelo `jarsigner` do Java (só a v1, que a TV Box também aceita).
+
+   Nas versões 2.0.0 e 2.0.1, quem assinava era o Godot, pelo `apksigner.bat` do SDK. Em SDK sem o pacote antigo "tools", esse `.bat` termina sem fazer nada e sem dar erro. O APK saía sem assinatura e a TV Box dizia **"o pacote parece estar corrompido"**.
 
 O que o PC precisa:
 
@@ -63,6 +67,13 @@ O gerador não usa o Gradle (o jogo não tem plugin). Por isso é mais rápido e
 | `GERAR_APK_MALI450.bat -Registro -Ip 192.168.0.50` | Só puxa o registro do Android para `build\android\LOGCAT-TVBOX.txt`. |
 
 O giro também se troca **na própria TV Box**, na CONFIGURAÇÃO do jogo, em "Giro da tela". Não precisa gerar outro APK.
+
+### Se a TV Box não instalar
+
+1. **"O pacote parece estar corrompido":** gere o APK de novo com esta versão (2.0.2 ou mais nova) e confira a linha **Assinatura** no fim da janela. Apague da TV Box (ou do pendrive) o APK antigo e copie o novo.
+2. **Arquivo copiado pela metade** também dá "corrompido": no Windows, use sempre **Ejetar** antes de tirar o pendrive.
+3. **"Conflito com um pacote existente":** já existe na TV Box um Lazer Shot Mali assinado com outra chave (de outro PC). Desinstale-o e instale o novo. O ranking e a configuração dele se perdem.
+4. **Para ver o motivo exato:** ligue a depuração (ADB) na TV Box e rode `GERAR_APK_MALI450.bat -Instalar -Ip IP-DA-TVBOX`. O gerador instala pela rede e mostra a resposta do Android.
 
 ## Na TV Box
 

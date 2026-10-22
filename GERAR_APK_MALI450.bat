@@ -4,7 +4,7 @@ title Lazer Shot Mali-450 - Gerar APK
 cd /d "%~dp0"
 echo ============================================================
 echo   LAZER SHOT 2.0 - TV BOX MALI-450 (S905L/S905W, ANDROID 7.1)
-echo   GODOT 3.6.2 (OPENGL ES 2) - GERA O APK
+echo   GODOT 3.6.2 (OPENGL ES 2) - GERA E ASSINA O APK
 echo   Tudo aparece aqui na hora e fica gravado em
 echo   build\android\GERACAO-COMPLETA.log
 echo ============================================================
