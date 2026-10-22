@@ -18,9 +18,10 @@ param(
 #
 # A placa de video dessa TV Box (Mali-450) so tem OpenGL ES 2.0: o jogo desta
 # pasta e a versao em Godot 3.6.2 (GLES2), sem Gradle e sem plugin. Este
-# script acha (ou baixa) o Godot 3.6.2 e os modelos de exportacao, prepara a
-# chave de assinatura e gera o APK, mostrando tudo na hora nesta janela e no
-# historico build\android\GERACAO-COMPLETA.log. Termina sozinho.
+# script acha (ou baixa) o Godot 3.6.2 e os modelos de exportacao, gera o APK
+# e ASSINA o APK ele mesmo (assinaturas v1 e v2, conferidas), mostrando tudo
+# na hora nesta janela e no historico build\android\GERACAO-COMPLETA.log.
+# Termina sozinho.
 $ErrorActionPreference = "Stop"
 # Com a barra de progresso ligada, o Windows PowerShell baixa e descompacta
 # ate dez vezes mais devagar.
@@ -158,10 +159,11 @@ function Parar-Arvore($Processo) {
 # $Log) e devolve o codigo de saida dele. Espera SO o proprio programa. Sem
 # linha nova por um tempo, avisa que segue trabalhando ($Aviso: texto ou bloco
 # que devolve o texto). Passou de $LimiteMinutos, encerra o programa e tudo o
-# que ele abriu ($script:EstourouTempo fica $true).
+# que ele abriu ($script:EstourouTempo fica $true). -SoHistorico: as linhas
+# vao so para $Log e o historico (a janela mostra o resumo).
 function Rodar {
     param([string]$Exe, [string]$Argumentos, [string]$Log, [double]$LimiteMinutos, $Aviso, [int]$Silencio = 0,
-        [System.Text.Encoding]$Codificacao = $null, [string]$Ruido = "")
+        [System.Text.Encoding]$Codificacao = $null, [string]$Ruido = "", [switch]$SoHistorico)
     if ($Silencio -le 0) { $Silencio = $script:SegundosSemSaida }
     if ($null -eq $Codificacao) { $Codificacao = $script:Utf8 }
     $script:EstourouTempo = $false
@@ -213,6 +215,11 @@ function Rodar {
                 # sem as cores do terminal (viram lixo na janela e no arquivo)
                 $Linha = [Regex]::Replace($Linha, '\x1b\[[0-9;?]*[A-Za-z]', '')
                 if ($Gravador) { $Gravador.WriteLine($Linha) }
+                if ($SoHistorico) {
+                    if ($script:Historico) { try { $script:Historico.WriteLine($Linha) } catch { } }
+                    $UltimaLinha = $Agora
+                    continue
+                }
                 # o Godot escreve uma linha por arquivo empacotado: na janela
                 # so as que dizem alguma coisa (no arquivo vai tudo)
                 if ($Linha -match '^\s*(ADDING|STORING|savepack):') { $UltimaLinha = $Agora; continue }
@@ -410,11 +417,30 @@ if (-not (Test-Path (Join-Path $PastaModelos "android_release.apk"))) {
 }
 
 # ------------------------------------------------------------------
-# [2/4] ANDROID SDK (o apksigner assina o APK), JAVA E A CHAVE.
+# [2/4] ANDROID SDK, JAVA E A CHAVE. Quem assina o APK e este gerador (veja
+# "A ASSINATURA", mais abaixo), com o apksigner.jar do build-tools mais novo.
 $Sdk = Achar-Sdk
 if (-not $Sdk) { throw "Android SDK nao encontrado. Instale-o em C:\AndroidSdk (com platform-tools e build-tools) ou defina ANDROID_HOME." }
-$Assinador = Get-ChildItem -LiteralPath (Join-Path $Sdk "build-tools") -Recurse -File -Filter "apksigner.bat" -ErrorAction SilentlyContinue | Select-Object -First 1
-if (-not $Assinador) { throw "Falta o build-tools no Android SDK ($Sdk\build-tools\...\apksigner.bat). Instale um build-tools pelo sdkmanager e rode de novo." }
+# (O Godot 3 so exporta se achar um apksigner.bat no build-tools, mesmo sem
+# usa-lo.)
+$AssinadorBat = Get-ChildItem -LiteralPath (Join-Path $Sdk "build-tools") -Recurse -File -Filter "apksigner.bat" -ErrorAction SilentlyContinue | Select-Object -First 1
+if (-not $AssinadorBat) { throw "Falta o build-tools no Android SDK ($Sdk\build-tools\...\apksigner.bat). Instale um build-tools pelo sdkmanager e rode de novo." }
+$ApksignerJar = $null
+$Zipalign = $null
+$VersaoBuildTools = [version]"0.0"
+foreach ($PastaBt in (Get-ChildItem -LiteralPath (Join-Path $Sdk "build-tools") -Directory -ErrorAction SilentlyContinue)) {
+    $Numero = [Regex]::Match($PastaBt.Name, '^\d+(\.\d+){0,3}').Value
+    $Versao = [version]"0.0"
+    if ($Numero) { try { $Versao = [version]$(if ($Numero.Contains('.')) { $Numero } else { "$Numero.0" }) } catch { } }
+    $Jar = Join-Path $PastaBt.FullName "lib\apksigner.jar"
+    if ((Test-Path -LiteralPath $Jar) -and (-not $ApksignerJar -or $Versao -gt $VersaoBuildTools)) {
+        $ApksignerJar = $Jar
+        $VersaoBuildTools = $Versao
+        $Alinhador = Join-Path $PastaBt.FullName "zipalign.exe"
+        if (Test-Path -LiteralPath $Alinhador) { $Zipalign = $Alinhador }
+    }
+    if (-not $Zipalign -and (Test-Path -LiteralPath (Join-Path $PastaBt.FullName "zipalign.exe"))) { $Zipalign = Join-Path $PastaBt.FullName "zipalign.exe" }
+}
 $env:ANDROID_HOME = $Sdk
 $env:ANDROID_SDK_ROOT = $Sdk
 
@@ -440,8 +466,17 @@ if (-not $Java) { throw "Java nao encontrado neste PC. Instale o Java 17 (Eclips
 $Java = (Resolve-Path -LiteralPath $Java).Path
 $env:JAVA_HOME = $Java
 $env:Path = (Join-Path $Java "bin") + ";" + $env:Path
+$JavaExe = Join-Path $Java "bin\java.exe"
+$Jarsigner = Join-Path $Java "bin\jarsigner.exe"
+if (-not (Test-Path -LiteralPath $Jarsigner)) { $Jarsigner = $null }
 Diz "[2/4] Android SDK: $Sdk" "Cyan"
-Diz "      Assinador: $($Assinador.FullName)"
+if ($ApksignerJar) {
+    Diz "      Assinador: $ApksignerJar (build-tools $VersaoBuildTools)"
+} elseif ($Jarsigner) {
+    Diz "      Assinador: $Jarsigner (o build-tools nao tem o apksigner.jar)" "Yellow"
+} else {
+    throw "Nao achei com o que assinar o APK: falta o lib\apksigner.jar no build-tools ($Sdk\build-tools) e o jarsigner no Java ($Java). Instale um build-tools pelo sdkmanager e rode de novo."
+}
 Diz "      Java: $Java"
 
 # A CHAVE: a de depuracao do Godot (%APPDATA%\Godot\keystores), a mesma dos
@@ -485,15 +520,20 @@ foreach ($Par in @(
 }
 [IO.File]::WriteAllText($ConfigEditor, $TextoEditor, $Utf8)
 
-# APK de RELEASE assinado com a mesma chave: o Godot 3 le a chave de release
-# do preset (o arquivo volta como estava no fim).
+# O Godot entrega o APK de RELEASE SEM assinatura: quem assina e este gerador
+# (logo depois da exportacao). No preset, "signed" desligado e as tres linhas
+# da chave de release vazias (o Godot 3 quer as tres ou nenhuma). Um preset de
+# versao antiga e acertado so durante a geracao (volta como estava no fim).
 $PresetTexto = [IO.File]::ReadAllText($PresetAndroid)
 if ($PresetTexto -notmatch 'name="Android"') { throw "export_presets.cfg sem o preset Android. Baixe a branch tvbox-mali450 de novo." }
-$PresetParaVoltar = $PresetTexto
-$PresetNovo = [Regex]::Replace($PresetTexto, '(?m)^keystore/release=.*$', "keystore/release=`"$ChaveGodot`"")
-$PresetNovo = [Regex]::Replace($PresetNovo, '(?m)^keystore/release_user=.*$', 'keystore/release_user="androiddebugkey"')
-$PresetNovo = [Regex]::Replace($PresetNovo, '(?m)^keystore/release_password=.*$', 'keystore/release_password="android"')
-[IO.File]::WriteAllText($PresetAndroid, $PresetNovo, $Utf8)
+$PresetNovo = [Regex]::Replace($PresetTexto, '(?m)^package/signed=.*$', 'package/signed=false')
+foreach ($Campo in @("keystore/release", "keystore/release_user", "keystore/release_password")) {
+    $PresetNovo = [Regex]::Replace($PresetNovo, '(?m)^' + [Regex]::Escape($Campo) + '=.*$', "$Campo=`"`"")
+}
+if ($PresetNovo -ne $PresetTexto) {
+    $PresetParaVoltar = $PresetTexto
+    [IO.File]::WriteAllText($PresetAndroid, $PresetNovo, $Utf8)
+}
 
 # ------------------------------------------------------------------
 # A IMPORTACAO LIMPA. Na primeira geracao de cada versao o cache de
@@ -545,10 +585,13 @@ if ($TextoImportacao -match "SCRIPT ERROR: Parse Error|Failed to load script|Fai
 $PastaApk = Join-Path $Projeto "APK-Pronto"
 New-Item -ItemType Directory -Path $PastaApk -Force | Out-Null
 Get-ChildItem -LiteralPath $PastaApk -Force | Remove-Item -Recurse -Force
-$ApkExportado = Join-Path $Saida $NomeApk
+# o Godot monta o APK sem assinatura; o assinado e o $ApkAssinado
+$ApkExportado = Join-Path $Saida "LazerShot-Mali450-sem-assinatura.apk"
+$ApkAssinado = Join-Path $Saida $NomeApk
+if (Test-Path -LiteralPath $ApkAssinado) { Remove-Item -LiteralPath $ApkAssinado -Force }
 $LogApk = Join-Path $Saida "exportacao.log"
 Diz ""
-Diz "[4/4] Montando e assinando o APK..." "Cyan"
+Diz "[4/4] Montando o APK..." "Cyan"
 $Argumentos = (@("--no-window", "--path", $Projeto, "--export", "Android", $ApkExportado) | ForEach-Object { Aspas $_ }) -join " "
 $Tentativa = 0
 while ($true) {
@@ -566,8 +609,8 @@ while ($true) {
 }
 $TextoApk = if (Test-Path -LiteralPath $LogApk) { [IO.File]::ReadAllText($LogApk) } else { "" }
 if (-not (Test-Path -LiteralPath $ApkExportado)) {
-    if ($TextoApk -match "keystore|Keystore") { Diz "DICA: problema com a chave de assinatura ($Chave)." "Yellow" }
-    if ($TextoApk -match "apksigner|Java|java") { Diz "DICA: o apksigner do Android SDK precisa do Java; confira as linhas Java e Assinador no inicio." "Yellow" }
+    if ($TextoApk -match "keystore|Keystore") { Diz "DICA: problema com a chave de depuracao ($Chave)." "Yellow" }
+    if ($TextoApk -match "apksigner|adb|SDK") { Diz "DICA: o Godot confere o Android SDK ($Sdk): platform-tools (adb) e build-tools (apksigner)." "Yellow" }
     if ($TextoApk -match "template|Template") { Diz "DICA: apague a pasta $PastaModelos e rode de novo (os modelos baixam de novo)." "Yellow" }
     throw "O APK nao foi criado (codigo $Codigo). A causa esta nas linhas acima (e em $LogApk)."
 }
@@ -592,22 +635,109 @@ try {
     $ZipApk.Dispose()
 }
 
-# A ASSINATURA, conferida pelo proprio apksigner do Android SDK. O Android
-# 7.1 da TV Box aceita a assinatura v2 (a v1, do Android 6 para tras, so vem
-# junto quando o apksigner acha que precisa).
+# ------------------------------------------------------------------
+# A ASSINATURA. Sem ela o Android recusa o APK com "o pacote parece estar
+# corrompido". O gerador assina sozinho, com a chave de sempre, e confere:
+#  1. pelo apksigner.jar do build-tools, rodando direto no Java: assinaturas
+#     v1 (vale em qualquer Android) e v2 (Android 7 em diante);
+#  2. se o apksigner falhar, pelo jarsigner do proprio Java (so a v1, que a
+#     TV Box tambem aceita), com o zipalign do build-tools.
+# O apksigner.bat nao e usado: em SDK sem o pacote antigo "tools" ele termina
+# sem fazer nada e sem dar erro, e o APK saia sem assinatura.
+# O Java 17 nao deixa os apksigner antigos usarem partes internas dele; a
+# JDK_JAVA_OPTIONS libera essas partes (o Java 8 nem le essa variavel).
+function Rodar-Java([string]$Exe, [string[]]$Opcoes, [string]$Log) {
+    $Antes = $env:JDK_JAVA_OPTIONS
+    $env:JDK_JAVA_OPTIONS = "--add-exports=java.base/sun.security.x509=ALL-UNNAMED --add-exports=java.base/sun.security.pkcs=ALL-UNNAMED --add-exports=java.base/sun.security.util=ALL-UNNAMED"
+    try {
+        return (Rodar $Exe (($Opcoes | ForEach-Object { Aspas $_ }) -join " ") $Log 10 "" 0 $null "" -SoHistorico)
+    } finally {
+        $env:JDK_JAVA_OPTIONS = $Antes
+    }
+}
+function Texto-Do([string]$Log) {
+    if (Test-Path -LiteralPath $Log) { return [IO.File]::ReadAllText($Log) }
+    return ""
+}
+function Assinar-Apksigner([string]$Entrada, [string]$Destino) {
+    if (-not $script:ApksignerJar) { return $false }
+    if (Test-Path -LiteralPath $Destino) { Remove-Item -LiteralPath $Destino -Force }
+    $Opcoes = @("-Xmx1024M", "-Duser.language=en", "-cp", $script:ApksignerJar, "com.android.apksigner.ApkSignerTool", "sign",
+        "--ks", $script:Chave, "--ks-key-alias", "androiddebugkey", "--ks-pass", "pass:android", "--key-pass", "pass:android",
+        "--min-sdk-version", "21", "--v1-signing-enabled", "true", "--v2-signing-enabled", "true")
+    if ($script:VersaoBuildTools -ge [version]"28.0") { $Opcoes += @("--v3-signing-enabled", "false") }
+    if ($script:VersaoBuildTools -ge [version]"30.0") { $Opcoes += @("--v4-signing-enabled", "false") }
+    $Opcoes += @("--out", $Destino, $Entrada)
+    $Codigo = Rodar-Java $script:JavaExe $Opcoes (Join-Path $script:Saida "assinatura.log")
+    if ($Codigo -ne 0 -or -not (Test-Path -LiteralPath $Destino)) { return $false }
+    # a conferencia: o proprio apksigner, exigindo a v1 E a v2
+    $Log = Join-Path $script:Saida "assinatura-conferida.log"
+    $Codigo = Rodar-Java $script:JavaExe @("-Xmx1024M", "-Duser.language=en", "-cp", $script:ApksignerJar, "com.android.apksigner.ApkSignerTool",
+        "verify", "--verbose", "--min-sdk-version", "21", $Destino) $Log
+    $Texto = Texto-Do $Log
+    return ($Codigo -eq 0 -and $Texto -match '(?m)^Verifies' -and
+        $Texto -match 'v1 scheme \(JAR signing\): true' -and $Texto -match 'v2 scheme \(APK Signature Scheme v2\): true')
+}
+function Assinar-Jarsigner([string]$Entrada, [string]$Destino) {
+    if (-not $script:Jarsigner) { return $false }
+    $SoV1 = "$Destino.v1"
+    foreach ($Velho in @($Destino, $SoV1)) { if (Test-Path -LiteralPath $Velho) { Remove-Item -LiteralPath $Velho -Force } }
+    $Codigo = Rodar-Java $script:Jarsigner @("-J-Duser.language=en", "-keystore", $script:Chave, "-storepass", "android", "-keypass", "android",
+        "-sigalg", "SHA256withRSA", "-digestalg", "SHA-256", "-signedjar", $SoV1, $Entrada, "androiddebugkey") (Join-Path $script:Saida "assinatura-jarsigner.log")
+    if ($Codigo -ne 0 -or -not (Test-Path -LiteralPath $SoV1)) { return $false }
+    # o jarsigner desalinha o APK por dentro: o zipalign alinha de novo (a
+    # assinatura v1 continua valendo)
+    $Alinhado = $false
+    if ($script:Zipalign) {
+        $Codigo = Rodar $script:Zipalign ((@("-f", "-p", "4", $SoV1, $Destino) | ForEach-Object { Aspas $_ }) -join " ") (Join-Path $script:Saida "zipalign.log") 10 "" 0 $null "" -SoHistorico
+        $Alinhado = ($Codigo -eq 0 -and (Test-Path -LiteralPath $Destino))
+    }
+    if ($Alinhado) { Remove-Item -LiteralPath $SoV1 -Force } else { Move-Item -LiteralPath $SoV1 -Destination $Destino -Force }
+    $Log = Join-Path $script:Saida "assinatura-conferida.log"
+    $Codigo = Rodar-Java $script:Jarsigner @("-J-Duser.language=en", "-verify", $Destino) $Log
+    return ($Codigo -eq 0 -and (Texto-Do $Log) -match 'jar verified')
+}
+
 $LogAssinatura = Join-Path $Saida "assinatura.log"
 Diz ""
-Diz "      Conferindo a assinatura do APK..."
-$Codigo = Rodar $env:ComSpec ('/d /s /c "' + (Aspas $Assinador.FullName) + ' verify --verbose ' + (Aspas $ApkExportado) + '"') $LogAssinatura 5 "" 0 $null '^WARNING: '
-$TextoAssinatura = if (Test-Path -LiteralPath $LogAssinatura) { [IO.File]::ReadAllText($LogAssinatura) } else { "" }
-$AssinaV1 = $TextoAssinatura -match 'v1 scheme \(JAR signing\): true'
-$AssinaV2 = $TextoAssinatura -match 'v2 scheme \(APK Signature Scheme v2\): true'
-if ($Codigo -ne 0 -or -not ($AssinaV1 -or $AssinaV2)) {
-    throw "O apksigner nao confirmou a assinatura do APK (codigo $Codigo). Detalhes em $LogAssinatura"
+Diz "      Assinando o APK (chave $Chave)..."
+$Assinatura = ""
+$AssinouApksigner = $false
+try { $AssinouApksigner = Assinar-Apksigner $ApkExportado $ApkAssinado } catch { Diz "      apksigner: $($_.Exception.Message)" "Yellow" }
+if ($AssinouApksigner) {
+    $Assinatura = "v1 + v2 (apksigner do build-tools $VersaoBuildTools)"
+} else {
+    if ($ApksignerJar) {
+        Diz "      O apksigner nao assinou (detalhes em $LogAssinatura). Assinando pelo jarsigner do Java..." "Yellow"
+    }
+    try {
+        if (Assinar-Jarsigner $ApkExportado $ApkAssinado) { $Assinatura = "v1 (jarsigner do Java)" }
+    } catch { Diz "      jarsigner: $($_.Exception.Message)" "Yellow" }
 }
-Diz ("      Assinatura conferida: v2 {0}, v1 {1} (a TV Box com Android 7.1 usa a v2)." -f $(if ($AssinaV2) { "SIM" } else { "NAO" }), $(if ($AssinaV1) { "SIM" } else { "NAO" })) "Green"
+if (-not $Assinatura) {
+    $Ultimas = (Texto-Do $LogAssinatura) + (Texto-Do (Join-Path $Saida "assinatura-jarsigner.log")) + (Texto-Do (Join-Path $Saida "assinatura-conferida.log"))
+    $Ultimas -split "`r?`n" | Where-Object { $_ -match '\S' -and $_ -notmatch 'JDK_JAVA_OPTIONS' } | Select-Object -Last 12 | ForEach-Object { Diz "      $_" "DarkYellow" }
+    if ((Texto-Do $LogAssinatura) + (Texto-Do (Join-Path $Saida "assinatura-jarsigner.log")) -match 'password|Keystore was tampered|alias') {
+        Diz "DICA: a chave $Chave nao abriu com a senha android e o nome androiddebugkey. Renomeie esse arquivo e rode de novo (o gerador cria outra)." "Yellow"
+    }
+    throw "Nao consegui assinar o APK. Sem assinatura a TV Box recusa ('pacote corrompido'). Envie o historico."
+}
+# O APK assinado tem a assinatura dentro (META-INF), alem da conferencia.
+$ZipApk = [System.IO.Compression.ZipFile]::OpenRead($ApkAssinado)
+try {
+    $Nomes = $ZipApk.Entries | ForEach-Object { $_.FullName }
+    if ($Nomes -notcontains "META-INF/MANIFEST.MF" -or -not ($Nomes | Where-Object { $_ -match '^META-INF/[^/]+\.(RSA|EC|DSA)$' })) {
+        throw "O APK assinado saiu sem a assinatura v1 (META-INF). Envie o historico."
+    }
+    if ($Nomes -notcontains "lib/armeabi-v7a/libgodot_android.so") { throw "O APK assinado saiu sem o motor ARM." }
+} finally {
+    $ZipApk.Dispose()
+}
+Diz "      Assinatura conferida: $Assinatura." "Green"
+$Tamanho = (Get-Item -LiteralPath $ApkAssinado).Length
 $Apk = Join-Path $PastaApk $NomeApk
-Copy-Item -LiteralPath $ApkExportado -Destination $Apk -Force
+Copy-Item -LiteralPath $ApkAssinado -Destination $Apk -Force
+Remove-Item -LiteralPath $ApkExportado -Force -ErrorAction SilentlyContinue
 $Hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $Apk).Hash
 # o cache agora e desta versao: as proximas geracoes nao importam tudo de novo
 if ((Test-Path -LiteralPath $Cache) -and $Carimbo) { [IO.File]::WriteAllText($MarcaCache, $Carimbo) }
@@ -623,8 +753,10 @@ Diz "Arquivo: $Apk"
 Diz ("Tamanho: {0:N1} MB" -f ($Tamanho / 1MB))
 Diz "SHA256: $Hash"
 Diz "Pacote: $Pacote (versao Mali-450; fica ao lado da versao 4.6, nao por cima)."
+Diz "Assinatura: $Assinatura, com a chave de sempre."
 Diz "Conferido: motor ARM 32 e 64 bits, scripts e imagens em ETC1 dentro do APK."
 Diz "O jogo gira por dentro: mantenha o HDMI deitado (1920x1080)."
+Diz "No pendrive: copie o APK e use 'Ejetar' no Windows antes de tirar o pendrive."
 
 if ($Instalar) {
     $Adb = Join-Path $Sdk "platform-tools\adb.exe"
