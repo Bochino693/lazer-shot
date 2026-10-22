@@ -12,7 +12,14 @@ Esta pasta é o **Lazer Shot para a TV Box da placa Mali-450** (S905L / S905W, A
 - **A seta do mouse não aparece mais** por cima do jogo.
 - **START na arma, como antes:** o botão do lado direito dá START fora da partida e, durante a partida, recarrega. Não precisa aprender nada. Dá para trocar na tela Arma e mira.
 - **Abertura sem o símbolo do Godot:** ao abrir o jogo aparece o logo da Lazer & Sport, já em pé no monitor.
-- **Bar:** o tiro é um **laser com a bala** na ponta, saindo da arma embaixo da tela até a mira, e deixa um fio de fumaça.
+- **O tiro de cada cenário** sai da arma, embaixo da tela, até a mira:
+  - **Bar:** bala de revólver, sem laser (o clarão da boca da arma e a bala traçante; no ponto, faísca e fumaça);
+  - **Egito de dia:** laser amarelo; **de noite:** laser branco;
+  - **Mar:** laser cor de água, com bolhas pelo caminho;
+  - **Arena:** o laser vermelho da abertura (faíscas em brasa no ponto).
+- **Janela do Bar com desenho próprio e destruição de verdade:** cada tiro estoura a vidraça (trincas saindo do furo, cacos do próprio vidro caindo e quicando na tábua, pontas presas na moldura, as vizinhas trincando, o céu aparecendo pelo buraco e o sol entrando mais forte).
+  - Os **5 primeiros tiros** na janela valem **+50** cada.
+  - No 5º, o resto do vidro desaba e a janela não dá mais pontos.
 - **Deserto: o cristal quebrado corta a energia.**
   - A energia já cai e pisca a cada tiro no cristal.
   - Quebrado, os feixes estalam e apagam, os cristais dos obeliscos e as pontas de ouro das pirâmides escurecem e o cristal não carrega (sem POWER OF RA!).
@@ -33,7 +40,7 @@ Esta pasta é o **Lazer Shot para a TV Box da placa Mali-450** (S905L / S905W, A
   - o sol entra pela janela do Bar com raios e poeira;
   - o Egito troca o dia pela noite e tem águias e o olho do astro;
   - a Arena pulsa com a música, com vapor, faíscas e giroflex.
-- **Os bônus continuam valendo pontos:** barril (+40 por furo), cristal (+300), pontas dos obeliscos (+150), peixes dourados (+40 cada), LED do alto da Arena (+50).
+- **Os bônus continuam valendo pontos:** barril (+40 por furo), janela do bar (+50 nos 5 primeiros tiros), cristal (+300), pontas dos obeliscos (+150), peixes dourados (+40 cada), LED do alto da Arena (+50).
 - **Os efeitos de tiro voltaram em todas as telas:** o traço do tiro, o coice da mira e as faíscas.
 - **As telas são as mesmas:**
   - abertura Lazer & Sport GAMES;
@@ -56,7 +63,7 @@ Esta pasta é o **Lazer Shot para a TV Box da placa Mali-450** (S905L / S905W, A
 
    Tudo aparece na janela na hora e fica gravado em `build\android\GERACAO-COMPLETA.log`. A janela termina sozinha.
 
-3. O APK fica em **`APK-Pronto\LazerShot-Mali450-2.1.0.apk`** (a versão vai no nome do arquivo). Copie para o pendrive, use **Ejetar** no Windows antes de tirar o pendrive e instale na TV Box.
+3. O APK fica em **`APK-Pronto\LazerShot-Mali450-2.1.1.apk`** (a versão vai no nome do arquivo). Copie para o pendrive, use **Ejetar** no Windows antes de tirar o pendrive e instale na TV Box.
 
    No fim aparece **APK PRONTO E CONFERIDO**, com a linha **Assinatura: v1 + v2**. Antes disso o gerador confere o APK por dentro: o motor ARM 32 e 64 bits, os scripts e as imagens em ETC1. As mensagens técnicas do Godot que não são problema (PC sem placa de som, por exemplo) não aparecem na janela; ficam só no histórico.
 

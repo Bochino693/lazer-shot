@@ -57,7 +57,7 @@ const DADOS = {
 			["whisky", "WHISKY", "", "+100", VERDE],
 			["falsa", "GARRAFA VERDE", "COM CAVEIRA", "-500", VERMELHO],
 		],
-		"regras": ["BARRIL: +40 POR FURO"],
+		"regras": ["BARRIL: +40 POR FURO", "JANELA: +50 NOS 5 PRIMEIROS TIROS"],
 	},
 	"arena": {
 		"nome": "ARENA LAZER SHOT", "cor": Color(1.0, 0.24, 0.20),

@@ -488,13 +488,24 @@ def splash():
     print("tela de abertura do app (3 giros)")
 
 
-# O feixe do tiro do Bar (laser e bala): macio dos lados e igual ao longo
-# (esticado no comprimento do tiro, a luz somada).
+# O feixe dos lasers (Arena, sol, lua, Mar): macio dos lados e igual ao
+# longo (esticado no comprimento do tiro, a luz somada).
 def feixe_laser():
     w, h = 16, 64
     v = (np.arange(h, dtype=np.float32) + 0.5) / h * 2.0 - 1.0     # -1..1 de um lado ao outro
     a = np.exp(-(v / 0.42) ** 2) * 0.8 + np.exp(-(v / 0.12) ** 2) * 0.2
     salvar_alfa("fx_laser", np.tile(a[:, None], (1, w)))
+
+
+# O risco da bala traçante do Bar: fraco no rabo e forte na ponta (a ponta
+# fica à direita, redonda), macio dos lados.
+def rastro_bala():
+    w, h = 64, 16
+    u = (np.arange(w, dtype=np.float32) + 0.5) / w                  # 0 rabo .. 1 ponta
+    v = (np.arange(h, dtype=np.float32) + 0.5) / h * 2.0 - 1.0
+    ao_longo = u ** 1.6 * np.clip((1.0 - u) / 0.08, 0.0, 1.0) ** 0.5
+    de_lado = np.exp(-(v / 0.45) ** 2)
+    salvar_alfa("fx_rastro", de_lado[:, None] * ao_longo[None, :])
 
 
 # ------------------------------------------------------------------ main
@@ -596,6 +607,7 @@ def main():
     icones_android()
     splash()
     feixe_laser()
+    rastro_bala()
     copiar("foto_vazia.png")
     for n in ["fx_fumaca.png", "fx_onda.png", "fx_furo_areia.png", "fx_furo_pedra.png", "egito_estrela.png"]:
         copiar(n)
@@ -791,7 +803,10 @@ if __name__ == "__main__":
         escrever_imports()
     elif os.environ.get("SO_SPLASH") == "1":
         splash()
+        escrever_imports()
+    elif os.environ.get("SO_EFEITOS") == "1":
         feixe_laser()
+        rastro_bala()
         escrever_imports()
     elif os.environ.get("SO_CARTOES") == "1":
         cartoes()

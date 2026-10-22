@@ -1,34 +1,40 @@
 extends CanvasLayer
 class_name Trajetoria
 
-## O TIRO VISTO DE QUEM ATIRA (primeira pessoa): a bala vai PARA DENTRO da
-## tela na linha da mira. Ela aparece no ponto da mira grande e desfocada
-## saindo da arma e fecha até o ponto (anéis fechando, como um zoom), e o
-## clarão da boca da arma acende de leve a beirada de baixo da tela. No
-## ponto, o impacto de cada cenário:
+## O TIRO DE CADA CENÁRIO, saindo da arma (embaixo da tela, puxada para o
+## lado da mira) até o ponto:
 ##
-##   laser (Arena)  anéis vermelhos e núcleo branco; clarão e anel de choque
-##   sol   (Egito)  anéis de ouro; estrela de luz girando e brilhos subindo
-##   lua   (Egito)  anéis de prata azulada; anel frio abrindo e pó de estrela
-##   mar   (Mar)    anéis de água; ondas abrindo e bolhas subindo
-##   bar   (Bar)    LASER E BALA (como na 4.6 de antes): o feixe quente sai
-##                  da arma, embaixo da tela, e corre até a mira com a bala
-##                  traçante na ponta; chegando, o feixe apaga num instante
-##                  e ficam a faísca, o clarão e um fio de fumaça no caminho
+##   laser (Arena)  o LASER DA ABERTURA: feixe vermelho com halo, faixa e
+##                  miolo branco e um pulso correndo até o alvo; no ponto o
+##                  clarão, o anel de choque e as faíscas em brasa
+##   sol   (Egito)  LASER AMARELO do sol, com brilhos soltos subindo pelo
+##                  caminho; no ponto a estrela de luz girando
+##   lua   (Egito)  LASER BRANCO do luar, com pó de estrela pelo caminho; no
+##                  ponto um anel frio abrindo
+##   mar   (Mar)    LASER COR DE ÁGUA, com um rastro de bolhas subindo; no
+##                  ponto as ondas abrindo e mais bolhas
+##   bar   (Bar)    BALA de revólver, sem laser: o clarão da boca da arma e a
+##                  bala traçante correndo até o ponto; lá a faísca e a
+##                  fumaça
+##   menu           (telas de fora das fases) anéis fechando no ponto
 ##
-## Um desenho para a luz (somada), um para a fumaça/bolhas; só redesenha
-## enquanto há tiro no ar.
+## O laser acende inteiro na hora e apaga em seguida; a bala voa. Os feixes
+## são uma textura macia esticada (luz somada): poucos quadrados, leve para
+## a Mali-450. Só redesenha enquanto há tiro no ar.
 
 const IMPACTO = 0.35
-# voo (s), raio de saída (px), cor dos anéis, cor do núcleo, cor do clarão
-const ESTILOS = {
-	"laser": [0.07, 96.0, Color(1.0, 0.16, 0.10), Color(1.0, 0.75, 0.70), Color(1.0, 0.25, 0.18)],
-	"sol": [0.10, 118.0, Color(1.0, 0.70, 0.22), Color(1.0, 0.95, 0.75), Color(1.0, 0.70, 0.30)],
-	"lua": [0.10, 112.0, Color(0.55, 0.75, 1.0), Color(0.92, 0.97, 1.0), Color(0.60, 0.78, 1.0)],
-	"mar": [0.12, 106.0, Color(0.55, 0.90, 1.0), Color(0.90, 0.99, 1.0), Color(0.40, 0.80, 1.0)],
-	"bar": [0.075, 74.0, Color(1.0, 0.55, 0.15), Color(1.0, 0.92, 0.65), Color(1.0, 0.62, 0.25)],
-	"menu": [0.07, 90.0, Color(1.0, 0.20, 0.22), Color(1.0, 0.85, 0.80), Color(1.0, 0.30, 0.25)],
+# os lasers: voo do pulso (s), vida do feixe (s), cores [halo, faixa, miolo]
+# (com o alfa) e larguras [halo, faixa, miolo] (px)
+const FEIXES = {
+	"laser": [0.07, 0.17, [Color(1.0, 0.16, 0.20, 0.36), Color(1.0, 0.22, 0.24, 0.66), Color(1.0, 0.86, 0.86, 1.0)], [64.0, 24.0, 7.0]],
+	"sol": [0.08, 0.26, [Color(1.0, 0.60, 0.10, 0.32), Color(1.0, 0.82, 0.28, 0.66), Color(1.0, 0.98, 0.80, 1.0)], [84.0, 28.0, 8.0]],
+	"lua": [0.08, 0.28, [Color(0.80, 0.88, 1.0, 0.28), Color(0.94, 0.97, 1.0, 0.62), Color(1.0, 1.0, 1.0, 1.0)], [76.0, 26.0, 8.0]],
+	"mar": [0.09, 0.20, [Color(0.10, 0.72, 0.84, 0.34), Color(0.40, 0.92, 1.0, 0.66), Color(0.86, 1.0, 1.0, 1.0)], [64.0, 22.0, 7.0]],
 }
+const BALA_VOO = 0.07          # s da arma até o ponto
+const BALA_RASTRO = 150.0      # px do risco da bala traçante
+# telas de fora (anéis): voo, raio de saída, cor dos anéis, do núcleo e do clarão
+const MENU = [0.07, 90.0, Color(1.0, 0.20, 0.22), Color(1.0, 0.85, 0.80), Color(1.0, 0.30, 0.25)]
 
 var _luz: Node2D
 var _tiros = []
@@ -39,7 +45,7 @@ var _t_ponto: Texture
 var _t_brilho: Texture
 var _t_estrela: Texture
 var _t_laser: Texture
-var _t_faisca: Texture
+var _t_rastro: Texture
 
 
 static func criar(pai: Node, camada: int = 15) -> Trajetoria:
@@ -55,7 +61,7 @@ func _ready() -> void:
 	_t_brilho = Estilo.tex("fx_brilho")
 	_t_estrela = Estilo.tex("fx_estrela")
 	_t_laser = Estilo.tex("fx_laser")
-	_t_faisca = Estilo.tex("fx_faisca")
+	_t_rastro = Estilo.tex("fx_rastro")
 	_fumaca = Particulas.new()
 	add_child(_fumaca)
 	_luz = Node2D.new()
@@ -70,27 +76,69 @@ func _ready() -> void:
 
 ## Um tiro em `p` (ponto da tela) no estilo do cenário.
 func disparar(p: Vector2, estilo: String) -> void:
-	var e: Array = ESTILOS.get(estilo, ESTILOS["laser"])
-	var s = {"p": p, "t": 0.0, "e": e, "estilo": estilo, "giro": randf() * TAU, "impacto": false}
-	if estilo == "bar":
-		# laser e bala: sai da arma (embaixo da tela, puxada para o lado da mira)
-		s["de"] = Vector2(lerp(Tela.TELA.x * 0.5, p.x, 0.3), Tela.TELA.y + 40.0)
+	if not FEIXES.has(estilo) and estilo != "bar" and estilo != "menu":
+		estilo = "laser"
+	var de = Vector2(lerp(Tela.TELA.x * 0.5, p.x, 0.3), Tela.TELA.y + 40.0)
+	var s = {"p": p, "de": de, "t": 0.0, "estilo": estilo, "giro": randf() * TAU, "impacto": false}
 	_tiros.append(s)
 	while _tiros.size() > 8:
 		_tiros.pop_front()
+	if FEIXES.has(estilo):
+		_pelo_caminho(s)
 	set_process(true)
 
 
+func _voo(estilo: String) -> float:
+	if FEIXES.has(estilo):
+		return FEIXES[estilo][0]
+	return BALA_VOO if estilo == "bar" else MENU[0]
+
+
+func _fim(estilo: String) -> float:
+	if FEIXES.has(estilo):
+		return max(FEIXES[estilo][1], FEIXES[estilo][0] + IMPACTO)
+	return _voo(estilo) + IMPACTO
+
+
+## O que o laser deixa no caminho, na hora em que acende.
+func _pelo_caminho(s: Dictionary) -> void:
+	var de: Vector2 = s["de"]
+	var p: Vector2 = s["p"]
+	var lado = (p - de).normalized().rotated(PI * 0.5)
+	match s["estilo"]:
+		"sol":
+			for i in 7:
+				var q = de.linear_interpolate(p, rand_range(0.15, 0.95)) + lado * rand_range(-8.0, 8.0)
+				_brilhos.explosao(q, {"n": 1, "vel": [10.0, 50.0], "ang": [230.0, 310.0], "vida": [0.35, 0.7], "tam": [5.0, 10.0],
+					"cor": Color(1.0, 0.85, 0.45), "grav": -40.0})
+		"lua":
+			for i in 9:
+				var q = de.linear_interpolate(p, rand_range(0.12, 0.95)) + lado * rand_range(-10.0, 10.0)
+				_brilhos.explosao(q, {"n": 1, "vel": [5.0, 30.0], "vida": [0.4, 0.8], "tam": [3.0, 7.0],
+					"cor": Color(0.92, 0.96, 1.0), "grav": 10.0})
+		"mar":
+			var n = int(clamp((p - de).length() / 45.0, 10.0, 28.0))
+			var bolha = Estilo.tex("mar_bolha")
+			for i in n:
+				var q = de.linear_interpolate(p, (i + randf()) / n) + lado * rand_range(-10.0, 10.0)
+				_fumaca.explosao(q, {"n": 1, "tex": bolha, "vel": [15.0, 60.0], "ang": [250.0, 290.0], "vida": [0.6, 1.1],
+					"tam": [6.0, 14.0], "fim": 0.9, "cor": Color(0.85, 0.97, 1.0, 0.8), "grav": -160.0, "arrasto": 1.5})
+
+
+## Quando o tiro chega no ponto.
 func _impacto(s: Dictionary) -> void:
 	var p: Vector2 = s["p"]
-	var e: Array = s["e"]
 	match s["estilo"]:
+		"laser":
+			# as faíscas em brasa da abertura (branco-quente esfriando a vermelho)
+			_brilhos.explosao(p, {"n": 22, "vel": [220.0, 640.0], "vida": [0.35, 0.6], "tam": [4.0, 8.0],
+				"cor": Color(1.0, 0.95, 0.7), "cor_fim": Color(1.0, 0.15, 0.05, 0.0), "grav": 1200.0, "estica": 0.03, "arrasto": 1.0})
 		"sol":
 			_brilhos.explosao(p, {"n": 10, "vel": [60.0, 220.0], "ang": [200.0, 340.0], "vida": [0.4, 0.8], "tam": [8.0, 16.0],
 				"cor": Color(1.0, 0.85, 0.4), "grav": -60.0, "arrasto": 2.0})
 		"lua":
 			_brilhos.explosao(p, {"n": 12, "vel": [40.0, 170.0], "vida": [0.5, 0.9], "tam": [6.0, 12.0],
-				"cor": Color(0.75, 0.88, 1.0), "grav": 40.0, "arrasto": 2.5})
+				"cor": Color(0.88, 0.94, 1.0), "grav": 40.0, "arrasto": 2.5})
 		"mar":
 			_fumaca.explosao(p, {"n": 7, "tex": Estilo.tex("mar_bolha"), "vel": [30.0, 110.0], "ang": [220.0, 320.0],
 				"vida": [0.6, 1.1], "tam": [10.0, 22.0], "fim": 0.9, "cor": Color(0.85, 0.97, 1.0, 0.85), "grav": -220.0, "arrasto": 1.5, "espalha": 10.0})
@@ -99,14 +147,9 @@ func _impacto(s: Dictionary) -> void:
 				"cor": Color(1.0, 0.75, 0.35), "grav": 600.0, "estica": 0.05, "arrasto": 1.0})
 			_fumaca.explosao(p, {"n": 3, "tex": Estilo.tex("fx_fumaca"), "vel": [10.0, 40.0], "ang": [240.0, 300.0],
 				"vida": [0.7, 1.2], "tam": [26.0, 40.0], "fim": 2.2, "cor": Color(0.75, 0.72, 0.68, 0.45), "grav": -40.0, "arrasto": 1.0})
-			# o fio de fumaça que a bala deixou no caminho
-			var de: Vector2 = s.get("de", p)
-			for j in 5:
-				_fumaca.explosao(de.linear_interpolate(p, 0.38 + j * 0.13), {"n": 1, "tex": Estilo.tex("fx_fumaca"), "vel": [4.0, 16.0],
-					"ang": [250.0, 290.0], "vida": [0.45, 0.8], "tam": [12.0, 20.0], "fim": 2.4, "cor": Color(0.82, 0.78, 0.72, 0.22), "grav": -16.0})
 		_:
 			_brilhos.explosao(p, {"n": 9, "vel": [120.0, 360.0], "vida": [0.18, 0.4], "tam": [5.0, 10.0],
-				"cor": e[2].linear_interpolate(Color.white, 0.3), "estica": 0.04, "arrasto": 2.0})
+				"cor": MENU[4].linear_interpolate(Color.white, 0.3), "estica": 0.04, "arrasto": 2.0})
 
 
 func _process(delta: float) -> void:
@@ -114,11 +157,10 @@ func _process(delta: float) -> void:
 	while i < _tiros.size():
 		var s: Dictionary = _tiros[i]
 		s["t"] += delta
-		var voo: float = s["e"][0]
-		if not s["impacto"] and s["t"] >= voo:
+		if not s["impacto"] and s["t"] >= _voo(s["estilo"]):
 			s["impacto"] = true
 			_impacto(s)
-		if s["t"] > voo + IMPACTO:
+		if s["t"] > _fim(s["estilo"]):
 			_tiros.remove(i)
 			continue
 		i += 1
@@ -129,94 +171,132 @@ func _process(delta: float) -> void:
 
 func _desenhar() -> void:
 	for s in _tiros:
-		if s.has("de"):
+		if FEIXES.has(s["estilo"]):
+			_desenhar_laser(s)
+		elif s["estilo"] == "bar":
 			_desenhar_bala(s)
-			continue
-		var e: Array = s["e"]
-		var t: float = s["t"]
-		var voo: float = e[0]
-		var p: Vector2 = s["p"]
-		var cor_anel: Color = e[2]
-		var cor_nucleo: Color = e[3]
-		if t < voo:
-			# a bala indo para dentro: anéis fechando até o ponto
-			var k = t / voo
-			var r: float = lerp(e[1], 10.0, k * k)
-			var a = 0.35 + 0.65 * k
-			_luz.draw_texture_rect(_t_anel, Rect2(p - Vector2(r, r), Vector2(r, r) * 2.0), false, Color(cor_anel.r, cor_anel.g, cor_anel.b, a * 0.8))
-			var r2 = r * 0.6
-			_luz.draw_texture_rect(_t_anel, Rect2(p - Vector2(r2, r2), Vector2(r2, r2) * 2.0), false, Color(cor_anel.r, cor_anel.g, cor_anel.b, a * 0.5))
-			var rn = 10.0 + 18.0 * (1.0 - k)
-			_luz.draw_texture_rect(_t_ponto, Rect2(p - Vector2(rn, rn), Vector2(rn, rn) * 2.0), false, cor_nucleo)
-			# o clarão da boca da arma na beirada de baixo
-			var bx: float = clamp(p.x, 160.0, Tela.TELA.x - 160.0)
-			var f = (1.0 - k) * 0.55
-			_luz.draw_texture_rect(_t_brilho, Rect2(Vector2(bx - 330.0, Tela.TELA.y - 230.0), Vector2(660.0, 460.0)), false, Color(e[4].r, e[4].g, e[4].b, f))
 		else:
-			var k = (t - voo) / IMPACTO
-			var fade = 1.0 - k
-			match s["estilo"]:
-				"sol":
-					var r = 40.0 + 70.0 * k
-					_luz.draw_set_transform(p, s["giro"] + k * 2.0, Vector2.ONE)
-					_luz.draw_texture_rect(_t_estrela, Rect2(Vector2(-r, -r), Vector2(r, r) * 2.0), false, Color(1.0, 0.9, 0.55, fade))
-					_luz.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-					var rb = 34.0 * fade + 10.0
-					_luz.draw_texture_rect(_t_brilho, Rect2(p - Vector2(rb, rb), Vector2(rb, rb) * 2.0), false, Color(1.0, 0.8, 0.35, fade))
-				"lua":
-					var r = 16.0 + 70.0 * k
-					_luz.draw_texture_rect(_t_anel, Rect2(p - Vector2(r, r), Vector2(r, r) * 2.0), false, Color(0.7, 0.85, 1.0, fade))
-					var rb = 30.0 * fade + 8.0
-					_luz.draw_texture_rect(_t_brilho, Rect2(p - Vector2(rb, rb), Vector2(rb, rb) * 2.0), false, Color(0.85, 0.92, 1.0, fade))
-				"mar":
-					for j in 2:
-						var kk: float = clamp(k * 1.2 - j * 0.25, 0.0, 1.0)
-						var r = 14.0 + 80.0 * kk
-						_luz.draw_texture_rect(_t_anel, Rect2(p - Vector2(r, r * 0.8), Vector2(r, r * 0.8) * 2.0), false, Color(0.6, 0.9, 1.0, (1.0 - kk) * 0.7))
-				"bar":
-					var rb = 26.0 * fade + 4.0
-					_luz.draw_texture_rect(_t_brilho, Rect2(p - Vector2(rb, rb), Vector2(rb, rb) * 2.0), false, Color(1.0, 0.7, 0.3, fade))
-				_:
-					var r = 12.0 + 64.0 * k
-					_luz.draw_texture_rect(_t_anel, Rect2(p - Vector2(r, r), Vector2(r, r) * 2.0), false, Color(cor_anel.r, cor_anel.g, cor_anel.b, fade))
-					var rb = 30.0 * fade + 6.0
-					_luz.draw_texture_rect(_t_brilho, Rect2(p - Vector2(rb, rb), Vector2(rb, rb) * 2.0), false, Color(cor_nucleo.r, cor_nucleo.g, cor_nucleo.b, fade))
+			_desenhar_aneis(s)
 
 
-## Bar: LASER E BALA. O feixe quente nasce na arma (embaixo da tela) e corre
-## até a mira com a bala na ponta (um risco quente com brilho); chegando, o
-## feixe apaga num instante e fica o clarão no ponto. Poucos quadrados
-## esticados, luz somada: leve para a Mali-450.
-func _desenhar_bala(s: Dictionary) -> void:
-	var voo: float = s["e"][0]
+func _brilho(c: Vector2, r: float, cor: Color) -> void:
+	_luz.draw_texture_rect(_t_brilho, Rect2(c - Vector2(r, r), Vector2(r, r) * 2.0), false, cor)
+
+
+## Um feixe da arma até `ate`: halo, faixa e miolo (textura macia esticada).
+func _raio(de: Vector2, ate: Vector2, cores: Array, larguras: Array, a: float) -> void:
+	var v = ate - de
+	var comp = v.length()
+	if comp < 1.0 or a <= 0.0:
+		return
+	_luz.draw_set_transform(de, v.angle(), Vector2.ONE)
+	for j in 3:
+		var c: Color = cores[j]
+		var w: float = larguras[j]
+		_luz.draw_texture_rect(_t_laser, Rect2(0.0, -w * 0.5, comp, w), false, Color(c.r, c.g, c.b, c.a * a))
+	_luz.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+
+## Laser (arena, sol, lua, mar): acende inteiro na hora e apaga; um pulso
+## corre da arma até o ponto e lá fica o impacto do cenário.
+func _desenhar_laser(s: Dictionary) -> void:
+	var f: Array = FEIXES[s["estilo"]]
+	var voo: float = f[0]
+	var vida: float = f[1]
+	var cores: Array = f[2]
 	var t: float = s["t"]
 	var de: Vector2 = s["de"]
 	var p: Vector2 = s["p"]
-	var k = clamp(t / voo, 0.0, 1.0)
-	var cabeca = de.linear_interpolate(p, k)
-	var a = 1.0 if t < voo else clamp(1.0 - (t - voo) / 0.12, 0.0, 1.0)
-	var v = cabeca - de
-	var comp = v.length()
-	if a > 0.0 and comp > 1.0:
-		_luz.draw_set_transform(de, v.angle(), Vector2.ONE)
-		# halo vermelho-alaranjado, faixa quente e miolo quase branco
-		_luz.draw_texture_rect(_t_laser, Rect2(0.0, -36.0, comp, 72.0), false, Color(1.0, 0.30, 0.08, 0.50 * a))
-		_luz.draw_texture_rect(_t_laser, Rect2(0.0, -11.0, comp, 22.0), false, Color(1.0, 0.62, 0.22, 0.85 * a))
-		_luz.draw_texture_rect(_t_laser, Rect2(0.0, -3.5, comp, 7.0), false, Color(1.0, 0.97, 0.88, a))
-		if t < voo:
-			# a bala: o risco quente na ponta do feixe (duas vezes: mais forte)
-			_luz.draw_texture_rect(_t_faisca, Rect2(comp - 116.0, -14.0, 128.0, 28.0), false, Color(1.0, 0.80, 0.40))
-			_luz.draw_texture_rect(_t_faisca, Rect2(comp - 96.0, -7.0, 104.0, 14.0), false, Color(1.0, 0.98, 0.85))
-		_luz.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	var halo: Color = cores[0]
+	var miolo: Color = cores[2]
+	_raio(de, p, cores, f[3], clamp(1.0 - t / vida, 0.0, 1.0))
 	if t < voo:
-		var rb = 50.0
-		_luz.draw_texture_rect(_t_brilho, Rect2(cabeca - Vector2(rb, rb), Vector2(rb, rb) * 2.0), false, Color(1.0, 0.62, 0.24, 0.95))
-		var rn = 14.0
-		_luz.draw_texture_rect(_t_ponto, Rect2(cabeca - Vector2(rn, rn), Vector2(rn, rn) * 2.0), false, Color(1.0, 1.0, 0.92))
-		# o clarão da boca da arma na beirada de baixo
-		_luz.draw_texture_rect(_t_brilho, Rect2(Vector2(de.x - 300.0, Tela.TELA.y - 230.0), Vector2(600.0, 460.0)), false,
-			Color(1.0, 0.62, 0.25, (1.0 - k) * 0.6))
-	else:
-		var fade = 1.0 - (t - voo) / IMPACTO
-		var rb2 = 32.0 * fade + 6.0
-		_luz.draw_texture_rect(_t_brilho, Rect2(p - Vector2(rb2, rb2), Vector2(rb2, rb2) * 2.0), false, Color(1.0, 0.72, 0.32, fade))
+		var k = t / voo
+		var cab = de.linear_interpolate(p, k)
+		_brilho(cab, 34.0, Color(halo.r, halo.g, halo.b, 0.9))
+		_luz.draw_texture_rect(_t_ponto, Rect2(cab - Vector2(10, 10), Vector2(20, 20)), false, miolo)
+		# o clarão da arma na beirada de baixo
+		_luz.draw_texture_rect(_t_brilho, Rect2(Vector2(de.x - 260.0, Tela.TELA.y - 200.0), Vector2(520.0, 400.0)), false,
+			Color(halo.r, halo.g, halo.b, (1.0 - k) * 0.5))
+		return
+	var k2 = clamp((t - voo) / IMPACTO, 0.0, 1.0)
+	var fade = 1.0 - k2
+	match s["estilo"]:
+		"laser":
+			# o clarão do laser abrindo e o anel de choque, como na abertura
+			_brilho(p, 22.0 + 96.0 * k2, Color(1.0, 0.6, 0.45, 0.7 * fade))
+			var r = 12.0 + 64.0 * k2
+			_luz.draw_texture_rect(_t_anel, Rect2(p - Vector2(r, r), Vector2(r, r) * 2.0), false, Color(1.0, 0.30, 0.25, fade))
+			_brilho(p, 14.0 * fade + 4.0, Color(1.0, 0.9, 0.85, fade))
+		"sol":
+			var r2 = 40.0 + 70.0 * k2
+			_luz.draw_set_transform(p, s["giro"] + k2 * 2.0, Vector2.ONE)
+			_luz.draw_texture_rect(_t_estrela, Rect2(Vector2(-r2, -r2), Vector2(r2, r2) * 2.0), false, Color(1.0, 0.9, 0.55, fade))
+			_luz.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+			_brilho(p, 34.0 * fade + 10.0, Color(1.0, 0.8, 0.35, fade))
+		"lua":
+			var r3 = 16.0 + 70.0 * k2
+			_luz.draw_texture_rect(_t_anel, Rect2(p - Vector2(r3, r3), Vector2(r3, r3) * 2.0), false, Color(0.85, 0.92, 1.0, fade))
+			_brilho(p, 30.0 * fade + 8.0, Color(0.95, 0.97, 1.0, fade))
+		"mar":
+			for j in 2:
+				var kk: float = clamp(k2 * 1.2 - j * 0.25, 0.0, 1.0)
+				var r4 = 14.0 + 80.0 * kk
+				_luz.draw_texture_rect(_t_anel, Rect2(p - Vector2(r4, r4 * 0.8), Vector2(r4, r4 * 0.8) * 2.0), false, Color(0.5, 0.92, 1.0, (1.0 - kk) * 0.7))
+			_brilho(p, 24.0 * fade + 6.0, Color(0.6, 0.95, 1.0, fade))
+
+
+## Bar: a BALA. O clarão da boca da arma na beirada de baixo e a bala
+## traçante (um risco quente, mais forte na ponta) correndo até o ponto.
+func _desenhar_bala(s: Dictionary) -> void:
+	var t: float = s["t"]
+	var de: Vector2 = s["de"]
+	var p: Vector2 = s["p"]
+	if t < 0.06:
+		var f = 1.0 - t / 0.06
+		_luz.draw_texture_rect(_t_brilho, Rect2(Vector2(de.x - 300.0, Tela.TELA.y - 240.0), Vector2(600.0, 480.0)), false,
+			Color(1.0, 0.70, 0.30, 0.85 * f))
+		_luz.draw_texture_rect(_t_brilho, Rect2(Vector2(de.x - 110.0, Tela.TELA.y - 120.0), Vector2(220.0, 240.0)), false,
+			Color(1.0, 0.95, 0.80, f))
+	if t < BALA_VOO:
+		var v = p - de
+		var k = t / BALA_VOO
+		var cab = de + v * k
+		var comp = min(BALA_RASTRO, v.length() * k)
+		if comp > 1.0:
+			_luz.draw_set_transform(cab, v.angle(), Vector2.ONE)
+			_luz.draw_texture_rect(_t_rastro, Rect2(-comp, -11.0, comp, 22.0), false, Color(1.0, 0.62, 0.22, 0.95))
+			_luz.draw_texture_rect(_t_rastro, Rect2(-comp * 0.75, -3.5, comp * 0.75, 7.0), false, Color(1.0, 0.97, 0.85))
+			_luz.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+		_brilho(cab, 14.0, Color(1.0, 0.85, 0.55, 0.9))
+		return
+	var fade = 1.0 - clamp((t - BALA_VOO) / IMPACTO, 0.0, 1.0)
+	_brilho(p, 30.0 * fade + 6.0, Color(1.0, 0.72, 0.32, fade))
+
+
+## Telas de fora das fases: a bala indo para dentro da tela (anéis fechando
+## até o ponto) e um clarão com anel no ponto.
+func _desenhar_aneis(s: Dictionary) -> void:
+	var t: float = s["t"]
+	var voo: float = MENU[0]
+	var p: Vector2 = s["p"]
+	var cor_anel: Color = MENU[2]
+	var cor_nucleo: Color = MENU[3]
+	if t < voo:
+		var k = t / voo
+		var r: float = lerp(MENU[1], 10.0, k * k)
+		var a = 0.35 + 0.65 * k
+		_luz.draw_texture_rect(_t_anel, Rect2(p - Vector2(r, r), Vector2(r, r) * 2.0), false, Color(cor_anel.r, cor_anel.g, cor_anel.b, a * 0.8))
+		var r2 = r * 0.6
+		_luz.draw_texture_rect(_t_anel, Rect2(p - Vector2(r2, r2), Vector2(r2, r2) * 2.0), false, Color(cor_anel.r, cor_anel.g, cor_anel.b, a * 0.5))
+		var rn = 10.0 + 18.0 * (1.0 - k)
+		_luz.draw_texture_rect(_t_ponto, Rect2(p - Vector2(rn, rn), Vector2(rn, rn) * 2.0), false, cor_nucleo)
+		var bx: float = clamp(p.x, 160.0, Tela.TELA.x - 160.0)
+		var c: Color = MENU[4]
+		_luz.draw_texture_rect(_t_brilho, Rect2(Vector2(bx - 330.0, Tela.TELA.y - 230.0), Vector2(660.0, 460.0)), false, Color(c.r, c.g, c.b, (1.0 - k) * 0.55))
+		return
+	var k2 = (t - voo) / IMPACTO
+	var fade = 1.0 - k2
+	var r3 = 12.0 + 64.0 * k2
+	_luz.draw_texture_rect(_t_anel, Rect2(p - Vector2(r3, r3), Vector2(r3, r3) * 2.0), false, Color(cor_anel.r, cor_anel.g, cor_anel.b, fade))
+	_brilho(p, 30.0 * fade + 6.0, Color(cor_nucleo.r, cor_nucleo.g, cor_nucleo.b, fade))
