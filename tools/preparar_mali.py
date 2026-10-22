@@ -450,6 +450,53 @@ def icones_android():
     print("ícones do Android")
 
 
+# A tela de quando o app abre (no lugar do símbolo do Godot): a marca Lazer &
+# Sport no escuro da abertura, com um brilho vermelho atrás. O Android e o
+# Godot mostram a imagem SEM o giro do jogo (a janela é o HDMI deitado):
+# por isso sai uma por giro, já girada; o gerador do APK escolhe pelo -Giro.
+# Fica em splash/ (com .gdignore: o Godot não importa; a exportação leva só
+# a escolhida, crua). O logo cabe no meio 1280x720 (TV Box com tela em 720p
+# corta as bordas da imagem de 1920x1080).
+SPLASH_COR = (15, 13, 14)
+
+
+def splash():
+    pasta = RAIZ / "splash"
+    pasta.mkdir(exist_ok=True)
+    (pasta / ".gdignore").write_text("")
+    w, h = TELA_TV                     # em pé: 1080 x 1920
+    yy, xx = np.mgrid[0:h, 0:w].astype(np.float32)
+    d = np.sqrt(((xx - w / 2) / 520.0) ** 2 + ((yy - h / 2) / 640.0) ** 2)
+    brilho = np.clip(1.0 - d, 0.0, 1.0) ** 2.2
+    base = np.zeros((h, w, 4), dtype=np.float32)
+    base[..., 0] = SPLASH_COR[0] + brilho * 70.0
+    base[..., 1] = SPLASH_COR[1] + brilho * 10.0
+    base[..., 2] = SPLASH_COR[2] + brilho * 14.0
+    base[..., 3] = 255.0
+    em_pe = Image.fromarray(np.clip(base, 0, 255).astype(np.uint8), "RGBA")
+    logo = Image.open(SAIDA / "logo_lazer_sport.png").convert("RGBA")
+    lw = 640
+    lh = round(logo.height * lw / logo.width)
+    logo = logo.resize((lw, lh), Image.LANCZOS)
+    em_pe.alpha_composite(logo, ((w - lw) // 2, (h - lh) // 2))
+    em_pe = em_pe.convert("RGB")
+    em_pe.save(pasta / "splash_giro_0.png", optimize=True)
+    # giro 1: topo do jogo na esquerda do HDMI (a imagem gira 90° anti-horário)
+    em_pe.rotate(90, expand=True).save(pasta / "splash_giro_1.png", optimize=True)
+    # giro -1: topo do jogo na direita do HDMI
+    em_pe.rotate(-90, expand=True).save(pasta / "splash_giro_m1.png", optimize=True)
+    print("tela de abertura do app (3 giros)")
+
+
+# O feixe do tiro do Bar (laser e bala): macio dos lados e igual ao longo
+# (esticado no comprimento do tiro, a luz somada).
+def feixe_laser():
+    w, h = 16, 64
+    v = (np.arange(h, dtype=np.float32) + 0.5) / h * 2.0 - 1.0     # -1..1 de um lado ao outro
+    a = np.exp(-(v / 0.42) ** 2) * 0.8 + np.exp(-(v / 0.12) ** 2) * 0.2
+    salvar_alfa("fx_laser", np.tile(a[:, None], (1, w)))
+
+
 # ------------------------------------------------------------------ main
 def main():
     SAIDA.mkdir(exist_ok=True)
@@ -547,6 +594,8 @@ def main():
     copiar("logo_lazer_sport.png")
     copiar("icone_app.png")
     icones_android()
+    splash()
+    feixe_laser()
     copiar("foto_vazia.png")
     for n in ["fx_fumaca.png", "fx_onda.png", "fx_furo_areia.png", "fx_furo_pedra.png", "egito_estrela.png"]:
         copiar(n)
@@ -739,6 +788,10 @@ if __name__ == "__main__":
         escrever_imports()
     elif os.environ.get("SO_ICONES") == "1":
         icones_android()
+        escrever_imports()
+    elif os.environ.get("SO_SPLASH") == "1":
+        splash()
+        feixe_laser()
         escrever_imports()
     elif os.environ.get("SO_CARTOES") == "1":
         cartoes()

@@ -5,6 +5,12 @@ extends Node2D
 ## as setas e ENTER). Tudo é guardado pela Maquina em user://config_admin.cfg
 ## (as mesmas chaves da versão 4.6). É a ÚNICA tela com informação técnica
 ## (desempenho e caixa-preta): nada disso aparece no jogo.
+##
+## ARMA E MIRA (botão AJUSTAR): uma segunda página com o tipo de arma, a
+## sensibilidade, a correção da aceleração do ponteiro do Android, a
+## CALIBRAGEM (a arma aponta em quatro alvos, sem a mira na tela, e a
+## sensibilidade sai da medida), os botões da arma e alvos de teste nos
+## quatro cantos.
 
 const CENA_SAIDA = "res://scenes/menu.tscn"
 const COR_FUNDO = Color(0.035, 0.045, 0.075)
@@ -38,10 +44,25 @@ var _painel_caixa: Control
 var _mira: MiraDesenho
 var _saindo = false
 var _t = 0.0
+var _pagina = "principal"   # ou "arma"
+var _desenho: Node2D        # alvos de teste e da calibragem (página da arma)
+var _testes = []            # alvos dos cantos: {p, acerto (s)}
+var _calib = {}             # calibragem em andamento: {passo, medidas, bordas}
+var _calib_texto: Label
+var _som_tiro: AudioStream
+
+# A CALIBRAGEM: a arma aponta no centro de cada alvo e atira, sem a mira na
+# tela. De um alvo ao outro, o movimento da arma (sem a sensibilidade) é
+# medido; a sensibilidade é a distância entre os alvos dividida pela medida.
+const CALIB_ALVOS = [Vector2(512, 560), Vector2(512, 1260), Vector2(212, 910), Vector2(812, 910)]
+const CALIB_RAIO = 46.0
+const TESTE_ALVOS = [Vector2(70, 70), Vector2(954, 70), Vector2(70, 1750), Vector2(954, 1750), Vector2(512, 1210)]
+const TESTE_RAIO = 40.0
 
 
 func _ready() -> void:
 	MiraGlobal.ativa = true
+	_som_tiro = load("res://songs/tiro_menu.wav")
 	var fundo = ColorRect.new()
 	fundo.color = COR_FUNDO
 	fundo.rect_size = Tela.TELA
@@ -67,6 +88,33 @@ func _montar() -> void:
 	faixa.rect_size = Vector2(Tela.TELA.x, 6)
 	faixa.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_raiz.add_child(faixa)
+	_contadores = null
+	_desempenho = null
+	if _pagina == "arma":
+		_montar_arma()
+	else:
+		_montar_principal()
+
+
+## Troca de página: desmonta tudo e monta a outra (os valores ficam na
+## Maquina até SALVAR E SAIR).
+func _reconstruir() -> void:
+	for c in _raiz.get_children():
+		c.queue_free()
+	_botoes = []
+	_atualizadores = []
+	_rotulos_botao = {}
+	_testes = []
+	_desenho = null
+	_calib = {}
+	_calib_texto = null
+	_aprendendo = ""
+	_foco = 0
+	_montar()
+	_atualizar_tudo()
+
+
+func _montar_principal() -> void:
 	var titulo = Estilo.rotulo(_raiz, "CONFIGURAÇÕES", 48, COR_TEXTO, 0, true, Label.ALIGN_LEFT)
 	Estilo.colocar(titulo, Vector2(X0, 18), Vector2(560, 60))
 	var sub = Estilo.rotulo(_raiz, "LAZER SHOT %s  ·  aponte e atire nos botões" % Tela.VERSAO, 20, COR_APAGADO, 0, false, Label.ALIGN_LEFT)
@@ -102,8 +150,8 @@ func _montar() -> void:
 	_volume("Efeitos", "audio/volume_fx")
 
 	_secao("BOTÕES")
-	_aprender("START na arma", "botão do lado direito, perto do bico", "start_arma")
-	_aprender("RECARGA na arma", "botão do lado direito, perto do gatilho", "recarga_arma")
+	_linha("Arma e mira", "sensibilidade, calibragem, START e RECARGA da arma")
+	_botao("AJUSTAR", Vector2(X0 + LARG - 12 - 190, _y - ALT_LINHA - 4 + Y_BOTAO), Vector2(190, ALT_BOTAO), 22, "_ir_para", ["arma"], COR_DESTAQUE.darkened(0.35))
 	_aprender("START na Zero Delay", "", "start")
 	_aprender("SELECT na Zero Delay", "ficha / crédito", "select")
 	_ultimo = Estilo.rotulo(_raiz, "Último botão recebido: —", 18, COR_APAGADO, 0, false)
@@ -129,6 +177,181 @@ func _montar() -> void:
 	_botao("PADRÃO", Vector2(X0 + 808, yr), Vector2(160, 70), 22, "_confirmado", ["padrao"])
 	var dica = Estilo.rotulo(_raiz, "F10 ou segure o SELECT 3 s na abertura para voltar aqui", 17, Color(COR_APAGADO.r, COR_APAGADO.g, COR_APAGADO.b, 0.7), 0, false)
 	Estilo.colocar(dica, Vector2(X0, yr + 80), Vector2(LARG, 26))
+
+
+## A página ARMA E MIRA.
+func _montar_arma() -> void:
+	# (os cantos de cima ficam para os alvos de teste)
+	var titulo = Estilo.rotulo(_raiz, "ARMA E MIRA", 48, COR_TEXTO, 0, true, Label.ALIGN_LEFT)
+	Estilo.colocar(titulo, Vector2(X0 + 120, 18), Vector2(560, 60))
+	var sub = Estilo.rotulo(_raiz, "a mira tem que ficar em cima de onde a arma aponta", 20, COR_APAGADO, 0, false, Label.ALIGN_LEFT)
+	Estilo.colocar(sub, Vector2(X0 + 120, 76), Vector2(700, 28))
+	_y = 120.0
+
+	_secao("MIRA")
+	_opcoes("Tipo de arma", "giroscópio: a arma manda o movimento (a da máquina)", "arma/tipo", [["giroscopio", "GIROSCÓPIO"], ["absoluta", "ABSOLUTA"]])
+	_passos_real("Sensibilidade", "quanto a mira anda a cada giro da arma", "arma/sensibilidade", MiraGlobal.SENS_MIN, MiraGlobal.SENS_MAX, 0.05)
+	_opcoes("Aceleração do Android", "desfaz o \"rápido anda mais\" do ponteiro", "arma/compensar_aceleracao", [[true, "COMPENSAR"], [false, "DEIXAR"]])
+	_linha("Calibrar a arma", "aponte no centro de 4 alvos e atire (sem a mira)")
+	_botao("CALIBRAR", Vector2(X0 + LARG - 12 - 190, _y - ALT_LINHA - 4 + Y_BOTAO), Vector2(190, ALT_BOTAO), 22, "_calibrar", [], COR_DESTAQUE.darkened(0.35))
+
+	_secao("BOTÕES DA ARMA")
+	_aprender("START na arma", "padrão: lado direito fora da partida", "start_arma")
+	_aprender("RECARGA na arma", "padrão: lado direito durante a partida", "recarga_arma")
+	_ultimo = Estilo.rotulo(_raiz, "Último botão recebido: —", 18, COR_APAGADO, 0, false)
+	Estilo.colocar(_ultimo, Vector2(X0, _y), Vector2(LARG, 26))
+	_y += 34.0
+
+	_secao("TESTE")
+	var dica = Estilo.rotulo(_raiz, "Atire nos alvos dos cantos e no do meio: a mira tem que chegar em todos e o tiro tem que cair onde a arma aponta. Se a mira corre demais mesmo com a sensibilidade baixa, diminua a VELOCIDADE DO PONTEIRO nas configurações do Android (Idioma e entrada) e calibre de novo.", 18, COR_APAGADO, 0, false, Label.ALIGN_LEFT)
+	dica.autowrap = true
+	Estilo.colocar(dica, Vector2(X0, _y), Vector2(LARG, 104))
+
+	_desenho = Node2D.new()
+	_desenho.connect("draw", self, "_desenhar_alvos")
+	_raiz.add_child(_desenho)
+	for p in TESTE_ALVOS:
+		_testes.append({"p": p, "acerto": 0.0})
+
+	var yr = Tela.TELA.y - 128.0
+	_aviso = Estilo.rotulo(_raiz, "", 22, COR_APAGADO, 0, false)
+	Estilo.colocar(_aviso, Vector2(X0, yr - 40), Vector2(LARG, 32))
+	_botao("VOLTAR", Vector2((Tela.TELA.x - 300.0) * 0.5, yr + 30), Vector2(300, 70), 28, "_ir_para", ["principal"], COR_OK)
+	_calib_texto = Estilo.rotulo(_raiz, "", 34, COR_TEXTO, 0, true)
+	_calib_texto.autowrap = true
+	_calib_texto.visible = false
+	Estilo.colocar(_calib_texto, Vector2(60, 620), Vector2(Tela.TELA.x - 120, 200))
+
+
+func _ir_para(pagina: String) -> void:
+	_pagina = pagina
+	MiraGlobal.ativa = true
+	_reconstruir()
+
+
+## Como `_passos`, para número com casas (sensibilidade).
+func _passos_real(titulo: String, dica: String, chave: String, minimo: float, maximo: float, passo: float) -> void:
+	var y = _y
+	_linha(titulo, dica)
+	var xd = X0 + LARG - 12.0
+	_botao("+", Vector2(xd - 74, y + Y_BOTAO), Vector2(74, ALT_BOTAO), 34, "_mudar_real", [chave, passo, minimo, maximo])
+	var valor = Estilo.rotulo(_raiz, "", 30, COR_TEXTO, 0, true)
+	Estilo.colocar(valor, Vector2(xd - 74 - 130, y), Vector2(130, ALT_LINHA))
+	_botao("−", Vector2(xd - 74 - 130 - 74, y + Y_BOTAO), Vector2(74, ALT_BOTAO), 34, "_mudar_real", [chave, -passo, minimo, maximo])
+	_atualizadores.append([self, "_mostrar_real", [valor, chave]])
+
+
+func _mostrar_real(valor: Label, chave: String) -> void:
+	valor.text = ("%.2fx" % float(Maquina.valor(chave))).replace(".", ",")
+
+
+func _mudar_real(chave: String, d: float, minimo: float, maximo: float) -> void:
+	var v = stepify(clamp(float(Maquina.valor(chave)) + d, minimo, maximo), 0.01)
+	Maquina.definir(chave, v)
+	MiraGlobal.aplicar_config()
+	_atualizar_tudo()
+
+
+# ---------------------------------------------------------------- calibragem
+func _calibrar() -> void:
+	if _desenho == null:
+		return
+	if not MiraGlobal.giroscopio:
+		# a arma absoluta marca o ponto: não tem o que medir
+		_mostrar_aviso("CALIBRAR é para a arma de GIROSCÓPIO (veja o Tipo de arma)", COR_DESTAQUE)
+		return
+	_calib = {"passo": 0, "medidas": [], "bordas": false}
+	MiraGlobal.ativa = false
+	MiraGlobal.zerar_borda()
+	_calib_mostrar()
+
+
+func _calib_mostrar() -> void:
+	var n = int(_calib["passo"])
+	_calib_texto.visible = true
+	var y = 620.0 if CALIB_ALVOS[n].y > 700.0 else 820.0
+	_calib_texto.rect_position = Vector2(60, y)
+	_calib_texto.text = "APONTE A ARMA NO CENTRO DO ALVO E ATIRE\n(%d de %d)" % [n + 1, CALIB_ALVOS.size()]
+	_desenho.update()
+
+
+## Um tiro durante a calibragem: guarda o movimento da arma até aqui.
+func _calib_tiro() -> void:
+	var n = int(_calib["passo"])
+	_calib["medidas"].append(MiraGlobal.movimento)
+	if n % 2 == 1:
+		# fim de um par medido (de cima a baixo, da esquerda à direita): a
+		# seta presa numa beirada no sentido do par andou menos que a arma
+		var g: Vector2 = (CALIB_ALVOS[n] - CALIB_ALVOS[n - 1]).normalized()
+		if Vector2(abs(g.x), abs(g.y)).dot(MiraGlobal.bordas_eixos) > 0.5:
+			_calib["bordas"] = true
+	MiraGlobal.zerar_borda()
+	Maquina.efeito(_som_tiro, -6.0)
+	if n + 1 < CALIB_ALVOS.size():
+		_calib["passo"] = n + 1
+		_calib_mostrar()
+		return
+	_calib_terminar()
+
+
+## Do alvo de cima ao de baixo e do da esquerda ao da direita: distância na
+## tela dividida pelo movimento da arma (na direção entre os alvos).
+func _calib_terminar() -> void:
+	var m: Array = _calib["medidas"]
+	var tela = 0.0
+	var arma = 0.0
+	for par in [[0, 1], [2, 3]]:
+		var g: Vector2 = CALIB_ALVOS[par[1]] - CALIB_ALVOS[par[0]]
+		var d: Vector2 = m[par[1]] - m[par[0]]
+		tela += g.length()
+		arma += max(0.0, d.dot(g.normalized()))
+	var bordas: bool = _calib["bordas"]
+	_calib = {}
+	_calib_texto.visible = false
+	MiraGlobal.ativa = true
+	_desenho.update()
+	if arma < 50.0:
+		_mostrar_aviso("A arma quase não andou: calibre de novo, apontando em cada alvo", COR_DESTAQUE)
+		return
+	if bordas:
+		# a conta sairia errada: fica a sensibilidade de antes
+		_mostrar_aviso("A seta do Android encostou na beirada: calibre de novo", COR_DESTAQUE)
+		return
+	var antes = float(Maquina.valor("arma/sensibilidade"))
+	var s = stepify(clamp(tela / arma, MiraGlobal.SENS_MIN, MiraGlobal.SENS_MAX), 0.01)
+	Maquina.definir("arma/sensibilidade", s)
+	MiraGlobal.aplicar_config()
+	_atualizar_tudo()
+	_mostrar_aviso(("Calibrada: %.2fx (era %.2fx)  ·  salve na tela anterior" % [s, antes]).replace(".", ","), COR_OK)
+
+
+func _desenhar_alvos() -> void:
+	if not _calib.empty():
+		_desenho.draw_rect(Rect2(Vector2.ZERO, Tela.TELA), Color(0, 0, 0, 0.82))
+		var p: Vector2 = CALIB_ALVOS[int(_calib["passo"])]
+		for i in 3:
+			_desenho.draw_arc(p, CALIB_RAIO * (1.0 - i * 0.3), 0.0, TAU, 48, Color(1.0, 0.3, 0.25) if i != 1 else Color.white, 6.0)
+		_desenho.draw_circle(p, 7.0, Color.white)
+		return
+	for a in _testes:
+		var acesa = a["acerto"] > 0.0
+		var c = COR_OK if acesa else Color(1.0, 0.85, 0.3)
+		_desenho.draw_arc(a["p"], TESTE_RAIO, 0.0, TAU, 40, c, 5.0)
+		_desenho.draw_arc(a["p"], TESTE_RAIO * 0.5, 0.0, TAU, 32, c, 4.0)
+		_desenho.draw_circle(a["p"], 5.0, c)
+		if acesa:
+			_desenho.draw_circle(a["p"], TESTE_RAIO * 0.9, Color(COR_OK.r, COR_OK.g, COR_OK.b, 0.35 * a["acerto"]))
+
+
+## Tiro na página da arma: alvo de teste acertado acende.
+func _testar_tiro(p: Vector2) -> bool:
+	for a in _testes:
+		if p.distance_to(a["p"]) <= TESTE_RAIO + 6.0:
+			a["acerto"] = 1.0
+			Maquina.efeito(_som_tiro, -6.0)
+			_desenho.update()
+			return true
+	return false
 
 
 func _secao(texto: String) -> void:
@@ -189,6 +412,8 @@ func _escolher(chave: String, v) -> void:
 		Maquina.aplicar()
 	if chave == "tela/giro":
 		Tela.definir_giro(v)
+	if chave.begins_with("arma/"):
+		MiraGlobal.aplicar_config()
 	_atualizar_tudo()
 
 
@@ -228,7 +453,8 @@ func _mostrar_botao(valor: Label, qual: String) -> void:
 	if _aprendendo == qual:
 		return
 	if qual.ends_with("_arma"):
-		valor.text = Maquina.nome_do_descritor(str(Maquina.valor("botoes/" + qual)))
+		var d = str(Maquina.valor("botoes/" + qual))
+		valor.text = "LADO DIREITO" if d == "padrao" else Maquina.nome_do_descritor(d)
 	else:
 		valor.text = "BOTÃO %d" % int(Maquina.valor("botoes/" + qual))
 
@@ -294,7 +520,8 @@ func _apertar(i: int) -> void:
 func _atualizar_tudo() -> void:
 	for a in _atualizadores:
 		a[0].callv(a[1], a[2])
-	_contadores.text = "FICHAS %04d   ·   PARTIDAS %04d" % [int(Maquina.valor("maquina/total_fichas")), int(Maquina.valor("maquina/total_partidas"))]
+	if _contadores != null:
+		_contadores.text = "FICHAS %04d   ·   PARTIDAS %04d" % [int(Maquina.valor("maquina/total_fichas")), int(Maquina.valor("maquina/total_partidas"))]
 	_pintar_foco()
 
 
@@ -327,6 +554,7 @@ func _confirmado(nome: String) -> void:
 		"padrao":
 			Maquina.restaurar_padrao()
 			Tela.definir_giro(Maquina.valor("tela/giro"))
+			MiraGlobal.aplicar_config()
 			_mostrar_aviso("Valores de fábrica (salve para valer)", COR_TEXTO)
 	_atualizar_tudo()
 
@@ -418,7 +646,8 @@ func _notification(what: int) -> void:
 
 
 func _mostrar_ultimo(nome: String) -> void:
-	_ultimo.text = "Último botão recebido: " + nome
+	if _ultimo != null and is_instance_valid(_ultimo):
+		_ultimo.text = "Último botão recebido: " + nome
 
 
 func _gravar_arma(descritor: String) -> void:
@@ -426,7 +655,7 @@ func _gravar_arma(descritor: String) -> void:
 	var outro = "botoes/recarga_arma" if qual == "start_arma" else "botoes/start_arma"
 	# o mesmo botão não pode ser START e RECARGA
 	if str(Maquina.valor(outro)) == descritor:
-		Maquina.definir(outro, "padrao" if outro == "botoes/recarga_arma" else "")
+		Maquina.definir(outro, "padrao")
 	Maquina.definir("botoes/" + qual, descritor)
 	Maquina.aplicar()
 	_mostrar_aviso("%s = %s  (salve para valer sempre)" % ["START na arma" if qual == "start_arma" else "RECARGA na arma", Maquina.nome_do_descritor(descritor)], COR_OK)
@@ -442,6 +671,20 @@ func _input(ev: InputEvent) -> void:
 	elif ev is InputEventJoypadButton and ev.pressed:
 		_mostrar_ultimo("ZERO DELAY " + Maquina.nome_do_descritor(Maquina.descrever(ev)))
 	if _saindo:
+		return
+	# calibrando: cada tiro é uma medida; ESC desiste
+	if not _calib.empty():
+		if Maquina.e_tiro_arma(ev) or ev.is_action_pressed("input_shot") or \
+				(ev is InputEventKey and ev.pressed and not ev.echo and ev.scancode in [KEY_ENTER, KEY_KP_ENTER, KEY_SPACE]):
+			get_tree().set_input_as_handled()
+			_calib_tiro()
+		elif ev is InputEventKey and ev.pressed and ev.scancode == KEY_ESCAPE:
+			get_tree().set_input_as_handled()
+			_calib = {}
+			_calib_texto.visible = false
+			MiraGlobal.ativa = true
+			_desenho.update()
+			_mostrar_aviso("Calibragem cancelada", COR_APAGADO)
 		return
 	# aprendendo um botão da arma: clique (menos o gatilho) ou tecla
 	if _aprendendo.ends_with("_arma"):
@@ -479,6 +722,8 @@ func _input(ev: InputEvent) -> void:
 			KEY_F10, KEY_ESCAPE:
 				if _painel_caixa != null:
 					_fechar_caixa()
+				elif _pagina != "principal":
+					_ir_para("principal")
 				else:
 					_salvar_e_sair()
 				get_tree().set_input_as_handled()
@@ -508,6 +753,8 @@ func _input(ev: InputEvent) -> void:
 			if Rect2(f.rect_position, f.rect_size).grow(8.0).has_point(p):
 				_fechar_caixa()
 			return
+		if _desenho != null and _testar_tiro(p):
+			return
 		for i in _botoes.size():
 			var no: Panel = _botoes[i]["no"]
 			if Rect2(no.rect_position, no.rect_size).grow(4.0).has_point(p):
@@ -533,6 +780,14 @@ func _process(delta: float) -> void:
 			_aprendendo = ""
 			_mostrar_aviso("Nenhum botão apertado", COR_APAGADO)
 			_atualizar_tudo()
-	if int(_t * 2.0) != int((_t - delta) * 2.0):
+	if _desempenho != null and int(_t * 2.0) != int((_t - delta) * 2.0):
 		_desempenho.text = "Agora: %d quadros/s  ·  memória %d MB  ·  vídeo %d MB  ·  tela %dx%d (giro %d)" % [int(round(Tela.fps())),
 			int(Tela.memoria_mb()), int(Tela.memoria_video_mb()), int(Tela.janela().x), int(Tela.janela().y), Tela.giro]
+	# alvos de teste acertados apagam devagar
+	var mudou = false
+	for a in _testes:
+		if a["acerto"] > 0.0:
+			a["acerto"] = max(0.0, a["acerto"] - delta * 0.6)
+			mudou = true
+	if mudou and _desenho != null:
+		_desenho.update()

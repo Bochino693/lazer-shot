@@ -361,9 +361,15 @@ if ($Projeto.Length -gt 120) {
 }
 
 # O giro da tela e a mira (project.godot): vale para este APK; o arquivo
-# volta como estava no fim.
+# volta como estava no fim. A tela de quando o app abre (a marca Lazer &
+# Sport, no lugar do simbolo do Godot) sai ja girada para o mesmo lado.
 $ConfigNovo = [Regex]::Replace($ConfigTexto, '(?m)^tela/giro=.*$', "tela/giro=$Giro")
 $ConfigNovo = [Regex]::Replace($ConfigNovo, '(?m)^tela/mira_direta=.*$', "tela/mira_direta=$(if ($MiraGirada) { 'false' } else { 'true' })")
+$Splash = @{ 1 = "splash_giro_1.png"; -1 = "splash_giro_m1.png"; 0 = "splash_giro_0.png" }[$Giro]
+if (-not (Test-Path -LiteralPath (Join-Path $Projeto "splash\$Splash"))) {
+    throw "Falta splash\$Splash (a tela de abertura do app). Baixe a branch tvbox-mali450 de novo, inteira."
+}
+$ConfigNovo = [Regex]::Replace($ConfigNovo, '(?m)^boot_splash/image=.*$', "boot_splash/image=`"res://splash/$Splash`"")
 if ($ConfigNovo -ne $ConfigTexto) {
     $ProjetoParaVoltar = $ConfigTexto
     [IO.File]::WriteAllText($ProjectGodot, $ConfigNovo, $Utf8)
