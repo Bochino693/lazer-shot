@@ -32,6 +32,13 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
 $Utf8 = New-Object System.Text.UTF8Encoding($false)
 $SegundosSemSaida = 30
 $EstourouTempo = $false
+# Mensagens do Godot que nao sao problema (vao so para o historico, nao para
+# a janela): o PC sem placa de som (WASAPI) e, na primeira importacao, os
+# sons que ainda nao foram importados.
+$RuidoGodot = 'HRESULT\)0x00000000|WASAPI|audio_driver_wasapi|All audio drivers failed|audio_server\.cpp|Cannot open file .res://\.import/|resource_format_binary\.cpp|^\s*\d+ param: --'
+$Ignoradas = 0
+# O Godot 3 no Windows escreve em Latin-1 (o "c" cedilha de "lancamento")
+$Latin1 = [System.Text.Encoding]::GetEncoding(1252)
 $Relogio = [System.Diagnostics.Stopwatch]::StartNew()
 $VersaoGodot = "3.6.2"
 $VersaoModelos = "3.6.2.stable"
@@ -153,8 +160,10 @@ function Parar-Arvore($Processo) {
 # que devolve o texto). Passou de $LimiteMinutos, encerra o programa e tudo o
 # que ele abriu ($script:EstourouTempo fica $true).
 function Rodar {
-    param([string]$Exe, [string]$Argumentos, [string]$Log, [double]$LimiteMinutos, $Aviso, [int]$Silencio = 0)
+    param([string]$Exe, [string]$Argumentos, [string]$Log, [double]$LimiteMinutos, $Aviso, [int]$Silencio = 0,
+        [System.Text.Encoding]$Codificacao = $null, [string]$Ruido = "")
     if ($Silencio -le 0) { $Silencio = $script:SegundosSemSaida }
+    if ($null -eq $Codificacao) { $Codificacao = $script:Utf8 }
     $script:EstourouTempo = $false
     if (-not (Test-Path -LiteralPath $Exe)) { throw "Nao encontrei $Exe" }
     $Inicio = New-Object System.Diagnostics.ProcessStartInfo
@@ -164,8 +173,8 @@ function Rodar {
     $Inicio.UseShellExecute = $false
     $Inicio.RedirectStandardOutput = $true
     $Inicio.RedirectStandardError = $true
-    $Inicio.StandardOutputEncoding = $script:Utf8
-    $Inicio.StandardErrorEncoding = $script:Utf8
+    $Inicio.StandardOutputEncoding = $Codificacao
+    $Inicio.StandardErrorEncoding = $Codificacao
     $Gravador = $null
     if ($Log) {
         $Gravador = New-Object System.IO.StreamWriter($Log, $false, $script:Utf8)
@@ -176,6 +185,7 @@ function Rodar {
         $Leitores = @($Processo.StandardOutput, $Processo.StandardError)
         $Tarefas = @($null, $null)
         $Abertas = @($true, $true)
+        $PularAt = @($false, $false)
         $Cronometro = [System.Diagnostics.Stopwatch]::StartNew()
         $UltimaLinha = 0.0
         $UltimoAviso = 0.0
@@ -206,6 +216,21 @@ function Rodar {
                 # o Godot escreve uma linha por arquivo empacotado: na janela
                 # so as que dizem alguma coisa (no arquivo vai tudo)
                 if ($Linha -match '^\s*(ADDING|STORING|savepack):') { $UltimaLinha = $Agora; continue }
+                # mensagem sem importancia (e a linha "at:" que vem com ela):
+                # so no historico
+                if ($Ruido -and $Linha -match $Ruido) {
+                    $script:Ignoradas++
+                    $PularAt[$i] = $true
+                    if ($script:Historico) { try { $script:Historico.WriteLine($Linha) } catch { } }
+                    $UltimaLinha = $Agora
+                    continue
+                }
+                if ($PularAt[$i] -and $Linha -match '^\s+at: ') {
+                    if ($script:Historico) { try { $script:Historico.WriteLine($Linha) } catch { } }
+                    $UltimaLinha = $Agora
+                    continue
+                }
+                $PularAt[$i] = $false
                 if ($i -eq 1) { Diz $Linha "DarkYellow" } else { Diz $Linha }
                 $UltimaLinha = $Agora
             }
@@ -471,6 +496,34 @@ $PresetNovo = [Regex]::Replace($PresetNovo, '(?m)^keystore/release_password=.*$'
 [IO.File]::WriteAllText($PresetAndroid, $PresetNovo, $Utf8)
 
 # ------------------------------------------------------------------
+# A IMPORTACAO LIMPA. Na primeira geracao de cada versao o cache de
+# importacao (.import) e refeito do zero: os arquivos .import voltam ao estado
+# de fabrica (sem os caminhos do cache de outro PC) e o Godot importa tudo de
+# novo, sem procurar arquivos que ainda nao existem. O carimbo e o
+# version/code do export_presets.cfg.
+$Cache = Join-Path $Projeto ".import"
+$MarcaCache = Join-Path $Cache ".lazer_mali"
+$Carimbo = ([Regex]::Match($PresetTexto, '(?m)^version/code=(\d+)')).Groups[1].Value
+$CacheDestaVersao = (Test-Path -LiteralPath $MarcaCache) -and (([IO.File]::ReadAllText($MarcaCache)).Trim() -eq $Carimbo)
+if (-not $CacheDestaVersao) {
+    Diz ""
+    Diz "      Preparando a importacao do zero (primeira geracao desta versao)..." "Cyan"
+    if (Test-Path -LiteralPath $Cache) { Remove-Item -LiteralPath $Cache -Recurse -Force }
+    $Limpos = 0
+    foreach ($Arq in (Get-ChildItem -LiteralPath $Projeto -Recurse -File -Filter "*.import" -ErrorAction SilentlyContinue)) {
+        if ($Arq.FullName -like "*\build\*" -or $Arq.FullName -like "*\arte_original\*" -or $Arq.FullName -like "*\sobras_de_versoes_antigas\*") { continue }
+        $T = [IO.File]::ReadAllText($Arq.FullName)
+        $N = [Regex]::Replace($T, '(?m)^(path(\.\w+)?|dest_files)=.*\r?\n', '')
+        $N = [Regex]::Replace($N, '(?ms)^metadata=\{.*?^\}\r?\n', '')
+        if ($N -ne $T) {
+            [IO.File]::WriteAllText($Arq.FullName, $N, $Utf8)
+            $Limpos++
+        }
+    }
+    Diz "      $Limpos arquivos de importacao prontos para importar de novo."
+}
+
+# ------------------------------------------------------------------
 # [3/4] A IMPORTACAO (imagens em ETC1 para a Mali-450, sons em ADPCM). Numa
 # pasta nova o Godot 3 le os scripts ANTES de importar sons e imagens: montar
 # so o pacote (.pck) primeiro importa tudo com calma. O .pck vai fora depois.
@@ -479,7 +532,7 @@ $Pck = Join-Path $Saida "importacao.pck"
 Diz ""
 Diz "[3/4] Importando imagens e sons (primeira vez: alguns minutos)..." "Cyan"
 $Argumentos = (@("--no-window", "--path", $Projeto, "--export-pack", "Android", $Pck) | ForEach-Object { Aspas $_ }) -join " "
-$Codigo = Rodar $Godot $Argumentos $LogImportacao 30 "O Godot esta importando as imagens e os sons."
+$Codigo = Rodar $Godot $Argumentos $LogImportacao 30 "O Godot esta importando as imagens e os sons." 0 $Latin1 $RuidoGodot
 if ($EstourouTempo) { throw "A importacao passou de 30 minutos e foi encerrada. Envie o historico." }
 if (Test-Path -LiteralPath $Pck) { Remove-Item -LiteralPath $Pck -Force }
 $TextoImportacao = if (Test-Path -LiteralPath $LogImportacao) { [IO.File]::ReadAllText($LogImportacao) } else { "" }
@@ -501,7 +554,7 @@ $Tentativa = 0
 while ($true) {
     $Tentativa++
     if (Test-Path -LiteralPath $ApkExportado) { Remove-Item -LiteralPath $ApkExportado -Force }
-    $Codigo = Rodar $Godot $Argumentos $LogApk 20 "O Godot esta montando o APK."
+    $Codigo = Rodar $Godot $Argumentos $LogApk 20 "O Godot esta montando o APK." 0 $Latin1 $RuidoGodot
     if ($EstourouTempo) { throw "A exportacao passou de 20 minutos e foi encerrada. Envie o historico." }
     # Sem APK (o Godot fechou sozinho, 0xC0000005 e parecidos): uma segunda
     # vez costuma passar.
@@ -535,18 +588,37 @@ try {
     if (-not ($Nomes | Where-Object { $_ -like "assets/scripts/fase.gdc" })) {
         throw "O APK saiu sem os scripts do jogo."
     }
-    if (-not ($Nomes -contains "META-INF/CERT.RSA" -or ($Nomes | Where-Object { $_ -like "META-INF/*.RSA" }))) {
-        Diz "AVISO: nao achei a assinatura v1 no APK (META-INF). Se a TV Box recusar instalar, envie o historico." "Yellow"
-    }
 } finally {
     $ZipApk.Dispose()
 }
+
+# A ASSINATURA, conferida pelo proprio apksigner do Android SDK. O Android
+# 7.1 da TV Box aceita a assinatura v2 (a v1, do Android 6 para tras, so vem
+# junto quando o apksigner acha que precisa).
+$LogAssinatura = Join-Path $Saida "assinatura.log"
+Diz ""
+Diz "      Conferindo a assinatura do APK..."
+$Codigo = Rodar $env:ComSpec ('/d /s /c "' + (Aspas $Assinador.FullName) + ' verify --verbose ' + (Aspas $ApkExportado) + '"') $LogAssinatura 5 "" 0 $null '^WARNING: '
+$TextoAssinatura = if (Test-Path -LiteralPath $LogAssinatura) { [IO.File]::ReadAllText($LogAssinatura) } else { "" }
+$AssinaV1 = $TextoAssinatura -match 'v1 scheme \(JAR signing\): true'
+$AssinaV2 = $TextoAssinatura -match 'v2 scheme \(APK Signature Scheme v2\): true'
+if ($Codigo -ne 0 -or -not ($AssinaV1 -or $AssinaV2)) {
+    throw "O apksigner nao confirmou a assinatura do APK (codigo $Codigo). Detalhes em $LogAssinatura"
+}
+Diz ("      Assinatura conferida: v2 {0}, v1 {1} (a TV Box com Android 7.1 usa a v2)." -f $(if ($AssinaV2) { "SIM" } else { "NAO" }), $(if ($AssinaV1) { "SIM" } else { "NAO" })) "Green"
 $Apk = Join-Path $PastaApk $NomeApk
 Copy-Item -LiteralPath $ApkExportado -Destination $Apk -Force
 $Hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $Apk).Hash
+# o cache agora e desta versao: as proximas geracoes nao importam tudo de novo
+if ((Test-Path -LiteralPath $Cache) -and $Carimbo) { [IO.File]::WriteAllText($MarcaCache, $Carimbo) }
 
 Diz ""
-Diz ("APK GERADO E CONFERIDO em {0}" -f (Tempo $Relogio.Elapsed.TotalSeconds)) "Green"
+if ($Ignoradas -gt 0) {
+    Diz "($Ignoradas mensagens tecnicas do Godot sem importancia ficaram so no historico.)" "DarkGray"
+}
+Diz "============================================================" "Green"
+Diz ("  APK PRONTO E CONFERIDO em {0}" -f (Tempo $Relogio.Elapsed.TotalSeconds)) "Green"
+Diz "============================================================" "Green"
 Diz "Arquivo: $Apk"
 Diz ("Tamanho: {0:N1} MB" -f ($Tamanho / 1MB))
 Diz "SHA256: $Hash"
