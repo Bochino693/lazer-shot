@@ -735,7 +735,10 @@ try {
 }
 Diz "      Assinatura conferida: $Assinatura." "Green"
 $Tamanho = (Get-Item -LiteralPath $ApkAssinado).Length
-$Apk = Join-Path $PastaApk $NomeApk
+# a versao vai no nome do arquivo: no pendrive, o APK novo nao se confunde
+# com um antigo
+$VersaoNome = ([Regex]::Match($PresetTexto, '(?m)^version/name="([0-9A-Za-z.\-]+)"')).Groups[1].Value
+$Apk = Join-Path $PastaApk $(if ($VersaoNome) { "LazerShot-Mali450-$VersaoNome.apk" } else { $NomeApk })
 Copy-Item -LiteralPath $ApkAssinado -Destination $Apk -Force
 Remove-Item -LiteralPath $ApkExportado -Force -ErrorAction SilentlyContinue
 $Hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $Apk).Hash
