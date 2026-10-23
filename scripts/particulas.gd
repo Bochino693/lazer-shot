@@ -73,6 +73,8 @@ func _tex_indice(t: Texture) -> int:
 ## Uma partícula. Use explosao() para muitas de uma vez.
 func soltar(pos: Vector2, vel: Vector2, vida: float, tam0: float, tam1: float, cor0: Color, cor1: Color,
 		tex: Texture, grav: float = 0.0, arrasto: float = 0.0, giro: float = 0.0, estica: float = 0.0, chao: float = 1.0e9) -> void:
+	if not visible:
+		return    # enfeite escondido (tela leve): nem nasce
 	if _lista.size() >= MAX:
 		_lista.pop_front()
 	_lista.append([pos.x, pos.y, vel.x, vel.y, 0.0, max(0.05, vida), tam0, tam1, cor0, cor1, grav, arrasto,

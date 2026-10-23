@@ -100,29 +100,43 @@ func _fim(estilo: String) -> float:
 	return _voo(estilo) + IMPACTO
 
 
-## O que o laser deixa no caminho, na hora em que acende.
+## O que o laser deixa no caminho, na hora em que acende (cada ponto solto
+## direto: tiro atrás de tiro sem montar uma explosão por ponto).
 func _pelo_caminho(s: Dictionary) -> void:
 	var de: Vector2 = s["de"]
 	var p: Vector2 = s["p"]
 	var lado = (p - de).normalized().rotated(PI * 0.5)
+	var k = Maquina.fator_efeitos()
 	match s["estilo"]:
 		"sol":
-			for i in 7:
+			var c = Color(1.0, 0.85, 0.45)
+			var ponto = Estilo.tex("fx_ponto")
+			for i in int(round(7 * k)):
 				var q = de.linear_interpolate(p, rand_range(0.15, 0.95)) + lado * rand_range(-8.0, 8.0)
-				_brilhos.explosao(q, {"n": 1, "vel": [10.0, 50.0], "ang": [230.0, 310.0], "vida": [0.35, 0.7], "tam": [5.0, 10.0],
-					"cor": Color(1.0, 0.85, 0.45), "grav": -40.0})
+				var a = deg2rad(rand_range(230.0, 310.0))
+				var t = rand_range(5.0, 10.0)
+				_brilhos.soltar(q, Vector2(cos(a), sin(a)) * rand_range(10.0, 50.0), rand_range(0.35, 0.7), t, t * 0.2,
+					c, Color(c.r, c.g, c.b, 0.0), ponto, -40.0, 1.0)
 		"lua":
-			for i in 9:
+			var c = Color(0.92, 0.96, 1.0)
+			var ponto = Estilo.tex("fx_ponto")
+			for i in int(round(9 * k)):
 				var q = de.linear_interpolate(p, rand_range(0.12, 0.95)) + lado * rand_range(-10.0, 10.0)
-				_brilhos.explosao(q, {"n": 1, "vel": [5.0, 30.0], "vida": [0.4, 0.8], "tam": [3.0, 7.0],
-					"cor": Color(0.92, 0.96, 1.0), "grav": 10.0})
+				var a = randf() * TAU
+				var t = rand_range(3.0, 7.0)
+				_brilhos.soltar(q, Vector2(cos(a), sin(a)) * rand_range(5.0, 30.0), rand_range(0.4, 0.8), t, t * 0.2,
+					c, Color(c.r, c.g, c.b, 0.0), ponto, 10.0, 1.0)
 		"mar":
-			var n = int(clamp((p - de).length() / 45.0, 10.0, 28.0))
+			var n = int(clamp((p - de).length() / 60.0, 8.0, 20.0) * k)
 			var bolha = Estilo.tex("mar_bolha")
+			var c = Color(0.85, 0.97, 1.0, 0.8)
+			var c_fim = Color(0.85, 0.97, 1.0, 0.0)
 			for i in n:
 				var q = de.linear_interpolate(p, (i + randf()) / n) + lado * rand_range(-10.0, 10.0)
-				_fumaca.explosao(q, {"n": 1, "tex": bolha, "vel": [15.0, 60.0], "ang": [250.0, 290.0], "vida": [0.6, 1.1],
-					"tam": [6.0, 14.0], "fim": 0.9, "cor": Color(0.85, 0.97, 1.0, 0.8), "grav": -160.0, "arrasto": 1.5})
+				var a = deg2rad(rand_range(250.0, 290.0))
+				var t = rand_range(6.0, 14.0)
+				_fumaca.soltar(q, Vector2(cos(a), sin(a)) * rand_range(15.0, 60.0), rand_range(0.6, 1.1), t, t * 0.9,
+					c, c_fim, bolha, -160.0, 1.5)
 
 
 ## Quando o tiro chega no ponto.

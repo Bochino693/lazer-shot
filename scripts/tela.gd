@@ -35,7 +35,7 @@ extends Node
 ## e os quadros por segundo; a CONFIGURAÇÃO mostra como a sessão anterior
 ## terminou (diagnóstico da TV Box sem cabo nem computador).
 
-const VERSAO = "2.2.0"
+const VERSAO = "2.3.0"
 const TELA = Vector2(1024, 1820)
 const CAIXA = "user://caixa_preta.cfg"
 const GIRO_ARQUIVO = "user://tela.cfg"
@@ -408,7 +408,37 @@ func _gravar_batida() -> void:
 	cfg.set_value("sessao", "fps", int(round(_fps)))
 	cfg.set_value("sessao", "fechou_bem", false)
 	cfg.set_value("sessao", "marcas", PoolStringArray(_marcas))
+	_salvar_em_fundo(cfg)
+
+
+var _gravador: Thread = null
+var _gravando = false
+
+## Grava a caixa-preta sem segurar o jogo: a memória da TV Box às vezes
+## demora para escrever, e isso não pode virar tranco no meio da partida.
+## Se a gravação anterior ainda não acabou, esta fica para a próxima.
+func _salvar_em_fundo(cfg: ConfigFile) -> void:
+	if _gravando:
+		return
+	if _gravador != null:
+		_gravador.wait_to_finish()
+	_gravando = true
+	_gravador = Thread.new()
+	if _gravador.start(self, "_gravar_arquivo", cfg) != OK:
+		_gravador = null
+		_gravando = false
+		cfg.save(CAIXA)
+
+
+func _gravar_arquivo(cfg: ConfigFile) -> void:
 	cfg.save(CAIXA)
+	_gravando = false
+
+
+func _exit_tree() -> void:
+	if _gravador != null:
+		_gravador.wait_to_finish()
+		_gravador = null
 
 
 var _inicio_txt = ""
@@ -445,6 +475,9 @@ func marcas_sessao_anterior() -> PoolStringArray:
 
 func _notification(what: int) -> void:
 	if what == MainLoop.NOTIFICATION_WM_QUIT_REQUEST:
+		if _gravador != null:
+			_gravador.wait_to_finish()
+			_gravador = null
 		var cfg = ConfigFile.new()
 		if cfg.load(CAIXA) == OK:
 			cfg.set_value("sessao", "fechou_bem", true)

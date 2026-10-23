@@ -56,6 +56,7 @@ var nivel = 0
 
 var _f = {}
 var _navio: Sprite
+var _furos_navio = []      # os furos de bala no casco (no máximo 14)
 var _navio_estado = "esperando"
 var _navio_t = 0.0
 var _frente: Sprite
@@ -592,12 +593,20 @@ func _lascar_navio(p: Vector2) -> void:
 		"cor": Color(0.62, 0.48, 0.32), "grav": 500.0, "giro": [-14.0, 14.0], "arrasto": 1.5})
 	_bolhas.explosao(p, {"n": 5, "tex": Estilo.tex("mar_bolha"), "vel": [30.0, 90.0], "ang": [230.0, 310.0], "vida": [0.6, 1.0], "tam": [8.0, 14.0],
 		"fim": 1.0, "cor": Color(0.9, 0.97, 1.0, 0.8), "grav": -200.0})
-	var furo = Sprite.new()
-	furo.texture = Estilo.tex("bar_furo_madeira")
+	# o furo fica no casco (anda e afunda com o navio); são no máximo 14, o
+	# mais velho é reaproveitado: tiro atrás de tiro no navio não acumula nó
+	var furo: Sprite
+	if _furos_navio.size() >= 14:
+		furo = _furos_navio.pop_front()
+		_navio.move_child(furo, _navio.get_child_count() - 1)
+	else:
+		furo = Sprite.new()
+		furo.texture = Estilo.tex("bar_furo_madeira")
+		furo.scale = Vector2.ONE * 0.5
+		_navio.add_child(furo)
+	_furos_navio.append(furo)
 	furo.position = _navio.get_global_transform().affine_inverse().xform(p)
-	furo.scale = Vector2.ONE * 0.5
 	furo.rotation = randf() * TAU
-	_navio.add_child(furo)
 	Maquina.efeito(_som_madeira, -6.0, rand_range(0.9, 1.1))
 
 
@@ -769,9 +778,10 @@ func _sempre(delta: float) -> void:
 		var s: Sprite = r["no"]
 		s.rotation = r["rot"] + sin(_t * r["vel"] + r["fase"]) * 0.06
 		s.modulate.a = 0.10 + 0.08 * sin(_t * r["vel"] * 1.7 + r["fase"]) + 0.06 * e.x
-	_peixes_fundo.update()
-	# neve marinha descendo devagar
-	if randf() < delta * 6.0 * Maquina.fator_efeitos():
+	if _peixes_fundo.visible:
+		_peixes_fundo.update()
+	# neve marinha descendo devagar (some com a tela leve)
+	if _neve.visible and randf() < delta * 6.0 * Maquina.fator_efeitos():
 		_neve.soltar(Vector2(rand_range(0, 1024), rand_range(150, 1500)), Vector2(rand_range(-8, 8), rand_range(6, 18)),
 			rand_range(3.0, 5.0), rand_range(3.0, 6.0), 2.0, Color(0.7, 0.9, 1.0, 0.0), Color(0.7, 0.9, 1.0, 0.5), Estilo.tex("fx_ponto"))
 	# bolhas subindo do chão
