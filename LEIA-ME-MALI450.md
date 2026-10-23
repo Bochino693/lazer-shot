@@ -1,16 +1,27 @@
-# Lazer Shot 2.1 — TV Box Mali-450
+# Lazer Shot 2.2 — TV Box Mali-450
 
 Esta pasta é o **Lazer Shot para a TV Box da placa Mali-450** (S905L / S905W, Android 7.1). A placa de vídeo dela só tem OpenGL ES 2.0, por isso este jogo é feito no **Godot 3.6.2 (GLES2)**. A versão 4.6 (Pro Ultra / TX9) é outro projeto, na branch `tvbox-ultra-pro`.
 
-## Novidades da 2.1
+## Novidades da 2.2
 
-- **A mira anda junto com a arma de giroscópio.** Ela não foge mais para os cantos: o jogo usa o movimento da arma (não a posição da seta do Android), desfaz a aceleração do ponteiro do Android e, quando a seta encosta na beirada do HDMI, a mira desliza até a mesma beirada da tela.
+- **Mira coerente com a arma, sem pular.**
+  - O app abre deitado e pede ao Android a tela em pé. Se a TV Box girar de verdade, a **seta do mouse anda junto com a arma** e a mira fica em cima dela, com um filtro leve que tira o tremor da mão parada.
+  - Se a TV Box não girar (ou puser o app numa faixa estreita no meio da tela, sem girar), o jogo volta a ficar deitado e gira a imagem por dentro, sozinho. A mira soma o movimento da arma na medida certa: de uma beirada à outra do HDMI ela percorre a tela inteira, sem salto na beirada. A TV Box lembra a resposta e não tenta de novo.
+  - Sem coice: o tiro sai exatamente onde a mira está.
+  - Na CONFIGURAÇÃO, "Quem gira a tela" mostra quem está girando agora.
+- **START separado da recarga.** A recarga é o **clique direito** da arma (o botão perto do gatilho), que nunca dá START. O START são os **outros botões do lado** (o do meio, os laterais e o VOLTAR). Na partida, qualquer botão do lado recarrega.
+- **Munição em balas:** o placar mostra os 30 cartuchos (duas fileiras de 15), sem escrever MUNIÇÃO. O cartucho gasto apaga; com pouca munição eles piscam em laranja, sem munição em vermelho, e na recarga voltam um a um.
+- **Vídeo na tela inicial:** o corredor do estande em movimento, o mesmo da versão 4.6, em tamanho leve para a Mali-450. Desliga na CONFIGURAÇÃO → "Vídeo da tela inicial".
+- **Mais nítido:** as águas-vivas, o baú e a bomba do Mar e as lanternas da Arena foram refeitos em tamanho maior (não são mais ampliados na tela).
+- **Leve e firme:** a tela que não segura 60 quadros por segundo primeiro desliga os enfeites (o vídeo inclusive) e a mira continua a 60. Só se ainda assim não der, ela passa a 30 cravados.
+- **Bar:** a garrafa verde (caveira) não flutua mais acima da prateleira; pisa na tábua como as outras.
+
+## Da 2.1 (continua valendo)
+
 - **Ajuste da arma na própria TV Box:** CONFIGURAÇÃO → BOTÕES → **Arma e mira** → AJUSTAR.
-  - Tipo de arma (GIROSCÓPIO ou ABSOLUTA), sensibilidade e a compensação da aceleração do Android.
-  - **CALIBRAR:** atire nos 4 alvos que aparecem. O jogo mede quanto a arma anda e acerta a sensibilidade sozinho.
+  - Tipo de arma (AUTO, SETA ou GIROSCÓPIO), sensibilidade (AUTO ou um número) e a compensação da aceleração do Android.
+  - **CALIBRAR** (quando o jogo gira por dentro): atire nos 4 alvos que aparecem. O jogo mede quanto a arma anda e acerta a sensibilidade sozinho.
   - Alvos de teste nos cantos e no meio: atire neles para conferir.
-- **A seta do mouse não aparece mais** por cima do jogo.
-- **START na arma, como antes:** o botão do lado direito dá START fora da partida e, durante a partida, recarrega. Não precisa aprender nada. Dá para trocar na tela Arma e mira.
 - **Abertura sem o símbolo do Godot:** ao abrir o jogo aparece o logo da Lazer & Sport, já em pé no monitor.
 - **O tiro de cada cenário** sai da arma, embaixo da tela, até a mira:
   - **Bar:** bala de revólver, sem laser (o clarão da boca da arma e a bala traçante; no ponto, faísca e fumaça);
@@ -41,7 +52,7 @@ Esta pasta é o **Lazer Shot para a TV Box da placa Mali-450** (S905L / S905W, A
   - o Egito troca o dia pela noite e tem águias e o olho do astro;
   - a Arena pulsa com a música, com vapor, faíscas e giroflex.
 - **Os bônus continuam valendo pontos:** barril (+40 por furo), janela do bar (+50 nos 5 primeiros tiros), cristal (+300), pontas dos obeliscos (+150), peixes dourados (+40 cada), LED do alto da Arena (+50).
-- **Os efeitos de tiro voltaram em todas as telas:** o traço do tiro, o coice da mira e as faíscas.
+- **Os efeitos de tiro voltaram em todas as telas:** o traço do tiro, o pulso da mira e as faíscas.
 - **As telas são as mesmas:**
   - abertura Lazer & Sport GAMES;
   - tela inicial com APERTE START;
@@ -49,7 +60,7 @@ Esta pasta é o **Lazer Shot para a TV Box da placa Mali-450** (S905L / S905W, A
   - escolha de cenário com roleta e missão;
   - como jogar, contagem, fim de jogo e nome no ranking;
   - ranking dos 20 melhores e configuração.
-- **Sem vídeo e sem shader de tela cheia.** A Mali-450 engasga com isso. Os fundos ganham vida com luz somada e partículas.
+- **Sem shader de tela cheia** (a Mali-450 engasga com isso). O único vídeo é o da tela inicial, leve (540x960, VP8). Os fundos das fases ganham vida com luz somada e partículas.
 - **Sem câmera:** não há foto antes da partida. No ranking aparece a silhueta.
 - **O APK tem outro nome de pacote** (`com.lazersport.lazershot.mali`). Ele instala ao lado da versão 4.6, não por cima.
 
@@ -63,7 +74,7 @@ Esta pasta é o **Lazer Shot para a TV Box da placa Mali-450** (S905L / S905W, A
 
    Tudo aparece na janela na hora e fica gravado em `build\android\GERACAO-COMPLETA.log`. A janela termina sozinha.
 
-3. O APK fica em **`APK-Pronto\LazerShot-Mali450-2.1.1.apk`** (a versão vai no nome do arquivo). Copie para o pendrive, use **Ejetar** no Windows antes de tirar o pendrive e instale na TV Box.
+3. O APK fica em **`APK-Pronto\LazerShot-Mali450-2.2.0.apk`** (a versão vai no nome do arquivo). Copie para o pendrive, use **Ejetar** no Windows antes de tirar o pendrive e instale na TV Box.
 
    No fim aparece **APK PRONTO E CONFERIDO**, com a linha **Assinatura: v1 + v2**. Antes disso o gerador confere o APK por dentro: o motor ARM 32 e 64 bits, os scripts e as imagens em ETC1. As mensagens técnicas do Godot que não são problema (PC sem placa de som, por exemplo) não aparecem na janela; ficam só no histórico.
 
@@ -87,10 +98,11 @@ O gerador não usa o Gradle (o jogo não tem plugin). Por isso é mais rápido e
 | `GERAR_APK_MALI450.bat -Giro -1` | A imagem sai de cabeça para baixo: o topo do jogo vai para a direita do HDMI. |
 | `GERAR_APK_MALI450.bat -Giro 0` | O monitor já recebe a imagem em pé (sem giro). |
 | `GERAR_APK_MALI450.bat -MiraGirada` | A mira anda de lado quando a arma sobe. |
+| `GERAR_APK_MALI450.bat -JogoGira` | Nem pede ao Android a tela em pé: o jogo sempre gira por dentro. |
 | `GERAR_APK_MALI450.bat -Instalar -Ip 192.168.0.50` | Gera, instala pela rede (adb) e puxa o registro. |
 | `GERAR_APK_MALI450.bat -Registro -Ip 192.168.0.50` | Só puxa o registro do Android para `build\android\LOGCAT-TVBOX.txt`. |
 
-O giro também se troca **na própria TV Box**, na CONFIGURAÇÃO do jogo, em "Giro da tela". Não precisa gerar outro APK.
+O giro e quem gira também se trocam **na própria TV Box**, na CONFIGURAÇÃO do jogo, em "Giro da tela" e "Quem gira a tela". Não precisa gerar outro APK.
 
 ### Se a TV Box não instalar
 
@@ -101,17 +113,22 @@ O giro também se troca **na própria TV Box**, na CONFIGURAÇÃO do jogo, em "G
 
 ## Na TV Box
 
-- O HDMI fica **deitado (1920x1080)**. O jogo gira a imagem por dentro para o monitor em pé.
-- A **arma** é o mouse: o gatilho atira, o botão perto do gatilho recarrega e o botão do lado direito dá START (na partida, ele também recarrega).
-- **Arma de giroscópio:** se a mira andar demais ou de menos, use CALIBRAR (CONFIGURAÇÃO → BOTÕES → Arma e mira). Se a mira correr demais mesmo com a sensibilidade baixa, diminua a **Velocidade do ponteiro** nas configurações do Android (Idioma e entrada) e calibre de novo.
+- O HDMI sai **deitado** e o monitor fica **em pé**. Deixe a TV Box em **1080p** (Configurações → Tela → Resolução): em 720p tudo fica menos nítido.
+- **Quem gira a imagem:** ao abrir, o jogo pede ao Android a tela em pé.
+  - Se a TV Box girar, a **seta do mouse anda junto com a arma** e a mira fica em cima dela. É o melhor jeito.
+  - Se não girar, o jogo gira por dentro sozinho e esconde a seta (algumas TV Box com Android 7 ainda mostram a seta; ela anda de lado, mas quem vale é a mira do jogo).
+  - Para a TV Box girar: se ela tiver **Configurações → Tela → Rotação da tela** (o nome muda de uma para outra), escolha **Original** (ou "seguir o app"). Nas TV Box Amlogic, as opções do tipo "retrato no meio" (middle_port) e "forçar paisagem" (force_land) não giram. Depois, na CONFIGURAÇÃO do jogo, toque em **AUTO** em "Quem gira a tela" para ele tentar de novo.
+  - **Imagem de cabeça para baixo:** CONFIGURAÇÃO → "Giro da tela" → troque ESQUERDA por DIREITA.
+- A **arma** é o mouse: o **gatilho** atira; o **clique direito** (o botão perto do gatilho) recarrega; os **outros botões do lado** dão START (na partida, também recarregam).
+- **Mira correndo demais ou de menos** (quando o jogo gira por dentro): use CALIBRAR (CONFIGURAÇÃO → BOTÕES → Arma e mira). Se ainda correr demais, diminua a **Velocidade do ponteiro** nas configurações do Android (Idioma e entrada) e calibre de novo.
 - **Zero Delay:** START = botão 0, RECARGA = 1, TIRO = 2, SELECT = 4.
   - O SELECT soma crédito no modo crédito.
   - Os botões podem ser aprendidos de novo na CONFIGURAÇÃO.
 - **Abrir a CONFIGURAÇÃO:** segure o SELECT por 3 s nas telas de abertura (ou aperte F10 num teclado).
-  - Lá ficam: modo livre ou crédito, tempos, demonstração, efeitos COMPLETO/LEVE, giro da tela, volumes, botões, limpar o ranking e a caixa-preta (como a sessão anterior terminou).
+  - Lá ficam: modo livre ou crédito, tempos, demonstração, efeitos COMPLETO/LEVE, vídeo da tela inicial, giro da tela e quem gira, volumes, botões, limpar o ranking e a caixa-preta (como a sessão anterior terminou).
   - É a única tela com informação técnica.
 - **Efeitos LEVE** (na CONFIGURAÇÃO) põe metade das partículas. Serve para a TV Box mais fraca de todas.
-- **Ritmo automático:** a tela que não segura 60 quadros por segundo passa sozinha para 30 cravados, que fica liso. A TV Box lembra disso.
+- **Ritmo automático:** a tela que não segura 60 quadros por segundo primeiro fica sem enfeites; se ainda não der, passa sozinha para 30 cravados, que fica liso. A TV Box lembra disso.
 
 ## Para quem mexe no jogo
 
@@ -123,5 +140,7 @@ O giro também se troca **na própria TV Box**, na CONFIGURAÇÃO do jogo, em "G
   - máscaras de acerto em `scripts/dados_arte.gd`;
   - sons em IMA-ADPCM.
 - Depois de mudar a arte, abra o projeto no Godot 3.6.2 uma vez, para reimportar.
-- A mira da arma está em `scripts/mira_global.gd` (giroscópio, aceleração do Android e beiradas) e o ajuste dela em `scripts/config.gd` (página Arma e mira).
-- A abertura do Android (no lugar do símbolo do Godot) está em `splash/`, uma imagem para cada giro, feita por `tools/preparar_mali.py`. O gerador escolhe a do giro pedido.
+- Quem gira a tela está em `scripts/tela.gd`: o app abre deitado, lê `persist.sys.app.rotation` (Amlogic), pede o retrato e confere pela janela (em pé do tamanho da tela inteira = o Android girou; faixa no meio ou nada em 5 s = o jogo gira por dentro). A resposta fica em `user://tela.cfg`. No PC dá para fingir a TV Box com `LAZER_GIRO=1` e `LAZER_PROP_ROTACAO`.
+- A mira da arma está em `scripts/mira_global.gd` (a seta com filtro 1€ quando o Android gira; giroscópio, aceleração do Android e beiradas quando o jogo gira) e o ajuste dela em `scripts/config.gd` (página Arma e mira).
+- O vídeo da tela inicial é `videos/back_init.webm` (VP8, 540x960, 24 quadros/s, sem som), feito do `back_init.mp4` da versão 4.6 com o ffmpeg: `-vf "crop=698:1088:11:0,scale=540:960:flags=lanczos" -r 24 -c:v libvpx -b:v 1500k -crf 8 -qmin 4 -qmax 40 -auto-alt-ref 0 -g 48 -an`.
+- A abertura do Android (no lugar do símbolo do Godot) está em `splash/`, uma imagem para cada giro, feita por `tools/preparar_mali.py`. Como o app abre deitado, o gerador escolhe a já girada para o lado do giro pedido.

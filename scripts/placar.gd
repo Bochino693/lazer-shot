@@ -4,13 +4,17 @@ class_name Placar
 ## Placar único das quatro fases: uma faixa no topo (~6% da altura), letras
 ## grandes (lidas de longe, com a arma na mão), o fundo aparecendo inteiro.
 ##
-##   TEMPO | PONTOS | MUNIÇÃO (barra) | ACERTOS/TIROS | campo da fase
+##   TEMPO | PONTOS | MUNIÇÃO (as balas) | ACERTOS/TIROS | campo da fase
+##
+## A munição são os próprios cartuchos (sprites/hud_bala.png), em duas
+## fileiras: os gastos ficam escuros, na recarga eles voltam um a um, e no
+## fim piscam (laranja com pouca bala, vermelho vazio). Sem escrever nada.
 ##
 ## A fase entrega uma função (funcref) que devolve os valores:
 ##   {"tempo", "pontos", "municao", "municao_max", "recarregando", "recarga",
 ##    "acertos", "tiros", "extra_titulo", "extra", "extra_cor"}
-## Os textos só são reescritos quando o valor muda; a barra só é redesenhada
-## quando a munição muda (ou pisca).
+## Os textos só são reescritos quando o valor muda; as balas só são
+## redesenhadas quando a munição muda (ou pisca).
 
 const ALTURA = 111.0
 const MARGEM = 10.0
@@ -25,6 +29,7 @@ var _divisorias = []
 var _titulos = []
 var _valores = []
 var _barra: Control
+var _t_bala: Texture
 var _dados = {}
 var _antes = {}
 var _t = 0.0
@@ -77,15 +82,17 @@ func _ready() -> void:
 		if i == 2:
 			_barra = Control.new()
 			_barra.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			_barra.rect_position = Vector2(x + w * 0.07, MARGEM + ALTURA * 0.46)
-			_barra.rect_size = Vector2(w * 0.86, ALTURA * 0.34)
-			_barra.connect("draw", self, "_desenhar_barra")
+			_barra.rect_position = Vector2(x + w * 0.05, MARGEM + ALTURA * 0.10)
+			_barra.rect_size = Vector2(w * 0.90, ALTURA * 0.80)
+			_barra.connect("draw", self, "_desenhar_balas")
 			_raiz.add_child(_barra)
 		x += w
 	_titulos[0].text = "TEMPO"
 	_titulos[1].text = "PONTOS"
 	_titulos[3].text = "ACERTOS"
+	_titulos[2].visible = false
 	_valores[2].visible = false
+	_t_bala = Estilo.tex("hud_bala")
 	_ler()
 	_aplicar(true)
 
@@ -158,30 +165,13 @@ func _aplicar(forcar: bool) -> void:
 		_valores[1].modulate = base
 		_valores[1].rect_scale = Vector2.ONE
 
-	# munição: título com o número e a barra embaixo
+	# munição: as balas (redesenha quando muda ou enquanto pisca)
 	var bal = int(_dados.get("municao", 0))
 	var maxb = int(max(1, int(_dados.get("municao_max", 30))))
 	var rec = bool(_dados.get("recarregando", false))
 	var estado = "recarga" if rec else ("vazia" if bal <= 0 else ("baixa" if bal <= max(3, maxb / 5) else "ok"))
-	var texto = "MUNIÇÃO  %d/%d" % [bal, maxb]
-	if estado == "recarga":
-		texto = "RECARREGANDO"
-	elif estado == "vazia":
-		texto = "RECARREGUE!"
-	if _mudou("municao_txt", texto):
-		_titulos[2].text = texto
-	if estado == "ok":
-		if _mudou("municao_cor", 0):
-			_titulos[2].add_color_override("font_color", _cor.linear_interpolate(Color.white, 0.35))
-			_titulos[2].modulate = Color.white
-	else:
-		_antes.erase("municao_cor")
-		var piscar = 0.55 + 0.45 * abs(sin(_t * (6.0 if estado == "recarga" else 9.0)))
-		var c = Color(0.35, 0.9, 1.0) if estado == "recarga" else (Color(1.0, 0.25, 0.2) if estado == "vazia" else Color(1.0, 0.65, 0.15))
-		_titulos[2].add_color_override("font_color", c)
-		_titulos[2].modulate = Color(1, 1, 1, piscar)
-	var chave_barra = [bal, maxb, estado, stepify(float(_dados.get("recarga", 0.0)), 0.02)]
-	if _mudou("municao", chave_barra) or estado != "ok":
+	var chave_balas = [bal, maxb, estado, stepify(float(_dados.get("recarga", 0.0)), 0.02)]
+	if _mudou("municao", chave_balas) or estado == "baixa" or estado == "vazia":
 		_barra.update()
 
 	# acertos / tiros
@@ -203,31 +193,36 @@ func _aplicar(forcar: bool) -> void:
 	_anima = _pulso_pontos != 0.0 or (seg <= 10 and tempo > 0.0) or estado != "ok"
 
 
-func _desenhar_barra() -> void:
+## As balas: duas fileiras de cartuchos, os gastos escuros; na recarga eles
+## voltam um a um; com pouca bala as que sobram piscam laranja, e vazia os
+## estojos piscam vermelho.
+func _desenhar_balas() -> void:
 	var bal = int(_dados.get("municao", 0))
 	var maxb = int(max(1, int(_dados.get("municao_max", 30))))
 	var rec = bool(_dados.get("recarregando", false))
 	var prog: float = clamp(float(_dados.get("recarga", 0.0)), 0.0, 1.0)
 	var tam = _barra.rect_size
-	var gap = 2.0
-	var w = (tam.x - gap * (maxb - 1)) / maxb
+	var por_fila = int(min(15, maxb))
+	var filas = int(ceil(float(maxb) / por_fila))
+	var esp = tam.x / por_fila
+	var alt_fila = tam.y / filas
+	var bh = min(alt_fila - 4.0, esp * 2.9)
+	var bw = bh * 24.0 / 68.0
 	var baixa = bal <= max(3, maxb / 5)
-	var piscar = 0.6 + 0.4 * abs(sin(_t * 9.0))
-	_barra.draw_rect(Rect2(Vector2(-3, -3), tam + Vector2(6, 6)), Color(0, 0, 0, 0.45))
+	var piscar = 0.55 + 0.45 * abs(sin(_t * 9.0))
+	_barra.draw_rect(Rect2(Vector2(-4, -2), tam + Vector2(8, 4)), Color(0, 0, 0, 0.38))
 	for i in maxb:
-		var r = Rect2(Vector2(i * (w + gap), 0.0), Vector2(w, tam.y))
-		var cheio = i < bal
+		var fila = i / por_fila
+		var r = Rect2(Vector2((i % por_fila) * esp + (esp - bw) * 0.5, fila * alt_fila + (alt_fila - bh) * 0.5), Vector2(bw, bh))
 		var c: Color
 		if rec:
-			cheio = float(i) < prog * maxb
-			c = Color(0.3, 0.9, 1.0, 0.95) if cheio else Color(0.12, 0.16, 0.2, 0.9)
-		elif cheio:
-			var k = float(i) / maxb
-			c = Color(1.0, 0.6, 0.12) if baixa else _cor.linear_interpolate(Color.white, 0.15 + 0.35 * k)
-			if baixa:
-				c.a = piscar
+			# recarregando: os cartuchos voltam um a um
+			var k = clamp(prog * maxb - i, 0.0, 1.0)
+			c = Color(0.16, 0.16, 0.2, 0.55).linear_interpolate(Color.white, k)
+		elif i < bal:
+			c = Color(1.0, 0.62, 0.35, piscar) if baixa else Color.white
+		elif bal <= 0:
+			c = Color(1.0, 0.22, 0.18, 0.35 + 0.4 * piscar)
 		else:
-			c = Color(0.13, 0.13, 0.16, 0.9)
-		_barra.draw_rect(r, c)
-		if cheio:
-			_barra.draw_rect(Rect2(r.position, Vector2(r.size.x, r.size.y * 0.32)), Color(1, 1, 1, 0.28))
+			c = Color(0.3, 0.29, 0.32, 0.55)
+		_barra.draw_texture_rect(_t_bala, r, false, c)

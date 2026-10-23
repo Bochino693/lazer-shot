@@ -3,10 +3,10 @@ extends Node2D
 ## TELA INICIAL: "TORNE-SE O MELHOR ATIRADOR" e LAZER SHOT no corredor do
 ## estande, APERTE START piscando e o selo JOGO LIVRE / CRÉDITOS embaixo.
 ##
-## Sem vídeo (a TV Box Mali-450 engasga decodificando vídeo em pé): o fundo é a
-## imagem parada que ganha vida (scripts/fundo_vivo.gd): o título, o alvo e o
-## logo acendem na batida da música, as luzes do corredor piscam com o grave,
-## brasas sobem do chão e uma faixa de brilho cruza a tela de tempos em tempos.
+## O fundo é o VÍDEO do corredor da 4.6 (scripts/fundo_vivo.gd, VP8 leve);
+## sem ele (desligado ou TV Box sem fôlego), a imagem parada que ganha vida:
+## o título, o alvo e o logo acendem na batida da música, as luzes do corredor
+## piscam com o grave, brasas sobem do chão e uma faixa de brilho cruza a tela.
 ##
 ## Parada o tempo da abertura (configuração): a DEMONSTRAÇÃO (os 4 cenários
 ## passando) e depois o RANKING (se ligados); o ranking volta para cá.
@@ -190,6 +190,7 @@ func _comecar_demo() -> void:
 	_demo_t = 0.0
 	_demo_i = -1
 	_demo.visible = true
+	_fundo.pausar_video(true)
 	_demo_painel.visible = true
 	_demo_painel.modulate.a = 1.0
 	_proximo_demo()
@@ -245,6 +246,7 @@ func _fim_demo() -> void:
 
 func _demo_escondida() -> void:
 	_demo.visible = false
+	_fundo.pausar_video(false)
 	_demo_painel.visible = false
 	for s in _demo_fundos:
 		s.texture = null

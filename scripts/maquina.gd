@@ -14,9 +14,11 @@ extends Node
 ##
 ## Botões da Zero Delay no Android (Godot 3.6 e 4.6 numeram igual):
 ## START = 0, RECARGA = 1, TIRO = 2, SELECT = 4. O gatilho da arma é o
-## clique esquerdo do mouse. Os outros botões da arma (os do lado direito),
-## sem nada aprendido: fora da partida são START, na partida são RECARGA.
-## START e RECARGA da arma também podem ser aprendidos (CONFIGURAÇÃO).
+## clique esquerdo do mouse. Sem nada aprendido: a RECARGA é o clique
+## direito e o START são os outros botões do lado (o do meio, os laterais e o
+## VOLTAR do Android); o da recarga nunca dá START. Na partida qualquer botão
+## do lado recarrega. START e RECARGA da arma também se aprendem na
+## CONFIGURAÇÃO.
 
 const CONFIG = "user://config_admin.cfg"
 const CENA_CONFIG = "res://scenes/config.tscn"
@@ -38,16 +40,18 @@ const PADRAO = {
 	"botoes/start": 0,
 	"botoes/select": 4,
 	# Botões da arma: "mouse:N", "tecla:N", "voltar" (VOLTAR do Android) ou
-	# "padrao": os botões do lado direito (clique direito/meio/laterais e o
-	# VOLTAR) dão START fora da partida e RECARGA na partida.
+	# "padrao": RECARGA no clique direito; START nos outros botões do lado
+	# direito (o do meio, os laterais e o VOLTAR do Android).
 	"botoes/start_arma": "padrao",
 	"botoes/recarga_arma": "padrao",
-	# ARMA E MIRA: "giroscopio" (a arma manda o movimento, como um mouse: a
-	# mira soma o deslocamento) ou "absoluta" (a arma marca o ponto da tela).
-	# Sensibilidade: multiplica o movimento (calibrada na CONFIGURAÇÃO).
+	# ARMA E MIRA: "auto" (a mira é a seta quando o Android gira a tela; soma
+	# o movimento quando o jogo gira por dentro), "absoluta" (sempre na seta)
+	# ou "giroscopio" (sempre pelo movimento).
+	# Sensibilidade do giroscópio: 0 = AUTO (a seta de borda a borda cobre a
+	# altura do jogo); outro valor multiplica o movimento (calibrável).
 	# Aceleração: desfaz a aceleração que o Android põe no ponteiro.
-	"arma/tipo": "giroscopio",
-	"arma/sensibilidade": 1.0,
+	"arma/modo": "auto",
+	"arma/sensibilidade": 0.0,
 	"arma/compensar_aceleracao": true,
 	"jogo/tempo_partida": 120,
 	"jogo/tempo_modal_final": 17,
@@ -59,9 +63,14 @@ const PADRAO = {
 	# EFEITOS: "completo" (padrão) ou "leve" (menos partículas, sem luz
 	# girando): para a TV Box mais fraca de todas.
 	"video/efeitos": "completo",
+	# o vídeo do corredor na tela inicial e no ranking (some sozinho se pesar)
+	"video/video_inicial": true,
 	# GIRO DA TELA na TV Box: "auto" (o do project.godot), 1 (topo do jogo na
 	# esquerda do HDMI), -1 (na direita) ou 0 (monitor já em pé)
 	"tela/giro": "auto",
+	# QUEM GIRA: "auto" (o do project.godot), "android" (o app pede a tela em
+	# pé e a seta anda com a arma) ou "jogo" (o jogo gira por dentro)
+	"tela/rotacao": "auto",
 	"audio/volume_musica": -5.0,
 	"audio/volume_fx": 0.0,
 }
@@ -271,27 +280,35 @@ func em_partida() -> bool:
 	return e != null and int(e) in [1, 2]     # fase.gd: CONTAGEM, JOGO
 
 
-## Clique da arma que recarrega: o aprendido, ou no padrão os do lado
-## direito durante a partida (menos o que estiver como START da arma).
+## O botão da RECARGA: o aprendido ou, no padrão, o clique direito. Durante
+## a partida qualquer botão do lado recarrega (menos o START aprendido):
+## ninguém fica sem bala por apertar o botão vizinho.
 func e_recarga_arma(ev: InputEvent) -> bool:
 	if not (ev is InputEventMouseButton) or not ev.pressed:
 		return false
 	var d = descrever(ev)
-	var s = str(valor("botoes/start_arma"))
-	if d == s:
+	if d == str(valor("botoes/start_arma")):
 		return false
+	if e_botao_recarga(ev):
+		return true
+	return e_botao_lateral(ev) and em_partida()
+
+
+## É o botão da recarga (o aprendido ou, no padrão, o clique direito)?
+func e_botao_recarga(ev: InputEvent) -> bool:
 	var r = str(valor("botoes/recarga_arma"))
 	if r == "padrao":
-		return e_botao_lateral(ev) and (s != "padrao" or em_partida())
-	return d == r
+		return ev is InputEventMouseButton and ev.button_index == BUTTON_RIGHT
+	return descrever(ev) == r
 
 
-## Clique da arma que dá START: o aprendido vem pelo mapa de ações; no
-## padrão, os do lado direito fora da partida (menos a RECARGA aprendida).
+## O botão do START: o aprendido vem pelo mapa de ações; no padrão, os botões
+## do lado que NÃO são o da recarga (o do meio e os laterais), fora da
+## partida. O da recarga nunca dá START.
 func e_start_arma(ev: InputEvent) -> bool:
 	if str(valor("botoes/start_arma")) != "padrao" or not e_botao_lateral(ev) or em_partida():
 		return false
-	return descrever(ev) != str(valor("botoes/recarga_arma"))
+	return not e_botao_recarga(ev)
 
 
 ## Qualquer jeito de atirar: o gatilho da arma, o TIRO da Zero Delay ou, no
@@ -380,18 +397,32 @@ func _notification(what: int) -> void:
 
 
 var _ultimo_voltar = 0
+var _ultimo_direito = -100000
+var _voltar_pendente = -1.0
 
+## O VOLTAR do Android (um botão lateral da arma vira VOLTAR): espera um
+## instante para ver se não é o clique direito chegando também como VOLTAR
+## (algumas TV Box fazem isso): aí é a recarga, que já foi tratada.
 func _voltar_vira_recarga() -> void:
 	var agora = OS.get_ticks_msec()
 	if agora - _ultimo_voltar < 120:
 		return
 	_ultimo_voltar = agora
+	_voltar_pendente = 0.15
+
+
+func _voltar_agora() -> void:
+	if OS.get_ticks_msec() - _ultimo_direito < 450:
+		return
 	var acao = ""
 	var s = str(valor("botoes/start_arma"))
-	if s == "voltar" or (s == "padrao" and not em_partida() and str(valor("botoes/recarga_arma")) != "voltar"):
+	var r = str(valor("botoes/recarga_arma"))
+	if s == "voltar":
 		acao = ACAO_START
-	elif str(valor("botoes/recarga_arma")) in ["padrao", "voltar"]:
+	elif r == "voltar" or em_partida():
 		acao = "input_recharge"
+	elif s == "padrao":
+		acao = ACAO_START
 	if acao == "" or not InputMap.has_action(acao) or na_configuracao():
 		return
 	var aperta = InputEventAction.new()
@@ -406,6 +437,8 @@ func _voltar_vira_recarga() -> void:
 
 # ---------------------------------------------------------------- SELECT
 func _input(event: InputEvent) -> void:
+	if event is InputEventMouseButton and event.pressed and event.button_index == BUTTON_RIGHT:
+		_ultimo_direito = OS.get_ticks_msec()
 	if event is InputEventKey and event.pressed and not event.echo and event.scancode == KEY_F10:
 		abrir_configuracao()
 		return
@@ -432,6 +465,10 @@ func _som_ficha() -> AudioStream:
 
 
 func _process(delta: float) -> void:
+	if _voltar_pendente >= 0.0:
+		_voltar_pendente -= delta
+		if _voltar_pendente < 0.0:
+			_voltar_agora()
 	if _salvar_em > 0.0:
 		_salvar_em -= delta
 		if _salvar_em <= 0.0:

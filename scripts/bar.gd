@@ -27,6 +27,10 @@ const Y_PRATELEIRA = {100: 575.0, 80: 815.0, 50: 1100.0, 20: 1400.0}
 const ESCALA_GARRAFA = {100: 0.50, 80: 0.56, 50: 0.62, 20: 0.58}
 const ESCALA_FALSA = {100: 0.81, 80: 0.85, 50: 0.96, 20: 1.00}
 const PE = 26.0                         # o pé da garrafa abaixo da linha da prateleira
+# px vazios embaixo do desenho (a garrafa verde parada tem 28; no estouro, 7):
+# descontados, toda garrafa pisa na tábua em vez de flutuar acima dela
+const VAZIO_EMBAIXO = {"falsa": 28.0}
+const VAZIO_ESTOURO_FALSA = 7.0
 const NOMES = {100: "whisky", 80: "vodka", 50: "rum", 20: "gin"}
 const LIQUIDO = {"gin": Color(0.85, 0.95, 1.0, 0.85), "rum": Color(0.78, 0.40, 0.10, 0.9), "vodka": Color(0.9, 0.97, 1.0, 0.85),
 	"whisky": Color(0.80, 0.50, 0.12, 0.9), "falsa": Color(0.35, 0.85, 0.25, 0.9)}
@@ -266,7 +270,7 @@ func _criar_garrafa(prat: int, x: float, tipo: String) -> Garrafa:
 	g.spr.frame = 0
 	g.spr.centered = false
 	var cel: Vector2 = g.f["cel"]
-	g.spr.offset = Vector2(-cel.x * 0.5, -cel.y)
+	g.spr.offset = Vector2(-cel.x * 0.5, -cel.y + VAZIO_EMBAIXO.get(tipo, 0.0))
 	var esc: float = (ESCALA_FALSA if tipo == "falsa" else ESCALA_GARRAFA)[prat]
 	g.spr.scale = Vector2.ONE * esc
 	g.no.add_child(g.spr)
@@ -455,6 +459,7 @@ func _acertar(g: Garrafa, p: Vector2) -> void:
 		tremer(8.0, 0.25)
 		particulas.explosao(g.no.position + Vector2(0, -70), {"n": 6, "tex": Estilo.tex("fx_fumaca"), "vel": [30.0, 110.0], "ang": [200.0, 340.0],
 			"vida": [0.9, 1.5], "tam": [50.0, 80.0], "fim": 2.0, "cor": Color(0.3, 0.75, 0.25, 0.6), "grav": -40.0})
+		g.spr.offset.y = -g.f["cel"].y + VAZIO_ESTOURO_FALSA
 		var tw = create_tween()
 		for q in g.f["acerto"]:
 			tw.tween_callback(g.spr, "set_frame", [q])

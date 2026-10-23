@@ -40,6 +40,7 @@ var _aviso: Label
 var _contadores: Label
 var _ultimo: Label
 var _desempenho: Label
+var _dica_rotacao: Label    # quem gira a tela agora (muda sozinho)
 var _painel_caixa: Control
 var _mira: MiraDesenho
 var _saindo = false
@@ -143,7 +144,9 @@ func _montar_principal() -> void:
 
 	_secao("VÍDEO")
 	_opcoes("Efeitos", "leve: menos partículas, para a TV Box mais fraca", "video/efeitos", [["completo", "COMPLETO"], ["leve", "LEVE"]])
+	_opcoes("Vídeo da tela inicial", "o corredor do estande em movimento", "video/video_inicial", [[true, "LIGADO"], [false, "DESLIGADO"]])
 	_opcoes("Giro da tela", "imagem de cabeça para baixo: troque o lado", "tela/giro", [["auto", "AUTO"], [1, "ESQUERDA"], [-1, "DIREITA"], [0, "EM PÉ"]])
+	_dica_rotacao = _opcoes("Quem gira a tela", "agora: " + Tela.quem_gira(), "tela/rotacao", [["auto", "AUTO"], ["android", "ANDROID"], ["jogo", "JOGO"]])
 
 	_secao("SOM")
 	_volume("Música", "audio/volume_musica")
@@ -189,21 +192,21 @@ func _montar_arma() -> void:
 	_y = 120.0
 
 	_secao("MIRA")
-	_opcoes("Tipo de arma", "giroscópio: a arma manda o movimento (a da máquina)", "arma/tipo", [["giroscopio", "GIROSCÓPIO"], ["absoluta", "ABSOLUTA"]])
-	_passos_real("Sensibilidade", "quanto a mira anda a cada giro da arma", "arma/sensibilidade", MiraGlobal.SENS_MIN, MiraGlobal.SENS_MAX, 0.05)
+	_opcoes("Tipo de arma", "AUTO: a mira é a seta quando o Android gira a tela", "arma/modo", [["auto", "AUTO"], ["absoluta", "SETA"], ["giroscopio", "GIROSCÓPIO"]])
+	_passos_real("Sensibilidade", "do giroscópio (AUTO: de borda a borda)", "arma/sensibilidade", MiraGlobal.SENS_MIN, MiraGlobal.SENS_MAX, 0.05)
 	_opcoes("Aceleração do Android", "desfaz o \"rápido anda mais\" do ponteiro", "arma/compensar_aceleracao", [[true, "COMPENSAR"], [false, "DEIXAR"]])
 	_linha("Calibrar a arma", "aponte no centro de 4 alvos e atire (sem a mira)")
 	_botao("CALIBRAR", Vector2(X0 + LARG - 12 - 190, _y - ALT_LINHA - 4 + Y_BOTAO), Vector2(190, ALT_BOTAO), 22, "_calibrar", [], COR_DESTAQUE.darkened(0.35))
 
 	_secao("BOTÕES DA ARMA")
-	_aprender("START na arma", "padrão: lado direito fora da partida", "start_arma")
-	_aprender("RECARGA na arma", "padrão: lado direito durante a partida", "recarga_arma")
+	_aprender("START na arma", "padrão: os botões que não são o clique direito", "start_arma")
+	_aprender("RECARGA na arma", "padrão: clique direito", "recarga_arma")
 	_ultimo = Estilo.rotulo(_raiz, "Último botão recebido: —", 18, COR_APAGADO, 0, false)
 	Estilo.colocar(_ultimo, Vector2(X0, _y), Vector2(LARG, 26))
 	_y += 34.0
 
 	_secao("TESTE")
-	var dica = Estilo.rotulo(_raiz, "Atire nos alvos dos cantos e no do meio: a mira tem que chegar em todos e o tiro tem que cair onde a arma aponta. Se a mira corre demais mesmo com a sensibilidade baixa, diminua a VELOCIDADE DO PONTEIRO nas configurações do Android (Idioma e entrada) e calibre de novo.", 18, COR_APAGADO, 0, false, Label.ALIGN_LEFT)
+	var dica = Estilo.rotulo(_raiz, "Atire nos alvos dos cantos e no do meio: a mira tem que chegar em todos e o tiro tem que cair onde a arma aponta. Se a mira andar demais ou de menos, ajuste a VELOCIDADE DO PONTEIRO nas configurações do Android (Idioma e entrada); no giroscópio, calibre de novo.", 18, COR_APAGADO, 0, false, Label.ALIGN_LEFT)
 	dica.autowrap = true
 	Estilo.colocar(dica, Vector2(X0, _y), Vector2(LARG, 104))
 
@@ -242,11 +245,22 @@ func _passos_real(titulo: String, dica: String, chave: String, minimo: float, ma
 
 
 func _mostrar_real(valor: Label, chave: String) -> void:
-	valor.text = ("%.2fx" % float(Maquina.valor(chave))).replace(".", ",")
+	var v = float(Maquina.valor(chave))
+	if chave == "arma/sensibilidade" and v <= 0.0:
+		valor.text = "AUTO"
+		return
+	valor.text = ("%.2fx" % v).replace(".", ",")
 
 
+## Sensibilidade: de AUTO parte do valor automático; abaixo do mínimo volta
+## a AUTO.
 func _mudar_real(chave: String, d: float, minimo: float, maximo: float) -> void:
-	var v = stepify(clamp(float(Maquina.valor(chave)) + d, minimo, maximo), 0.01)
+	var atual = float(Maquina.valor(chave))
+	if chave == "arma/sensibilidade" and atual <= 0.0:
+		atual = MiraGlobal.sensibilidade_cobertura()
+	var v = stepify(clamp(atual + d, minimo, maximo), 0.01)
+	if chave == "arma/sensibilidade" and atual + d < minimo - 0.001:
+		v = 0.0
 	Maquina.definir(chave, v)
 	MiraGlobal.aplicar_config()
 	_atualizar_tudo()
@@ -257,8 +271,8 @@ func _calibrar() -> void:
 	if _desenho == null:
 		return
 	if not MiraGlobal.giroscopio:
-		# a arma absoluta marca o ponto: não tem o que medir
-		_mostrar_aviso("CALIBRAR é para a arma de GIROSCÓPIO (veja o Tipo de arma)", COR_DESTAQUE)
+		# a mira é a própria seta: não tem o que medir
+		_mostrar_aviso("A mira já é a seta (o Android gira a tela): não precisa calibrar", COR_OK)
 		return
 	_calib = {"passo": 0, "medidas": [], "bordas": false}
 	MiraGlobal.ativa = false
@@ -322,7 +336,8 @@ func _calib_terminar() -> void:
 	Maquina.definir("arma/sensibilidade", s)
 	MiraGlobal.aplicar_config()
 	_atualizar_tudo()
-	_mostrar_aviso(("Calibrada: %.2fx (era %.2fx)  ·  salve na tela anterior" % [s, antes]).replace(".", ","), COR_OK)
+	var era = "AUTO" if antes <= 0.0 else ("%.2fx" % antes).replace(".", ",")
+	_mostrar_aviso(("Calibrada: %.2fx" % s).replace(".", ",") + " (era %s)  ·  salve na tela anterior" % era, COR_OK)
 
 
 func _desenhar_alvos() -> void:
@@ -362,16 +377,19 @@ func _secao(texto: String) -> void:
 
 
 ## Cartão de uma linha: título (e dica) à esquerda; os controles à direita
-## são postos por quem chama (o cartão ocupa _y .. _y + ALT_LINHA).
-func _linha(titulo: String, dica: String) -> void:
+## são postos por quem chama (o cartão ocupa _y .. _y + ALT_LINHA). Devolve
+## a dica (ou null), para quem troca o texto dela depois.
+func _linha(titulo: String, dica: String) -> Label:
 	Estilo.painel(_raiz, Vector2(X0, _y), Vector2(LARG, ALT_LINHA), Estilo.caixa(COR_CARTAO, Color(0, 0, 0, 0), 0, 14))
 	var t = Estilo.rotulo(_raiz, titulo, 24, COR_TEXTO, 0, false, Label.ALIGN_LEFT)
 	Estilo.colocar(t, Vector2(X0 + 20, _y + (2 if dica != "" else 0)), Vector2(520, 32 if dica != "" else ALT_LINHA))
+	var d: Label = null
 	if dica != "":
-		var d = Estilo.rotulo(_raiz, dica, 15, COR_APAGADO, 0, false, Label.ALIGN_LEFT)
+		d = Estilo.rotulo(_raiz, dica, 15, COR_APAGADO, 0, false, Label.ALIGN_LEFT)
 		d.clip_text = true
 		Estilo.colocar(d, Vector2(X0 + 20, _y + 32), Vector2(560, 22))
 	_y += ALT_LINHA + 4.0
+	return d
 
 
 func _passos(titulo: String, dica: String, chave: String, minimo: int, maximo: int, passo: int, formato: String, recuo: float = 0.0) -> void:
@@ -395,15 +413,16 @@ func _mudar(chave: String, d: int, minimo: int, maximo: int) -> void:
 	_atualizar_tudo()
 
 
-func _opcoes(titulo: String, dica: String, chave: String, lista: Array) -> void:
+func _opcoes(titulo: String, dica: String, chave: String, lista: Array) -> Label:
 	var y = _y
-	_linha(titulo, dica)
+	var d = _linha(titulo, dica)
 	var larg = 170.0 if lista.size() <= 2 else 116.0
 	var x = X0 + LARG - 12.0 - lista.size() * (larg + 8.0) + 8.0
 	for par in lista:
 		var b = _botao(par[1], Vector2(x, y + Y_BOTAO), Vector2(larg, ALT_BOTAO), 22 if larg > 120 else 19, "_escolher", [chave, par[0]])
 		b["ligado"] = [chave, par[0]]
 		x += larg + 8.0
+	return d
 
 
 func _escolher(chave: String, v) -> void:
@@ -412,7 +431,9 @@ func _escolher(chave: String, v) -> void:
 		Maquina.aplicar()
 	if chave == "tela/giro":
 		Tela.definir_giro(v)
-	if chave.begins_with("arma/"):
+	if chave == "tela/rotacao":
+		Tela.definir_rotacao(v, true)
+	if chave.begins_with("arma/") or chave.begins_with("tela/"):
 		MiraGlobal.aplicar_config()
 	_atualizar_tudo()
 
@@ -454,7 +475,10 @@ func _mostrar_botao(valor: Label, qual: String) -> void:
 		return
 	if qual.ends_with("_arma"):
 		var d = str(Maquina.valor("botoes/" + qual))
-		valor.text = "LADO DIREITO" if d == "padrao" else Maquina.nome_do_descritor(d)
+		if d == "padrao":
+			valor.text = "CLIQUE DIREITO" if qual == "recarga_arma" else "OUTROS BOTÕES"
+		else:
+			valor.text = Maquina.nome_do_descritor(d)
 	else:
 		valor.text = "BOTÃO %d" % int(Maquina.valor("botoes/" + qual))
 
@@ -554,6 +578,7 @@ func _confirmado(nome: String) -> void:
 		"padrao":
 			Maquina.restaurar_padrao()
 			Tela.definir_giro(Maquina.valor("tela/giro"))
+			Tela.definir_rotacao(Maquina.valor("tela/rotacao"))
 			MiraGlobal.aplicar_config()
 			_mostrar_aviso("Valores de fábrica (salve para valer)", COR_TEXTO)
 	_atualizar_tudo()
@@ -577,6 +602,8 @@ func _sair_sem_salvar() -> void:
 	Maquina.cfg.load(Maquina.CONFIG)
 	Maquina.aplicar()
 	Tela.definir_giro(Maquina.valor("tela/giro"))
+	Tela.definir_rotacao(Maquina.valor("tela/rotacao"))
+	MiraGlobal.aplicar_config()
 	TransicaoGlobal.trocar_cena(CENA_SAIDA)
 
 
@@ -781,8 +808,11 @@ func _process(delta: float) -> void:
 			_mostrar_aviso("Nenhum botão apertado", COR_APAGADO)
 			_atualizar_tudo()
 	if _desempenho != null and int(_t * 2.0) != int((_t - delta) * 2.0):
-		_desempenho.text = "Agora: %d quadros/s  ·  memória %d MB  ·  vídeo %d MB  ·  tela %dx%d (giro %d)" % [int(round(Tela.fps())),
-			int(Tela.memoria_mb()), int(Tela.memoria_video_mb()), int(Tela.janela().x), int(Tela.janela().y), Tela.giro]
+		_desempenho.text = "Agora: %d quadros/s  ·  memória %d MB  ·  vídeo %d MB  ·  tela %dx%d (%s)" % [int(round(Tela.fps())),
+			int(Tela.memoria_mb()), int(Tela.memoria_video_mb()), int(Tela.janela().x), int(Tela.janela().y),
+			"Android gira" if Tela.android_gira else ("jogo gira %d" % Tela.giro if Tela.giro != 0 else "sem giro")]
+	if is_instance_valid(_dica_rotacao) and int(_t * 2.0) != int((_t - delta) * 2.0):
+		_dica_rotacao.text = "agora: " + Tela.quem_gira()
 	# alvos de teste acertados apagam devagar
 	var mudou = false
 	for a in _testes:

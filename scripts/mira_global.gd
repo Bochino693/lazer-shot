@@ -3,72 +3,63 @@ extends Node
 ## A MIRA DO JOGO INTEIRO e o RITMO DE QUADROS.
 ##
 ## Há UMA mira, aqui; cada tela lê `MiraGlobal.mira()` e desenha/acerta
-## exatamente ali.
+## exatamente ali. O tiro sai EXATAMENTE na mira (sem recuo que desvie a
+## bala): a arma de verdade aponta onde aponta.
 ##
-## A ARMA DE GIROSCÓPIO (a da máquina, como na versão 4.6): ela é um mouse
-## que manda o MOVIMENTO da arma, e a mira soma esse movimento, na mesma
-## medida nos dois eixos (arma para a direita = mira para a direita; para
-## cima = para cima) e na escala da tela (um pixel do HDMI anda um ponto do
-## jogo do mesmo tamanho), vezes a SENSIBILIDADE (CONFIGURAÇÃO -> ARMA E
-## MIRA, onde também se calibra atirando em quatro alvos).
-## No Android 8 em diante a 4.6 capturava o ponteiro e recebia o movimento
-## cru. No Android 7.1 da TV Box não existe captura: o movimento vem do
-## ponteiro do sistema, com duas manias que a mira corrige:
-##   - ACELERAÇÃO: o Android multiplica o movimento rápido (até 3x acima de
-##     3000 px/s). A mira desfaz a conta pela velocidade do ponteiro, e o
-##     movimento volta a ser proporcional ao giro da arma.
-##   - BORDA: o ponteiro para na borda do HDMI (e a borda curta do HDMI
-##     deitado é a altura do jogo em pé). Ponteiro parado numa borda = a arma
-##     apontando além dela: a mira vai para a mesma borda do jogo, e arma e
-##     mira voltam a casar (o "encostar na borda" de toda arma de giroscópio).
-## Tipo ABSOLUTA (CONFIGURAÇÃO): para a arma que marca o ponto da tela; a
-## mira é o ponto do ponteiro (a fração do HDMI é a fração do jogo).
+## A ARMA é um mouse (a de giroscópio da máquina). Dois jeitos de virar mira,
+## escolhidos sozinhos (CONFIGURAÇÃO -> ARMA E MIRA -> Tipo de arma: AUTO):
+##   - A MIRA É A SETA (com a janela em pé, ver `Tela`): o Android gira a
+##     tela, a seta do mouse anda no sentido da arma e cobre a tela inteira;
+##     a mira fica em cima dela, com um filtro leve (1€) que tira o tremor da
+##     mão parada sem atrasar o movimento rápido. Nada pula: a borda da seta é
+##     a borda da tela.
+##   - GIROSCÓPIO (reserva, quando a janela fica deitada e o jogo gira por
+##     dentro): a seta anda de lado em relação ao jogo e para na borda curta
+##     do HDMI, então a mira soma o MOVIMENTO da seta, na mesma medida nos
+##     dois eixos, sem a aceleração do Android, vezes a SENSIBILIDADE. A
+##     sensibilidade AUTO faz a seta, de uma borda à outra do HDMI, cobrir a
+##     altura inteira do jogo: a mira chega na borda junto com a seta (sem o
+##     salto de quando a seta parava antes). Calibrável atirando em 4 alvos.
+## Tipo ABSOLUTA força a mira na seta; GIROSCÓPIO força o movimento.
 ##
 ## A SETA DO SISTEMA: no Android 7.1 o Godot 3.6 não esconde o ponteiro (só
 ## do Android 8 em diante); ela vira uma imagem transparente (cursor
 ## próprio, Android 7.0+) em todos os formatos, refeita a cada tela nova e
-## quando o jogo volta ao foco. A tela desenha a mira; a seta não aparece.
-##
-## RECUO (como nos jogos de tiro): o primeiro tiro vai exatamente na mira;
-## tiros em sequência levantam a arma (um tranco para cima e um pouco para o
-## lado) e a bala do tiro seguinte vai para onde a arma subiu; sem atirar,
-## ela volta sozinha (~0,4 s).
+## quando o jogo volta ao foco. Se a TV Box ainda mostrar a seta, com a tela
+## girada pelo Android ela fica em cima da mira, andando junto.
 ##
 ## RITMO: a TV é de 60 Hz. Uma tela que não segura 60 quadros alterna 16 e
 ## 33 ms e isso aparece como tranco; se em 2 s mais de um quarto dos quadros
-## passou de 20 ms, a tela fica em 30 por segundo cravados (liso). A TV Box
-## lembra (user://ritmo.cfg): da próxima vez a tela já abre em 30. Se nem em
-## 30 ela segura (quadros de 45 ms), os enfeites (grupo "efeito_opcional")
-## somem nela, e isso também fica lembrado.
-
-const RECUO_PASSO = 26.0
-const RECUO_LADO = 11.0
-const RECUO_SEQUENCIA = 0.45
-const RECUO_MAX = 110.0
-const RECUO_VOLTA = 4.5
+## passou de 20 ms, os enfeites (grupo "efeito_opcional") somem nela primeiro
+## (a mira continua a 60); se ainda assim não segura, a tela fica em 30 por
+## segundo cravados (liso). A TV Box lembra (user://ritmo.cfg).
 
 # a aceleração do ponteiro do Android (VelocityControl, igual do 4.1 ao 7.1)
 const ACEL_BAIXA = 500.0       # px/s: até aqui o Android não acelera
 const ACEL_ALTA = 3000.0       # px/s: daqui para cima acelera o máximo
 const ACEL_MAX = 3.0
 const BORDA_PX = 0.75          # ponteiro a até isto da borda da janela = parado nela
-const BORDA_VOLTA = 16.0       # 1/s: a mira indo para a borda (rápido, sem pulo)
+const BORDA_VOLTA = 10.0       # 1/s: a mira indo para a borda (suave)
 const SENS_MIN = 0.2
 const SENS_MAX = 4.0
+# filtro 1€ da mira na seta (Casiez, Roussel e Vogel): corte baixo parado
+# (tira o tremor) e alto em movimento (não atrasa)
+const FILTRO_CORTE = 2.4       # Hz com a arma parada
+const FILTRO_BETA = 0.012      # quanto o corte sobe por px/s
+const FILTRO_D = 1.0           # Hz do corte da velocidade
+const FILTRO_SEGUE = 0.35      # s filtrando depois do último movimento
 
 const RITMO_ARQUIVO = "user://ritmo.cfg"
 const RITMO_JANELA = 2.0
 const RITMO_LENTO_MS = 20.0
 const RITMO_FRACAO = 0.25
-const LEVE_JANELA = 3.0
-const LEVE_LENTO_MS = 45.0
 
 var pos = Vector2(512, 910)
-var recuo = Vector2.ZERO
 var ativa = true              # false: a tela não mostra mira (abertura)
 
-## A arma manda movimento (giroscópio) ou o ponto da tela (absoluta)?
-var giroscopio = true
+## A mira soma o movimento (giroscópio) ou fica na seta (absoluta)? Muda
+## sozinha com quem gira a tela (tipo AUTO).
+var giroscopio = false
 var sensibilidade = 1.0
 var compensar = true
 ## Soma do movimento da arma em pontos do jogo, sem a sensibilidade e sem a
@@ -82,14 +73,18 @@ var bordas_eixos = Vector2.ZERO
 ## Último ponto do ponteiro do sistema (pixels da janela).
 var ponteiro = Vector2(-1, -1)
 
-var _seguidos = 0
-var _ultimo_coice_ms = -100000
+var _tipo = "auto"
+var _sens_auto = true
 var _android = false
 var _seta: ImageTexture
 var _seta_cena = 0
 var _ultimo = Vector2(INF, INF)
 var _quadro_d = Vector2.ZERO   # o quanto o ponteiro andou neste quadro (pixels da janela)
 var _na_borda = Vector2.ZERO   # borda do jogo para onde a arma passou (-1, 0, 1 em cada eixo)
+var _alvo = Vector2(512, 910)  # a seta no jogo (mira absoluta), antes do filtro
+var _segue = 0.0               # s que o filtro ainda anda
+var _f_x = Vector2(512, 910)
+var _f_v = Vector2.ZERO
 
 var _ritmo_lento = {}
 var _telas_leves = {}
@@ -98,9 +93,6 @@ var _ritmo_t = 0.0
 var _ritmo_quadros = 0
 var _ritmo_lentos = 0
 var _ritmo_ultimo = 0
-var _leve_t = 0.0
-var _leve_quadros = 0
-var _leve_lentos = 0
 
 
 func _ready() -> void:
@@ -118,14 +110,42 @@ func _ready() -> void:
 
 ## Lê o tipo de arma, a sensibilidade e a correção da aceleração.
 func aplicar_config() -> void:
-	var tipo = str(Maquina.valor("arma/tipo"))
+	_tipo = str(Maquina.valor("arma/modo"))
 	if OS.has_environment("LAZER_ARMA"):
-		tipo = OS.get_environment("LAZER_ARMA")
+		_tipo = OS.get_environment("LAZER_ARMA")
 	elif not _android:
-		tipo = "absoluta"      # no PC o mouse marca o ponto
-	giroscopio = tipo != "absoluta"
-	sensibilidade = clamp(float(Maquina.valor("arma/sensibilidade")), SENS_MIN, SENS_MAX)
+		_tipo = "absoluta"      # no PC o mouse marca o ponto
+	var s = float(Maquina.valor("arma/sensibilidade"))
+	_sens_auto = s <= 0.0
+	sensibilidade = clamp(s, SENS_MIN, SENS_MAX)
 	compensar = bool(Maquina.valor("arma/compensar_aceleracao"))
+	_atualizar_modo()
+
+
+## Giroscópio ou seta, pelo tipo e por quem gira a tela agora.
+func _atualizar_modo() -> void:
+	var giro_antes = giroscopio
+	giroscopio = _tipo == "giroscopio" or (_tipo == "auto" and Tela.giro != 0)
+	if _sens_auto:
+		sensibilidade = sensibilidade_cobertura()
+	if giroscopio != giro_antes:
+		_ultimo = Vector2(INF, INF)
+		_quadro_d = Vector2.ZERO
+		_alvo = pos
+		_f_x = pos
+		_f_v = Vector2.ZERO
+
+
+## A sensibilidade em que a seta, de uma borda à outra da janela no sentido
+## da altura do jogo, leva a mira do alto ao pé da tela (a sensibilidade AUTO
+## do giroscópio).
+func sensibilidade_cobertura() -> float:
+	var j = Tela.janela()
+	if j.x <= 0.0 or j.y <= 0.0:
+		return 1.0
+	# o eixo da janela que anda junto com a altura do jogo
+	var altura = j.y if (Tela.giro == 0 or Tela.mira_direta) else j.x
+	return clamp(Tela.TELA.y * Tela.px_por_ponto() / altura, SENS_MIN, SENS_MAX)
 
 
 ## A seta do sistema some: no PC o modo escondido; no Android 7 (onde o Godot
@@ -135,7 +155,7 @@ func aplicar_config() -> void:
 func _esconder_seta(todos: bool = false) -> void:
 	if _seta == null:
 		var img = Image.new()
-		img.create(8, 8, false, Image.FORMAT_RGBA8)
+		img.create(16, 16, false, Image.FORMAT_RGBA8)
 		img.fill(Color(0, 0, 0, 0))
 		var caminho = "user://seta_vazia.png"
 		img.save_png(caminho)
@@ -155,7 +175,7 @@ func _esconder_seta(todos: bool = false) -> void:
 
 func _notification(what: int) -> void:
 	if what == MainLoop.NOTIFICATION_WM_FOCUS_IN:
-		_esconder_seta()
+		_esconder_seta(true)
 		# voltando ao foco o ponteiro pode ter andado por fora: recomeça a
 		# conta do movimento a partir do próximo evento
 		_ultimo = Vector2(INF, INF)
@@ -175,7 +195,40 @@ func _input(event: InputEvent) -> void:
 		p = Tela.hdmi_para_jogo_direto(event.global_position)
 	else:
 		p = event.position
-	pos = Vector2(clamp(p.x, 0.0, tela.x), clamp(p.y, 0.0, tela.y))
+	_alvo = Vector2(clamp(p.x, 0.0, tela.x), clamp(p.y, 0.0, tela.y))
+	if event is InputEventMouseButton:
+		# o clique vale onde a seta está: a mira vai junto na hora
+		pos = _alvo
+		_f_x = _alvo
+		_f_v = Vector2.ZERO
+		_segue = 0.0
+	else:
+		_segue = FILTRO_SEGUE
+
+
+## A mira na seta, pelo filtro 1€ (um passo por quadro).
+func _seguir_seta(delta: float) -> void:
+	if _segue <= 0.0:
+		return
+	_segue -= delta
+	if delta <= 0.0:
+		return
+	if _f_x.distance_squared_to(pos) > 0.25:
+		# alguém levou a mira para outro lugar (tela nova): recomeça dali
+		_f_x = pos
+		_f_v = Vector2.ZERO
+	var v = (_alvo - _f_x) / delta
+	_f_v = _f_v.linear_interpolate(v, _alfa(FILTRO_D, delta))
+	var corte = FILTRO_CORTE + FILTRO_BETA * _f_v.length()
+	_f_x = _f_x.linear_interpolate(_alvo, _alfa(corte, delta))
+	if _segue <= 0.0:
+		_f_x = _alvo          # parou: a mira assenta em cima da seta
+	pos = _f_x
+
+
+static func _alfa(corte: float, dt: float) -> float:
+	var tau = 1.0 / (TAU * corte)
+	return 1.0 / (1.0 + tau / dt)
 
 
 ## Arma de giroscópio: guarda o quanto o ponteiro andou (a mira anda no
@@ -249,20 +302,19 @@ func zerar_borda() -> void:
 
 
 func _process(delta: float) -> void:
-	if recuo != Vector2.ZERO:
-		recuo *= exp(-RECUO_VOLTA * delta)
-		if recuo.length_squared() < 0.04:
-			recuo = Vector2.ZERO
+	_atualizar_modo()
 	if giroscopio:
 		_andar(delta)
-	if giroscopio and _na_borda != Vector2.ZERO:
-		# a arma passou da borda: a mira vai para a mesma borda do jogo
-		var k = 1.0 - exp(-BORDA_VOLTA * delta)
-		var tela = Tela.TELA
-		if _na_borda.x != 0.0:
-			pos.x = lerp(pos.x, 0.0 if _na_borda.x < 0.0 else tela.x, k)
-		if _na_borda.y != 0.0:
-			pos.y = lerp(pos.y, 0.0 if _na_borda.y < 0.0 else tela.y, k)
+		if _na_borda != Vector2.ZERO:
+			# a arma passou da borda: a mira vai para a mesma borda do jogo
+			var k = 1.0 - exp(-BORDA_VOLTA * delta)
+			var tela = Tela.TELA
+			if _na_borda.x != 0.0:
+				pos.x = lerp(pos.x, 0.0 if _na_borda.x < 0.0 else tela.x, k)
+			if _na_borda.y != 0.0:
+				pos.y = lerp(pos.y, 0.0 if _na_borda.y < 0.0 else tela.y, k)
+	else:
+		_seguir_seta(delta)
 	var cena = get_tree().current_scene
 	var id = cena.get_instance_id() if cena != null else 0
 	if id != _seta_cena:
@@ -271,28 +323,24 @@ func _process(delta: float) -> void:
 	_ritmo()
 
 
-## Onde a arma aponta agora: a mira mais o recuo dos tiros em sequência.
+## Onde a arma aponta agora (o tiro sai exatamente aqui).
 func mira() -> Vector2:
-	var p = pos + recuo
-	return Vector2(clamp(p.x, 0.0, Tela.TELA.x), clamp(p.y, 0.0, Tela.TELA.y))
+	return Vector2(clamp(pos.x, 0.0, Tela.TELA.x), clamp(pos.y, 0.0, Tela.TELA.y))
 
 
-## A tela chama a cada tiro dado: a arma dá o tranco. `forca` muda com a arma
-## (pistola do bar mais forte, laser da arena leve).
-func coice(forca: float = 1.0) -> void:
-	var agora = OS.get_ticks_msec()
-	var dt = (agora - _ultimo_coice_ms) / 1000.0
-	_ultimo_coice_ms = agora
-	_seguidos = int(min(_seguidos + 1, 5)) if dt < RECUO_SEQUENCIA else 0
-	var sobe = RECUO_PASSO * (1.0 + 0.1 * _seguidos)
-	var lado = rand_range(-RECUO_LADO, RECUO_LADO) * (1.0 + 0.3 * _seguidos)
-	recuo = (recuo + Vector2(lado, -sobe) * forca).limit_length(RECUO_MAX * forca)
+## A tela chama a cada tiro dado. A bala sai exatamente na mira (a arma de
+## verdade não sobe sozinha): o tranco fica no pulso da mira e no estampido.
+func coice(_forca: float = 1.0) -> void:
+	pass
 
 
 ## Leva a mira para um ponto (ex.: centro ao começar algo novo).
 func levar_para(p: Vector2) -> void:
 	pos = p
-	recuo = Vector2.ZERO
+	_alvo = p
+	_f_x = p
+	_f_v = Vector2.ZERO
+	_segue = 0.0
 
 
 func centralizar() -> void:
@@ -337,18 +385,12 @@ func _ritmo() -> void:
 		_ritmo_quadros = 0
 		_ritmo_lentos = 0
 		_ritmo_ultimo = agora
-		_leve_t = -2.0
-		_leve_quadros = 0
-		_leve_lentos = 0
 		if cena != null and _telas_leves.has(cena.filename):
 			call_deferred("_deixar_leve", cena)
 		return
 	var quadro = (agora - _ritmo_ultimo) / 1000.0
 	_ritmo_ultimo = agora
-	if TransicaoGlobal.em_transicao or cena == null or cena.filename == "":
-		return
-	if Engine.target_fps == 30:
-		_medir_leve(quadro, cena)
+	if TransicaoGlobal.em_transicao or cena == null or cena.filename == "" or Engine.target_fps == 30:
 		return
 	_ritmo_t += quadro / 1000.0
 	if _ritmo_t < 0.0:
@@ -358,33 +400,22 @@ func _ritmo() -> void:
 		_ritmo_lentos += 1
 	if _ritmo_t >= RITMO_JANELA:
 		if _ritmo_quadros > 20 and float(_ritmo_lentos) / _ritmo_quadros > RITMO_FRACAO:
-			Engine.target_fps = 30
-			Tela.marca("ritmo: 30 quadros/s em %s (%d de %d quadros passavam de %d ms)" % [cena.name, _ritmo_lentos, _ritmo_quadros, int(RITMO_LENTO_MS)])
-			_ritmo_lento[cena.filename] = true
+			if not _telas_leves.has(cena.filename):
+				# primeiro os enfeites somem (a mira continua a 60)
+				Tela.marca("leve: %s sem enfeites (%d de %d quadros passavam de %d ms)" % [cena.name, _ritmo_lentos, _ritmo_quadros, int(RITMO_LENTO_MS)])
+				_telas_leves[cena.filename] = true
+				_deixar_leve(cena)
+				_ritmo_t = -1.0
+			else:
+				# nem assim: 30 quadros cravados (liso)
+				Engine.target_fps = 30
+				Tela.marca("ritmo: 30 quadros/s em %s (%d de %d quadros passavam de %d ms)" % [cena.name, _ritmo_lentos, _ritmo_quadros, int(RITMO_LENTO_MS)])
+				_ritmo_lento[cena.filename] = true
 			_ritmo_salvar()
-		_ritmo_t = 0.0
+		else:
+			_ritmo_t = 0.0
 		_ritmo_quadros = 0
 		_ritmo_lentos = 0
-
-
-func _medir_leve(quadro: float, cena: Node) -> void:
-	if _telas_leves.has(cena.filename):
-		return
-	_leve_t += quadro / 1000.0
-	if _leve_t < 0.0:
-		return
-	_leve_quadros += 1
-	if quadro > LEVE_LENTO_MS:
-		_leve_lentos += 1
-	if _leve_t >= LEVE_JANELA:
-		if _leve_quadros > 20 and float(_leve_lentos) / _leve_quadros > RITMO_FRACAO:
-			Tela.marca("calibragem: %s leve (%d de %d quadros passavam de %d ms)" % [cena.name, _leve_lentos, _leve_quadros, int(LEVE_LENTO_MS)])
-			_telas_leves[cena.filename] = true
-			_ritmo_salvar()
-			_deixar_leve(cena)
-		_leve_t = 0.0
-		_leve_quadros = 0
-		_leve_lentos = 0
 
 
 ## Os enfeites que a fase marcou como opcionais param e somem.
