@@ -124,6 +124,7 @@ Estilo="*res://scripts/estilo.gd"
 Maquina="*res://scripts/maquina.gd"
 MiraGlobal="*res://scripts/mira_global.gd"
 RankingManager="*res://scripts/ranking_manager.gd"
+FotoJogador="*res://scripts/foto_jogador.gd"
 TransicaoGlobal="*res://scripts/transicao.gd"
 
 [debug]
@@ -176,6 +177,7 @@ tela/giro=1
 tela/mira_direta=true
 tela/rotacao="android"
 tela/seta_nula=false
+camera/nativa=false
 
 [physics]
 

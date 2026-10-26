@@ -1,8 +1,35 @@
-# Lazer Shot 2.4 — TV Box Mali-450
+# Lazer Shot 2.5 — TV Box Mali-450
 
 Esta pasta é o **Lazer Shot para a TV Box da placa Mali-450** (S905L / S905W, Android 7.1). A placa de vídeo dela só tem OpenGL ES 2.0, por isso este jogo é feito no **Godot 3.6.2 (GLES2)**. A versão 4.6 (Pro Ultra / TX9) é outro projeto, na branch `tvbox-ultra-pro`.
 
-## Novidades da 2.4
+## Novidades da 2.5
+
+- **Deserto com o céu de verdade.** O sol e a lua estavam pintados no próprio fundo. Quando o astro animado saía, o pintado aparecia por trás.
+  - O fundo agora tem só o céu no lugar do astro (nuvens de dia, estrelas de noite).
+  - Na troca do dia, o sol fecha o olho e **se põe atrás das pirâmides**, avermelhando. O céu escurece e a lua **nasce do mesmo lugar**, abrindo o olho. Nada fica transparente, então não aparece imagem por trás.
+- **Olho do sol e da lua mais natural:**
+  - olha em movimentos rápidos, como olho de verdade, e fica parado com um tremor mínimo;
+  - pisca, às vezes duas vezes seguidas;
+  - a pupila abre no escuro e na alegria, e um brilho de luz fica na íris;
+  - a pálpebra ficou no tom do disco, sem a faixa clara, e nenhuma camada do olho passa mais da borda do disco.
+- **Águias voando de lado**, com a cabeça para a frente (antes eram vistas de baixo, de cabeça para cima).
+  - Batem as asas para subir, planam descendo e inclinam o corpo.
+  - **Profundidade:** as de longe são pequenas, lentas, apagadas na névoa e passam atrás das pirâmides. As de perto são grandes e rápidas.
+- **Mais vida no Deserto:** estrelas piscando e estrelas cadentes de noite; rajadas de areia rente ao chão de dia.
+- **Sons que não se cortam.**
+  - Cada som tem até 6 vozes e usa uma livre antes de tomar outra (antes eram 3 em rodízio, e o 4º tiro cortava o 1º).
+  - Até 24 sons juntos.
+  - O limitador só segura o pico: não abaixa mais um som por causa do outro.
+- **Fim de partida com ânimo.** Uma fanfarra de vitória: rufar, metais subindo, acorde final com tímpanos, pratos, sinos e aplausos. Depois a música da fase volta baixinho. O som antigo (`end_game.mp3`) era um grave repetido e saiu do jogo.
+- **Foto do jogador pela webcam USB.**
+  - Tirada no COMEÇOU! de cada partida, com flash e o clique da câmera. A foto instantânea "VOCÊ!" entra no canto da tela.
+  - Aparece na tela do nome ("SEU RECORDE"), no resultado e no ranking. Sem câmera, fica a silhueta.
+  - A câmera só fica ligada o tempo da foto, para não gastar processador na partida.
+  - **CONFIGURAÇÃO → RANKING E FOTO → Foto do jogador** liga e desliga. O botão **CÂMERA** abre a página com qual câmera usar, girar (0°, 90°, 180°, 270°), espelhar, o estado e o **TESTAR**.
+  - Na primeira vez o Android pergunta se o jogo pode usar a câmera: escolha **Permitir**.
+  - **Precisa gerar o APK de novo** com este gerador. Na janela aparece "Camera: a foto do jogador vai no APK".
+
+## Da 2.4
 
 - **Só a mira na tela, sem a seta do mouse.** No Android 7 o Godot 3.6 não esconde a seta, e muitas TV Box ignoram a seta transparente que o jogo punha no lugar. Por isso a seta aparecia junto com a mira e, com a tela girada, andava ao contrário.
   - Agora o gerador faz uma cópia dos modelos do Godot (em `build\android\modelos`) em que todos os formatos de seta viram o "nenhum" do Android. É o mesmo jeito que os outros jogos de tiro usam.
@@ -88,7 +115,7 @@ Esta pasta é o **Lazer Shot para a TV Box da placa Mali-450** (S905L / S905W, A
   - como jogar, contagem, fim de jogo e nome no ranking;
   - ranking dos 20 melhores e configuração.
 - **Sem shader de tela cheia** (a Mali-450 engasga com isso). O único vídeo é o da tela inicial, leve (540x960, VP8). Os fundos das fases ganham vida com luz somada e partículas.
-- **Sem câmera:** não há foto antes da partida. No ranking aparece a silhueta.
+- **Câmera:** a foto do jogador sai da webcam USB da TV Box no começo da partida, sem a tela de pose da 4.6. Sem câmera, o ranking mostra a silhueta.
 - **O APK tem outro nome de pacote** (`com.lazersport.lazershot.mali`). Ele instala ao lado da versão 4.6, não por cima.
 
 ## Gerar o APK (no PC com Windows)
@@ -101,7 +128,7 @@ Esta pasta é o **Lazer Shot para a TV Box da placa Mali-450** (S905L / S905W, A
 
    Tudo aparece na janela na hora e fica gravado em `build\android\GERACAO-COMPLETA.log`. A janela termina sozinha.
 
-3. O APK fica em **`APK-Pronto\LazerShot-Mali450-2.4.0.apk`** (a versão vai no nome do arquivo). Copie para o pendrive, use **Ejetar** no Windows antes de tirar o pendrive e instale na TV Box.
+3. O APK fica em **`APK-Pronto\LazerShot-Mali450-2.5.0.apk`** (a versão vai no nome do arquivo). Copie para o pendrive, use **Ejetar** no Windows antes de tirar o pendrive e instale na TV Box.
 
    No fim aparece **APK PRONTO E CONFERIDO**, com a linha **Assinatura: v1 + v2**. Antes disso o gerador confere o APK por dentro: o motor ARM 32 e 64 bits, os scripts e as imagens em ETC1. As mensagens técnicas do Godot que não são problema (PC sem placa de som, por exemplo) não aparecem na janela; ficam só no histórico.
 
@@ -137,7 +164,8 @@ O giro e quem gira também se trocam **na própria TV Box**, na CONFIGURAÇÃO d
   - Desde esta versão o gerador monta o APK sem desenhar nada (`--disable-render-loop`): a placa só abre o OpenGL e fica parada. O APK sai igual, arquivo por arquivo.
   - Se ainda acontecer: reinicie o PC, feche jogos e navegadores e rode de novo. Se continuar, reinstale o driver da placa (para a 8400GS, o último é o 342.01) ou gere o APK em outro PC.
   - Quando falha, o gerador mostra as últimas linhas do Godot e o motivo da saída.
-- **"AVISO: nao deu para preparar os modelos sem a seta":** o APK sai, mas com a seta transparente antiga, que algumas TV Box ainda mostram. Apague a pasta `build\android\modelos` e rode de novo. Se continuar, apague também a pasta dos modelos do Godot (`%APPDATA%\Godot\templates\3.6.2.stable`) para eles baixarem de novo.
+- **"AVISO: o build-tools do Android SDK nao tem o d8" ou "o d8 nao converteu a classe da camera":** o APK sai, mas sem a foto do jogador. O d8 vem no build-tools do Android SDK (versão 28 ou mais nova) e precisa do Java 11 ou mais novo (o gerador prefere o 17). Instale um build-tools novo pelo sdkmanager e rode de novo. O motivo fica em `build\android\d8.log`.
+- **"AVISO: nao deu para preparar os modelos do Lazer":** o APK sai, mas com a seta transparente antiga, que algumas TV Box ainda mostram. Apague a pasta `build\android\modelos` e rode de novo. Se continuar, apague também a pasta dos modelos do Godot (`%APPDATA%\Godot\templates\3.6.2.stable`) para eles baixarem de novo.
 
 ### Se a TV Box não instalar
 
@@ -160,7 +188,7 @@ O giro e quem gira também se trocam **na própria TV Box**, na CONFIGURAÇÃO d
   - O SELECT soma crédito no modo crédito.
   - Os botões podem ser aprendidos de novo na CONFIGURAÇÃO.
 - **Abrir a CONFIGURAÇÃO:** segure o SELECT por 3 s nas telas de abertura (ou aperte F10 num teclado).
-  - Lá ficam: modo livre ou crédito, tempos, demonstração, efeitos COMPLETO/LEVE, vídeo da tela inicial, giro da tela e quem gira, volumes, botões, limpar o ranking e a caixa-preta (como a sessão anterior terminou).
+  - Lá ficam: modo livre ou crédito, tempos, demonstração, efeitos COMPLETO/LEVE, vídeo da tela inicial, giro da tela e quem gira, volumes, botões, limpar o ranking, a foto do jogador (e a página CÂMERA) e a caixa-preta (como a sessão anterior terminou).
   - É a única tela com informação técnica.
 - **Efeitos LEVE** (na CONFIGURAÇÃO) põe metade das partículas. Serve para a TV Box mais fraca de todas.
 - **Ritmo automático:** a tela que não segura 60 quadros por segundo primeiro fica sem enfeites; se ainda não der, passa sozinha para 30 cravados, que fica liso. A TV Box lembra disso.
@@ -179,4 +207,6 @@ O giro e quem gira também se trocam **na própria TV Box**, na CONFIGURAÇÃO d
 - Quem gira a tela está em `scripts/tela.gd`: o app abre deitado, lê `persist.sys.app.rotation` (Amlogic), pede o retrato e confere pela janela (em pé do tamanho da tela inteira = o Android girou; faixa no meio ou nada em 5 s = o jogo gira por dentro). A resposta fica em `user://tela.cfg`. No PC dá para fingir a TV Box com `LAZER_GIRO=1` e `LAZER_PROP_ROTACAO`.
 - A mira da arma está em `scripts/mira_global.gd` (a seta com filtro 1€ quando o Android gira; giroscópio, aceleração do Android e beiradas quando o jogo gira) e o ajuste dela em `scripts/config.gd` (página Arma e mira).
 - O vídeo da tela inicial é `videos/back_init.webm` (VP8, 540x960, 24 quadros/s, sem som), feito do `back_init.mp4` da versão 4.6 com o ffmpeg: `-vf "crop=698:1088:11:0,scale=540:960:flags=lanczos" -r 24 -c:v libvpx -b:v 1500k -crf 8 -qmin 4 -qmax 40 -auto-alt-ref 0 -g 48 -an`.
+- A foto do jogador: `scripts/foto_jogador.gd` (o autoload FotoJogador) chama a classe Java `android_camera/src/org/lazershot/CameraFoto.java` pelo JavaClassWrapper. A classe é compilada em `android_camera/camera_foto.jar` por `android_camera/COMPILAR.sh` (javac, com as assinaturas do Android em `android_camera/stubs/`). No PC dá para testar com `LAZER_CAMERA_FALSA=foto.jpg`.
+- O céu do Deserto sem o astro, a águia de lado, o recorte das camadas do olho e a fanfarra do fim saem de `tools/preparar_mali.py` (`SO_EGITO=1` e `SO_SONS=1`).
 - A abertura do Android (no lugar do símbolo do Godot) está em `splash/`, uma imagem para cada giro, feita por `tools/preparar_mali.py`. Como o app abre deitado, o gerador escolhe a já girada para o lado do giro pedido.

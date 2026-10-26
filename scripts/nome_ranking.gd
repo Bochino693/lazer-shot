@@ -14,6 +14,7 @@ const LETRAS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 const COLUNAS = 9
 const TRAVA_TIRO = 0.12
 
+var _foto: Control = null
 var ativo = false
 var nome = ""
 
@@ -65,6 +66,11 @@ func abrir(cor: Color, pontos: int, precisao: int) -> void:
 	_aplicar_cores()
 	_placar.text = "%s PONTOS  ·  ACERTO %d%%" % [Estilo.milhar(pontos), precisao]
 	_atualizar_casas()
+	if _foto != null:
+		_foto.queue_free()
+		_foto = null
+	if FotoJogador.ultima_textura != null:
+		_foto = FotoJogador.moldura(_raiz, Vector2(Tela.TELA.x * 0.5, 250.0), 250.0, FotoJogador.ultima_textura, -4.0, "SEU RECORDE")
 	ativo = true
 	visible = true
 	_painel.rect_scale = Vector2(0.92, 0.92)
