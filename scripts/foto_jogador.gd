@@ -1,20 +1,26 @@
 extends Node
 
-## A FOTO DO JOGADOR (webcam USB da TV Box): tirada no começo de cada
-## partida e mostrada na tela do nome, no resultado e no ranking.
+## A FOTO DO JOGADOR (webcam USB da TV Box): pedida antes de cada partida
+## na tela de pose (scripts/pose_foto.gd: a imagem ao vivo, 3-2-1 e o
+## clique) e mostrada na tela do nome, no resultado e no ranking.
 ##
 ## No APK do gerador vai a classe org.lazershot.CameraFoto (classes2.dex,
 ## veja android_camera/ e "OS MODELOS DO LAZER" no gerador): a API clássica
-## de câmera do Android, por onde a TV Box mostra a webcam USB. O jogo a
-## chama pelo JavaClassWrapper só com números e texto e nunca espera por ela.
+## de câmera do Android, por onde a TV Box mostra a webcam USB. Sem câmera
+## escolhida (AUTO) ela tenta da última para a primeira: a webcam USB
+## costuma ser a última da lista. O jogo a chama pelo JavaClassWrapper só
+## com números e texto e nunca espera por ela.
 ##
-## A CÂMERA SÓ FICA LIGADA O TEMPO DA FOTO: liga na contagem da partida
-## (preparar), fotografa no COMEÇOU! (fotografar) e desliga logo depois.
-## Ligada, ela gasta processador que faz falta ao jogo.
+## A CÂMERA SÓ FICA LIGADA ENQUANTO A FASE ESPERA O START E NA POSE: liga
+## quando a fase abre (ligar_previa: a luz da webcam já está acertada quando
+## o jogador aperta START), mostra a imagem ao vivo na pose e desliga logo
+## depois da foto. Ligada, ela gasta processador que faz falta ao jogo.
 ##
-## O recorte (quadrado do meio), o giro e o espelho saem numa Thread: a
-## partida não engasga. Sem câmera (PC, APK sem a classe, câmera ausente ou
-## sem permissão) nada acontece e o ranking mostra a silhueta.
+## A IMAGEM AO VIVO: a classe grava o quadro mais novo num JPEG pequeno a
+## cada PREVIA_MS; aqui ele é aberto numa Thread e vira a textura da pose.
+## O recorte da foto (quadrado do meio), o giro e o espelho também saem numa
+## Thread: nada engasga. Sem câmera (PC, APK sem a classe, câmera ausente ou
+## sem permissão) a pose não aparece e o ranking mostra a silhueta.
 ##
 ## Nada técnico aparece no jogo: o estado (status()) só aparece na
 ## CONFIGURAÇÃO, na página CÂMERA.
@@ -23,25 +29,28 @@ extends Node
 ## faz o papel da webcam).
 
 signal foto_pronta(textura)
+signal previa_nova(textura)
 
 const PASTA = "user://fotos"
 const LADO = 256
-const QUADROS_ANTES = 8          # a câmera acerta a luz antes da foto
-const LIMITE_ABRIR = 7.0         # s esperando a imagem chegar
+const PREVIA_MS = 140
 const LIMITE_GRAVAR = 4.0        # s esperando o JPEG ficar pronto
 const GUARDADAS = 6              # fotos sem ranking que ficam (as últimas)
 
 var disponivel = false           # a classe está no APK e o Android vê câmera
 var ultima = ""                  # a foto da última partida (png) ou ""
 var ultima_textura: Texture = null
+var previa: ImageTexture = null  # a imagem ao vivo (a mesma textura sempre)
 
 var _cls = null
 var _cameras = 0
-var _fase = ""                   # "", "abrindo", "gravando", "tratando"
+var _fase = ""                   # "", "previa", "gravando", "tratando"
 var _t = 0.0
-var _quer_foto = false
 var _jpg = ""
-var _thread: Thread = null
+var _jpg_previa = ""
+var _previas = 0
+var _thread: Thread = null       # a foto
+var _thread_previa: Thread = null
 var _cache = {}                  # caminho -> textura (o ranking reabre muito)
 var _falhas = ""
 var _falsa = ""                  # teste no PC: uma foto no lugar da webcam
@@ -67,15 +76,98 @@ func _ready() -> void:
 	if _cls == null:
 		_falhas = "classe da câmera não carregou"
 		return
-	# a permissão da câmera (o Android pergunta uma vez)
-	OS.request_permissions()
 	_cameras = int(_cls.call("cameras"))
 	disponivel = _cameras > 0
-	Tela.marca("câmera: %d" % _cameras)
+	# a permissão da câmera (o Android pergunta uma vez)
+	if int(_cls.call("permissao")) != 1:
+		OS.request_permissions()
+	Tela.marca("câmera: %d (permissão %d)" % [_cameras, int(_cls.call("permissao"))])
 
 
 func ligada() -> bool:
+	if _cls != null and not disponivel:
+		# a webcam pode ter sido ligada depois que o jogo abriu
+		_cameras = int(_cls.call("cameras"))
+		disponivel = _cameras > 0
 	return disponivel and bool(Maquina.valor("camera/foto"))
+
+
+## O estado em palavras (só para a CONFIGURAÇÃO).
+func status() -> String:
+	if _falsa != "":
+		return "câmera falsa (teste): " + _falsa
+	if OS.get_name() != "Android":
+		return "no PC não há câmera (só na TV Box)"
+	if _cls == null:
+		if _falhas != "":
+			return _falhas
+		return "este APK não tem a câmera (gere de novo com o gerador e confira a linha Camera)"
+	var perm = int(_cls.call("permissao"))
+	var s = "câmeras vistas: %d  ·  %s" % [int(_cls.call("cameras")), str(_cls.call("status"))]
+	if perm == 0:
+		s = "SEM PERMISSÃO: permita o Lazer Shot usar a câmera (configurações do Android > Apps)  ·  " + s
+	if _fase == "previa":
+		s += "  ·  %d quadros" % int(_cls.call("quadros"))
+	return s
+
+
+func cameras() -> int:
+	return _cameras
+
+
+## A imagem ao vivo já chegou?
+func tem_previa() -> bool:
+	return _previas > 0 and previa != null
+
+
+func ligando() -> bool:
+	return _fase == "previa"
+
+
+## Liga a câmera e a imagem ao vivo (a fase abriu: o jogador ainda vai
+## apertar START).
+func ligar_previa() -> void:
+	if not ligada() or _fase != "":
+		return
+	ultima = ""
+	ultima_textura = null
+	_previas = 0
+	_t = 0.0
+	_dir()
+	if _falsa != "":
+		_fase = "previa"
+		set_process(true)
+		return
+	_jpg_previa = ProjectSettings.globalize_path("%s/previa.jpg" % PASTA)
+	_cls.call("previa", _jpg_previa, PREVIA_MS)
+	var indice = int(Maquina.valor("camera/indice"))
+	if indice >= _cameras:
+		indice = -1
+	if bool(_cls.call("abrir", indice)):
+		_fase = "previa"
+		set_process(true)
+
+
+## O clique: grava o quadro de agora (a pose chama no fim do 3-2-1).
+func fotografar() -> void:
+	if _fase != "previa":
+		return
+	_t = 0.0
+	if _falsa != "":
+		_comecar_tratamento(_falsa)
+		return
+	_cls.call("previa", "", 0)
+	_jpg = ProjectSettings.globalize_path("%s/nova.jpg" % PASTA)
+	if bool(_cls.call("fotografar", _jpg)):
+		_fase = "gravando"
+	else:
+		_desistir()
+
+
+## Solta a câmera (saiu da fase ou desistiu da foto).
+func cancelar() -> void:
+	if _fase == "previa" or _fase == "gravando":
+		_desistir()
 
 
 func _comecar_tratamento(jpg: String) -> void:
@@ -88,82 +180,32 @@ func _comecar_tratamento(jpg: String) -> void:
 		_desistir()
 
 
-## O estado em palavras (só para a CONFIGURAÇÃO).
-func status() -> String:
-	if _falsa != "":
-		return "câmera falsa (teste): " + _falsa
-	if OS.get_name() != "Android":
-		return "no PC não há câmera (só na TV Box)"
-	if _cls == null:
-		if _falhas != "":
-			return _falhas
-		return "este APK não tem a câmera (gere de novo com o gerador)"
-	var s = "câmeras: %d  ·  %s" % [_cameras, str(_cls.call("status"))]
-	if _fase == "abrindo":
-		s += "  ·  %d quadros" % int(_cls.call("quadros"))
-	return s
-
-
-func cameras() -> int:
-	return _cameras
-
-
-## Liga a câmera (a contagem da partida começou).
-func preparar() -> void:
-	if not ligada() or _fase != "":
-		return
-	ultima = ""
-	ultima_textura = null
-	_quer_foto = false
-	if _falsa != "":
-		_fase = "abrindo"
-		_t = 0.0
-		set_process(true)
-		return
-	var indice = int(clamp(int(Maquina.valor("camera/indice")), 0, max(0, _cameras - 1)))
-	if bool(_cls.call("abrir", indice)):
-		_fase = "abrindo"
-		_t = 0.0
-		set_process(true)
-
-
-## Tira a foto assim que a imagem estiver boa (ou liga e tira).
-func fotografar() -> void:
-	if not ligada():
-		return
-	if _fase == "":
-		preparar()
-	_quer_foto = true
-
-
-## Solta a câmera (saiu da partida antes da foto).
-func cancelar() -> void:
-	if _fase == "abrindo" or _fase == "gravando":
-		if _cls != null:
-			_cls.call("fechar")
-		_fase = ""
-		set_process(false)
-
-
 func _process(delta: float) -> void:
 	_t += delta
+	# a imagem ao vivo: a prévia nova é aberta numa Thread
+	if _thread_previa != null and not _thread_previa.is_alive():
+		var img = _thread_previa.wait_to_finish()
+		_thread_previa = null
+		if img is Image and _fase == "previa":
+			if previa == null or previa.get_width() != img.get_width() or previa.get_height() != img.get_height():
+				previa = ImageTexture.new()
+				previa.create_from_image(img, Texture.FLAG_FILTER)
+			else:
+				previa.set_data(img)
+			emit_signal("previa_nova", previa)
 	match _fase:
-		"abrindo":
-			if _falsa != "":
-				if _quer_foto and _t > 0.4:
-					_comecar_tratamento(_falsa)
-				return
-			var q = int(_cls.call("quadros"))
-			if _quer_foto and q >= QUADROS_ANTES:
-				_dir()
-				_jpg = ProjectSettings.globalize_path("%s/nova.jpg" % PASTA)
-				if bool(_cls.call("fotografar", _jpg)):
-					_fase = "gravando"
-					_t = 0.0
-				else:
-					_desistir()
-			elif _t > LIMITE_ABRIR:
-				_desistir()
+		"previa":
+			if _thread_previa == null:
+				var n = _previas
+				if _falsa == "":
+					n = int(_cls.call("previas"))
+				elif _t > 0.3 * (_previas + 1):
+					n = _previas + 1
+				if n != _previas:
+					_previas = n
+					_thread_previa = Thread.new()
+					if _thread_previa.start(self, "_abrir_previa", _falsa if _falsa != "" else _jpg_previa) != OK:
+						_thread_previa = null
 		"gravando":
 			var f = int(_cls.call("foto"))
 			if f == 2:
@@ -176,7 +218,6 @@ func _process(delta: float) -> void:
 				var img = _thread.wait_to_finish()
 				_thread = null
 				_fase = ""
-				set_process(false)
 				if img is Image:
 					_dir()
 					var caminho = "%s/foto_%d_%03d.png" % [PASTA, OS.get_unix_time(), randi() % 1000]
@@ -188,14 +229,25 @@ func _process(delta: float) -> void:
 						_cache[caminho] = tex
 						emit_signal("foto_pronta", tex)
 		_:
-			set_process(false)
+			if _thread_previa == null:
+				set_process(false)
+
+
+## Na Thread: a prévia (o JPEG pequeno que a câmera acabou de gravar).
+func _abrir_previa(caminho: String):
+	var img = Image.new()
+	if img.load(caminho) != OK:
+		return null
+	if img.get_width() > 480:
+		img.resize(img.get_width() / 2, img.get_height() / 2, Image.INTERPOLATE_BILINEAR)
+	return img
 
 
 func _desistir() -> void:
 	if _cls != null:
+		_cls.call("previa", "", 0)
 		_cls.call("fechar")
 	_fase = ""
-	set_process(false)
 
 
 ## Na Thread: abre o JPEG, recorta o quadrado do meio, reduz, gira e espelha.
@@ -323,5 +375,7 @@ func _limpar_fotos_velhas() -> void:
 func _exit_tree() -> void:
 	if _thread != null:
 		_thread.wait_to_finish()
+	if _thread_previa != null:
+		_thread_previa.wait_to_finish()
 	if _cls != null:
 		_cls.call("fechar")

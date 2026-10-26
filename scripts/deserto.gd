@@ -413,19 +413,21 @@ func _parte(pai: Node2D, nome: String, pos: Vector2) -> Sprite:
 const PLANO_LONGE = 0
 const PLANO_MEIO = 1
 const PLANO_PERTO = 2
-# por plano: tamanho, velocidade (px/s), altura na tela, névoa, espera
+# por plano: tamanho, velocidade (px/s), altura na tela, névoa, espera. O
+# desenho (sprites/egito_aguia_lado.png, quadros de 256 px com mipmaps) nunca
+# é ampliado: a de perto fica em até 0,9 (nítida)
 const PLANOS = [
-	{"esc": [0.30, 0.42], "vel": [42.0, 62.0], "y": [470.0, 700.0], "nevoa": 0.5, "espera": [3.0, 9.0], "bate": 1.7},
-	{"esc": [0.62, 0.80], "vel": [95.0, 135.0], "y": [230.0, 520.0], "nevoa": 0.18, "espera": [5.0, 13.0], "bate": 2.1},
-	{"esc": [1.15, 1.45], "vel": [190.0, 250.0], "y": [170.0, 640.0], "nevoa": 0.0, "espera": [12.0, 26.0], "bate": 2.6},
+	{"esc": [0.19, 0.26], "vel": [42.0, 62.0], "y": [470.0, 700.0], "nevoa": 0.5, "espera": [3.0, 9.0], "bate": 1.7},
+	{"esc": [0.39, 0.50], "vel": [95.0, 135.0], "y": [230.0, 520.0], "nevoa": 0.18, "espera": [5.0, 13.0], "bate": 2.1},
+	{"esc": [0.72, 0.90], "vel": [190.0, 250.0], "y": [170.0, 640.0], "nevoa": 0.0, "espera": [12.0, 26.0], "bate": 2.6},
 ]
 
 
 func _criar_aguia(i: int, plano: int) -> Dictionary:
 	var s = Sprite.new()
 	s.texture = Estilo.tex("egito_aguia_lado")
-	s.hframes = 7
-	s.vframes = 2
+	s.hframes = 4
+	s.vframes = 4
 	s.frame = 12
 	s.visible = false
 	cenario.add_child(s)
@@ -1411,11 +1413,11 @@ func _animar_aguia(g: Dictionary, delta: float) -> void:
 			var esq = randf() < 0.5
 			g["dir"] = 1.0 if esq else -1.0
 			g["esc"] = rand_range(cfg["esc"][0], cfg["esc"][1])
-			var margem = 90.0 * g["esc"]
+			var margem = 140.0 * g["esc"]
 			g["pos"] = Vector2(-margem if esq else Tela.TELA.x + margem, rand_range(cfg["y"][0], cfg["y"][1]))
 			g["vel"] = rand_range(cfg["vel"][0], cfg["vel"][1])
 			g["onda"] = rand_range(0.18, 0.4)
-			g["amp"] = rand_range(18.0, 46.0) * (0.6 + g["esc"] * 0.4)
+			g["amp"] = rand_range(18.0, 46.0) * (0.6 + g["esc"] * 0.64)
 			g["fase"] = randf() * TAU
 			g["batendo"] = true
 			g["bate_t"] = rand_range(0.8, 1.6)
@@ -1452,7 +1454,7 @@ func _animar_aguia(g: Dictionary, delta: float) -> void:
 	cor = cor.linear_interpolate(Color(0.12, 0.12, 0.2), _noite * (0.85 - cfg["nevoa"] * 0.4))
 	cor.a = 1.0 - cfg["nevoa"] * 0.35
 	s.modulate = cor
-	var margem2 = 100.0 * g["esc"]
+	var margem2 = 150.0 * g["esc"]
 	if g["pos"].x < -margem2 - 1.0 or g["pos"].x > Tela.TELA.x + margem2 + 1.0:
 		s.visible = false
 		g["espera"] = rand_range(cfg["espera"][0], cfg["espera"][1])

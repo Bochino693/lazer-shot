@@ -53,10 +53,15 @@ const PADRAO = {
 	"arma/modo": "auto",
 	"arma/sensibilidade": 0.0,
 	"arma/compensar_aceleracao": true,
+	# A calibragem da seta (CONFIGURAÇÃO -> CALIBRAR): [escala x, escala y,
+	# deslocamento x, deslocamento y]; vazia = sem calibragem. E o alvo de
+	# partida no COMO JOGAR, que recoloca a mira a cada partida.
+	"arma/calib": [],
+	"arma/alvo_partida": true,
 	# A FOTO DO JOGADOR (webcam USB da TV Box): ligada, qual câmera, giro
 	# (0, 90, 180, 270) e espelho (scripts/foto_jogador.gd)
 	"camera/foto": true,
-	"camera/indice": 0,
+	"camera/indice": -1,           # -1 = AUTO (a primeira que abrir, da última para a primeira)
 	"camera/girar": 0,
 	"camera/espelhar": false,
 	"jogo/tempo_partida": 120,
@@ -542,7 +547,8 @@ func _criar_rotulo() -> void:
 func _posicionar_selo() -> void:
 	var tam = Estilo.fonte(28, false).get_string_size(_rotulo.text) + Vector2(56, 18)
 	_caixa.rect_size = tam
-	_caixa.rect_position = Vector2((Tela.TELA.x - tam.x) * 0.5, Tela.TELA.y - tam.y - 16.0)
+	# só aparece na tela inicial: à direita, longe do logo LAZER SHOT do fundo
+	_caixa.rect_position = Vector2(780.0 - tam.x * 0.5, Tela.TELA.y - tam.y - 16.0)
 	_caixa.rect_pivot_offset = tam * 0.5
 	_rotulo.rect_position = Vector2.ZERO
 	_rotulo.rect_size = tam
@@ -711,13 +717,20 @@ func soltar_efeitos(manter: Array = []) -> void:
 
 
 ## Toca uma música no barramento da música (um player por chamada; a tela
-## guarda e para).
+## guarda e para). A música nunca acaba enquanto a tela está aberta: se o
+## arquivo não tiver laço, ela recomeça sozinha ao terminar.
 func musica(pai: Node, stream: AudioStream, volume_db: float = 0.0) -> AudioStreamPlayer:
 	var p = AudioStreamPlayer.new()
 	p.bus = "Musica"
 	p.stream = stream
 	p.volume_db = volume_db
 	pai.add_child(p)
+	p.connect("finished", self, "_musica_acabou", [p])
 	if stream != null:
 		p.play()
 	return p
+
+
+func _musica_acabou(p: AudioStreamPlayer) -> void:
+	if is_instance_valid(p) and p.is_inside_tree() and not p.get_meta("parada", false):
+		p.play()

@@ -607,18 +607,18 @@ $SetaNula = $false
 $CameraNativa = $false
 try {
     $Originais = @(Get-Item -LiteralPath (Join-Path $PastaModelos "android_release.apk"), (Join-Path $PastaModelos "android_debug.apk"))
-    $Assinatura = ($Originais | ForEach-Object { "{0} {1} {2}" -f $_.Name, $_.Length, $_.LastWriteTimeUtc.Ticks }) -join "`n"
-    if ($DexCamera) { $Assinatura += "`ncamera " + (Get-FileHash -LiteralPath $DexCamera -Algorithm SHA256).Hash }
+    $AssinaturaModelos = ($Originais | ForEach-Object { "{0} {1} {2}" -f $_.Name, $_.Length, $_.LastWriteTimeUtc.Ticks }) -join "`n"
+    if ($DexCamera) { $AssinaturaModelos += "`ncamera " + (Get-FileHash -LiteralPath $DexCamera -Algorithm SHA256).Hash }
     $MarcaSemSeta = Join-Path $PastaSemSeta "sem_seta.txt"
     if ((Test-Path -LiteralPath $MarcaSemSeta) -and (Test-Path -LiteralPath $ModeloRelease) -and (Test-Path -LiteralPath $ModeloDebug) -and
-        ([IO.File]::ReadAllText($MarcaSemSeta).Trim() -eq $Assinatura)) {
+        ([IO.File]::ReadAllText($MarcaSemSeta).Trim() -eq $AssinaturaModelos)) {
         $SetaNula = $true
     } else {
         Diz "      Preparando os modelos do Lazer (seta escondida e camera; primeira vez: ~1 min)..." "Cyan"
         New-Item -ItemType Directory -Path $PastaSemSeta -Force | Out-Null
         Remove-Item -LiteralPath $MarcaSemSeta -Force -ErrorAction SilentlyContinue
         if ((Modelo-Do-Lazer $Originais[0].FullName $ModeloRelease $DexCamera) -and (Modelo-Do-Lazer $Originais[1].FullName $ModeloDebug $DexCamera)) {
-            [IO.File]::WriteAllText($MarcaSemSeta, $Assinatura, $Utf8)
+            [IO.File]::WriteAllText($MarcaSemSeta, $AssinaturaModelos, $Utf8)
             $SetaNula = $true
         }
     }
@@ -911,6 +911,7 @@ try {
         throw "O APK assinado saiu sem a assinatura v1 (META-INF). Envie o historico."
     }
     if ($Nomes -notcontains "lib/armeabi-v7a/libgodot_android.so") { throw "O APK assinado saiu sem o motor ARM." }
+    $CameraNoApk = $Nomes -contains "classes2.dex"
 } finally {
     $ZipApk.Dispose()
 }
@@ -939,6 +940,11 @@ Diz "SHA256: $Hash"
 Diz "Pacote: $Pacote (versao Mali-450; fica ao lado da versao 4.6, nao por cima)."
 Diz "Assinatura: $Assinatura, com a chave de sempre."
 Diz "Conferido: motor ARM 32 e 64 bits, scripts e imagens em ETC1 dentro do APK."
+if ($CameraNoApk) {
+    Diz "Camera: a foto do jogador esta no APK (na TV Box, permita a camera quando o Android perguntar)." "Green"
+} else {
+    Diz "Camera: SEM a foto do jogador neste APK (o d8 do Android SDK nao converteu a classe da camera; veja build\android\d8.log)." "Red"
+}
 Diz "O jogo gira por dentro: mantenha o HDMI deitado (1920x1080)."
 Diz "No pendrive: copie o APK e use 'Ejetar' no Windows antes de tirar o pendrive."
 
