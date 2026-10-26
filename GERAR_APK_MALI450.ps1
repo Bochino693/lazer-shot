@@ -276,6 +276,18 @@ function Rodar {
     return $Processo.ExitCode
 }
 
+# O Godot saiu derrubado pelo driver de video? 0x6E76.... ("nv") e o driver
+# da NVIDIA fechando o programa ("Error code 7" e parecidos); negativo
+# (0xC0000005 e outros) e o Godot caindo sozinho.
+function Saida-Do-Driver([int]$Codigo) {
+    return ((($Codigo -shr 16) -band 0xFFFF) -eq 0x6E76) -or ($Codigo -lt -1)
+}
+function Motivo-Da-Saida([int]$Codigo) {
+    if ((($Codigo -shr 16) -band 0xFFFF) -eq 0x6E76) { return (", 0x{0:X8}: o driver da placa de video NVIDIA fechou o Godot" -f $Codigo) }
+    if ($Codigo -lt -1) { return (", 0x{0:X8}: o Godot caiu" -f $Codigo) }
+    return ""
+}
+
 # Baixa um arquivo mostrando quanto ja veio.
 function Baixar([string]$Url, [string]$Destino, [double]$LimiteMinutos) {
     if (Test-Path -LiteralPath $Destino) { Remove-Item -LiteralPath $Destino -Force }
@@ -590,7 +602,12 @@ $LogImportacao = Join-Path $Saida "importacao.log"
 $Pck = Join-Path $Saida "importacao.pck"
 Diz ""
 Diz "[3/4] Importando imagens e sons (primeira vez: alguns minutos)..." "Cyan"
-$Argumentos = (@("--no-window", "--path", $Projeto, "--export-pack", "Android", $Pck) | ForEach-Object { Aspas $_ }) -join " "
+# --disable-render-loop: o editor do Godot nem desenha. A placa de video so
+# abre o OpenGL e fica parada (placa antiga com driver fraco, como a NVIDIA
+# GeForce 8400GS, caia no meio da montagem com "Error code 7"). O resultado
+# e o mesmo: APK conferido igual, arquivo por arquivo.
+$SemDesenhar = @("--no-window", "--disable-render-loop", "--resolution", "64x64")
+$Argumentos = (@($SemDesenhar + @("--path", $Projeto, "--export-pack", "Android", $Pck)) | ForEach-Object { Aspas $_ }) -join " "
 $Codigo = Rodar $Godot $Argumentos $LogImportacao 30 "O Godot esta importando as imagens e os sons." 0 $Latin1 $RuidoGodot
 if ($EstourouTempo) { throw "A importacao passou de 30 minutos e foi encerrada. Envie o historico." }
 if (Test-Path -LiteralPath $Pck) { Remove-Item -LiteralPath $Pck -Force }
@@ -611,7 +628,7 @@ if (Test-Path -LiteralPath $ApkAssinado) { Remove-Item -LiteralPath $ApkAssinado
 $LogApk = Join-Path $Saida "exportacao.log"
 Diz ""
 Diz "[4/4] Montando o APK..." "Cyan"
-$Argumentos = (@("--no-window", "--path", $Projeto, "--export", "Android", $ApkExportado) | ForEach-Object { Aspas $_ }) -join " "
+$Argumentos = (@($SemDesenhar + @("--path", $Projeto, "--export", "Android", $ApkExportado)) | ForEach-Object { Aspas $_ }) -join " "
 $Tentativa = 0
 while ($true) {
     $Tentativa++
@@ -621,13 +638,22 @@ while ($true) {
     # Sem APK (o Godot fechou sozinho, 0xC0000005 e parecidos): uma segunda
     # vez costuma passar.
     if (-not (Test-Path -LiteralPath $ApkExportado) -and $Tentativa -lt 2) {
-        Diz ("O APK nao saiu (codigo {0}). Tentando mais uma vez..." -f $Codigo) "Yellow"
+        Diz ("O APK nao saiu (codigo {0}{1}). Tentando mais uma vez..." -f $Codigo, (Motivo-Da-Saida $Codigo)) "Yellow"
         continue
     }
     break
 }
 $TextoApk = if (Test-Path -LiteralPath $LogApk) { [IO.File]::ReadAllText($LogApk) } else { "" }
 if (-not (Test-Path -LiteralPath $ApkExportado)) {
+    # as ultimas linhas do Godot (a janela nao mostra a lista de arquivos)
+    $Ultimas = @(Get-Content -LiteralPath $LogApk -Encoding UTF8 -ErrorAction SilentlyContinue | Where-Object { $_.Trim() -and $_ -notmatch '^\s*(ADDING|STORING|savepack):' }) | Select-Object -Last 15
+    if ($Ultimas.Count -gt 0) {
+        Diz "Ultimas linhas do Godot (exportacao.log):" "Yellow"
+        foreach ($L in $Ultimas) { Diz ("   " + $L) }
+    }
+    if (Saida-Do-Driver $Codigo) {
+        Diz "DICA: quem fechou o Godot foi o driver da placa de video (NVIDIA). Reinicie o PC, feche jogos e navegadores e rode de novo. Se continuar, reinstale o driver da placa (GeForce 8400GS: o ultimo e o 342.01) ou gere o APK em outro PC." "Yellow"
+    }
     if ($TextoApk -match "keystore|Keystore") { Diz "DICA: problema com a chave de depuracao ($Chave)." "Yellow" }
     if ($TextoApk -match "apksigner|adb|SDK") { Diz "DICA: o Godot confere o Android SDK ($Sdk): platform-tools (adb) e build-tools (apksigner)." "Yellow" }
     if ($TextoApk -match "template|Template") { Diz "DICA: apague a pasta $PastaModelos e rode de novo (os modelos baixam de novo)." "Yellow" }
