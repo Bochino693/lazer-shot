@@ -63,18 +63,426 @@ def enquadrar(im, corte_max=None, filtro=Image.LANCZOS):
     return im.crop((corte, 0, larg - corte, TELA_TV[1])).resize(TELA_TV, filtro)
 
 
-def fundo(nome_orig, nome_saida, nitidez=True, corte_max=None):
+def fundo(nome_orig, nome_saida, nitidez=True, corte_max=None, preparo=None):
     hd = HD / (Path(nome_orig).stem + "@hd.png")
     if hd.exists():
         im = Image.open(hd).convert("RGB")
     else:
         im = Image.open(ORIG / nome_orig).convert("RGB")
+    if preparo is not None:
+        im = preparo(im)
     im = enquadrar(im, corte_max)
     if nitidez and not hd.exists():
         im = im.filter(ImageFilter.UnsharpMask(radius=1.2, percent=60, threshold=2))
     im.save(SAIDA / nome_saida, quality=92, subsampling=0, optimize=True)
     print("fundo", nome_saida, "(alta)" if hd.exists() else "(1024)")
     return im
+
+
+def ceu_sem_astro(im, noite=False):
+    """O sol (ou a lua) pintado no fundo do Egito vira céu: o astro do jogo
+    é desenhado por cima, em camadas, e se põe atrás das pirâmides; no lugar
+    dele fica o céu (a cor de volta por inpainting suave, nuvens geradas e,
+    de noite, estrelas), sem a ponta da pirâmide do meio."""
+    import cv2
+    a = np.asarray(im.convert("RGB")).astype(np.float32)
+    h, w = a.shape[:2]
+    s = w / 1024.0
+    cx, cy = 512.0 * s, 300.0 * s
+    rx, ry = 182.0 * s, 160.0 * s
+    yy, xx = np.mgrid[0:h, 0:w].astype(np.float32)
+    dx, dy = xx - cx, yy - cy
+    e = np.sqrt((dx / rx) ** 2 + (dy / ry) ** 2)
+    buraco = (e < 1.3).astype(np.uint8)
+    k = int(8 * s)
+    pq = cv2.resize(a, (w // k, h // k), interpolation=cv2.INTER_AREA).astype(np.uint8)
+    mpq = cv2.resize(buraco * 255, (w // k, h // k), interpolation=cv2.INTER_NEAREST)
+    mpq = cv2.dilate(mpq, np.ones((3, 3), np.uint8))
+    base = cv2.inpaint(pq, mpq, 8, cv2.INPAINT_TELEA)
+    base = cv2.resize(base, (w, h), interpolation=cv2.INTER_CUBIC).astype(np.float32)
+    base = cv2.GaussianBlur(base, (0, 0), 10 * s)
+    # nuvens geradas (ruído suave em várias escalas, sem desenho repetido):
+    # o céu em volta do astro fica claro e enevoado, com textura viva
+    rng = np.random.RandomState(7)
+    ruido = np.zeros((h, w), np.float32)
+    amp = 1.0
+    for oit in range(5):
+        lado = int(6 * 2 ** oit)
+        r = rng.rand(lado * 3 // 2 + 2, lado + 2).astype(np.float32)
+        ruido += cv2.resize(r, (w, h), interpolation=cv2.INTER_CUBIC) * amp
+        amp *= 0.55
+    ruido = (ruido - ruido.mean()) / (ruido.std() + 1e-6)
+    # veios esticados na horizontal, como as nuvens do quadro
+    ruido = cv2.GaussianBlur(ruido, (0, 0), sigmaX=6 * s, sigmaY=2 * s)
+    lum = base.mean(axis=2, keepdims=True)
+    if noite:
+        # de noite as nuvens são veios claros e há estrelas
+        veio = np.clip(ruido - 0.6, 0, None)[..., None]
+        ceu = base * (1.0 + 0.12 * ruido[..., None]) + veio * np.array([60.0, 80.0, 120.0], np.float32) * 0.55
+        est = (rng.rand(h, w) > 0.99975).astype(np.float32)
+        est = cv2.GaussianBlur(est, (0, 0), 0.7 * s) * 900.0
+        ceu += est[..., None] * np.array([0.85, 0.9, 1.0], np.float32)
+    else:
+        ceu = base * (1.0 + 0.10 * ruido[..., None]) + np.clip(ruido[..., None] - 0.8, 0, None) * 0.18 * lum
+    alfa = np.clip((1.18 - e) / 0.18, 0, 1)
+    piramide = np.zeros((h, w), np.uint8)
+    cv2.fillPoly(piramide, [np.array([[508 * s, 443 * s], [298 * s, 742 * s], [718 * s, 742 * s]], np.int32)], 255)
+    piramide = cv2.GaussianBlur(piramide.astype(np.float32), (0, 0), 0.8 * s) / 255.0
+    alfa = (alfa * (1.0 - piramide))[..., None]
+    out = a * (1 - alfa) + np.clip(ceu, 0, 255) * alfa
+    return Image.fromarray(np.clip(out, 0, 255).astype(np.uint8), "RGB")
+
+
+def fundos_egito():
+    fundo("egito_fundo_sol.png", "fundo_egito_sol.jpg", preparo=ceu_sem_astro)
+    fundo("egito_fundo_lua.png", "fundo_egito_lua.jpg", preparo=lambda im: ceu_sem_astro(im, True))
+
+
+# ------------------------------------------------------------------ fanfarra
+def fanfarra_fim():
+    """O som do fim da partida (songs/fim_partida.wav): rufar da caixa,
+    fanfarra de metais subindo (tchan-tchan-tchan-TCHAAAN), o acorde final
+    com tímpanos, pratos e sinos brilhando, e aplausos. Tudo sintetizado
+    aqui (a 4.6 tocava end_game.mp3, um grave repetido sem ânimo)."""
+    import wave
+    SR = 44100
+    DUR = 6.2
+    N = int(SR * DUR)
+    rng = np.random.RandomState(42)
+    L = np.zeros(N); R = np.zeros(N)
+
+    def nota_hz(n):            # n: semitons a partir do A4
+        return 440.0 * 2 ** (n / 12.0)
+    C4, E4, G4 = -9, -5, -2
+    C5, D5, E5, F5, G5, A5 = 3, 5, 7, 8, 10, 12
+    C6 = 15
+
+    def put(sig, t0, pan=0.0, g=1.0):
+        i = int(t0 * SR)
+        n = min(len(sig), N - i)
+        if n <= 0: return
+        L[i:i + n] += sig[:n] * g * np.sqrt(0.5 * (1 - pan))
+        R[i:i + n] += sig[:n] * g * np.sqrt(0.5 * (1 + pan))
+
+    def env_adsr(n, a, d, s, r, dur):
+        t = np.arange(n) / SR
+        e = np.where(t < a, t / a, np.where(t < a + d, 1 - (1 - s) * (t - a) / d, s))
+        rel = np.clip((dur - t) / r, 0, 1)
+        return e * np.minimum(1.0, rel)
+
+    def metal(hz, dur, vol=1.0, brilho=1.0, vib=True):
+        """Metal (trompete) sintético: dente de serra aditivo, brilho que abre
+        no ataque, coro de 3 vozes e vibrato depois do ataque."""
+        n = int((dur + 0.25) * SR)
+        t = np.arange(n) / SR
+        out = np.zeros(n)
+        for det in (-0.004, 0.0, 0.0045):
+            f = hz * (1 + det)
+            vibr = 1 + (0.006 * np.sin(2 * np.pi * 5.6 * t) * np.clip((t - 0.18) / 0.2, 0, 1) if vib else 0)
+            fase = 2 * np.pi * np.cumsum(f * vibr) / SR
+            bri = 0.35 + 0.65 * np.exp(-t / 0.12) * brilho + 0.25 * brilho
+            k = 1
+            while k * f < 9000 and k <= 18:
+                out += np.sin(k * fase) / k * np.exp(-(k - 1) * (0.55 - 0.4 * np.minimum(bri, 1.2)))
+                k += 1
+        out /= 3.0
+        out *= env_adsr(n, 0.025, 0.12, 0.78, 0.18, dur + 0.05)
+        return out * vol
+
+    def timpano(hz, vol=1.0):
+        n = int(1.4 * SR); t = np.arange(n) / SR
+        f = hz * (1 + 0.25 * np.exp(-t / 0.03))
+        s = np.sin(2 * np.pi * np.cumsum(f) / SR) * np.exp(-t / 0.45)
+        s += 0.3 * np.sin(2 * np.pi * np.cumsum(f * 1.5) / SR) * np.exp(-t / 0.2)
+        s += rng.randn(n) * np.exp(-t / 0.012) * 0.25
+        return s * vol
+
+    def caixa(vol=1.0, dur=0.12):
+        n = int(dur * SR); t = np.arange(n) / SR
+        ruido = rng.randn(n)
+        ruido = ruido - np.convolve(ruido, np.ones(6) / 6, 'same')     # passa-alta
+        corpo = np.sin(2 * np.pi * 190 * t) * np.exp(-t / 0.03)
+        return (ruido * 0.7 + corpo * 0.5) * np.exp(-t / 0.045) * vol
+
+    def prato(vol=1.0, dur=2.6):
+        n = int(dur * SR); t = np.arange(n) / SR
+        r = rng.randn(n)
+        r = r - np.convolve(r, np.ones(3) / 3, 'same')
+        r = r - np.convolve(r, np.ones(3) / 3, 'same')
+        return r * np.exp(-t / 0.75) * (1 - np.exp(-t / 0.004)) * vol
+
+    def sino(hz, vol=1.0):
+        n = int(1.2 * SR); t = np.arange(n) / SR
+        s = np.sin(2 * np.pi * hz * t) * np.exp(-t / 0.45) + 0.4 * np.sin(2 * np.pi * hz * 2.76 * t) * np.exp(-t / 0.12)
+        s += 0.18 * np.sin(2 * np.pi * hz * 5.4 * t) * np.exp(-t / 0.05)
+        return s * (1 - np.exp(-t / 0.002)) * vol
+
+    def aplausos(t0, dur, vol=1.0):
+        """Aplausos: centenas de palmas curtas (ruído filtrado) em ritmo
+        aleatório, crescendo e diminuindo."""
+        n = int(dur * SR)
+        out_l = np.zeros(n); out_r = np.zeros(n)
+        taxa = 70.0
+        k = int(taxa * dur)
+        for _ in range(k):
+            i = int(rng.rand() ** 0.8 * (n - 2000))
+            m = int(SR * rng.uniform(0.006, 0.014))
+            tt = np.arange(m) / SR
+            palma = rng.randn(m) * np.exp(-tt / rng.uniform(0.003, 0.007))
+            palma = palma - np.convolve(palma, np.ones(4) / 4, 'same')
+            p = rng.uniform(-0.9, 0.9)
+            a = rng.uniform(0.3, 1.0)
+            out_l[i:i + m] += palma * a * np.sqrt(0.5 * (1 - p))
+            out_r[i:i + m] += palma * a * np.sqrt(0.5 * (1 + p))
+        t = np.arange(n) / SR
+        env = np.clip(t / 0.4, 0, 1) * np.clip((dur - t) / 1.6, 0, 1)
+        i0 = int(t0 * SR)
+        m = min(n, N - i0)
+        L[i0:i0 + m] += out_l[:m] * env[:m] * vol
+        R[i0:i0 + m] += out_r[:m] * env[:m] * vol
+
+    b = 60.0 / 132.0            # a batida
+    # rufar da caixa crescendo
+    t = 0.0
+    while t < 0.62:
+        put(caixa(0.25 + 0.75 * (t / 0.62), 0.08), t, rng.uniform(-0.2, 0.2), 0.32)
+        t += 0.032
+    put(timpano(nota_hz(C4 - 24)), 0.62, 0.0, 0.55)
+    put(prato(0.6, 1.4), 0.62, 0.3, 0.12)
+    # a fanfarra: tchan-tchan-tchan-TCHAAAN
+    t0 = 0.66
+    frase = [(G4, 0.5), (C5, 0.5), (E5, 0.5), (G5, 1.0), (E5, 0.5), (G5, 2.0)]
+    for nota, dur_b in frase:
+        d = dur_b * b * 0.92
+        put(metal(nota_hz(nota), d, 1.0, 1.0), t0, -0.25, 0.30)
+        put(metal(nota_hz(nota - 12), d, 0.8, 0.7), t0, 0.25, 0.20)      # oitava de baixo
+        if dur_b >= 1.0:
+            put(caixa(0.9), t0, 0.1, 0.35)
+        t0 += dur_b * b
+    # o acorde final, com tudo
+    tf = t0
+    acorde = [(C4, -0.5), (E4, 0.5), (G4, -0.3), (C5, 0.3), (E5, -0.1), (G5, 0.15), (C6, 0.0)]
+    for nota, p in acorde:
+        put(metal(nota_hz(nota), 2.4, 1.0, 1.15), tf, p, 0.20)
+    put(metal(nota_hz(C4 - 12), 2.4, 1.0, 0.6, False), tf, 0.0, 0.30)    # baixo
+    put(timpano(nota_hz(C4 - 24)), tf, -0.1, 0.8)
+    put(timpano(nota_hz(G4 - 36)), tf - b * 0.5, 0.1, 0.5)
+    put(prato(1.0, 3.0), tf, -0.3, 0.22)
+    put(prato(1.0, 3.0), tf + 0.01, 0.35, 0.18)
+    # brilho de sinos subindo por cima do acorde
+    for i, nota in enumerate([C6, C6 + 4, C6 + 7, C6 + 12, C6 + 16, C6 + 19, C6 + 24]):
+        put(sino(nota_hz(nota)), tf + 0.05 + i * 0.07, (-0.6 + i * 0.2), 0.12)
+    aplausos(tf - 0.1, DUR - tf + 0.1, 0.10)
+    # mistura: tira o DC, satura leve e normaliza a -1 dBFS
+    est = np.stack([L, R], 1)
+    est -= est.mean(0)
+    est = np.tanh(est * 1.4) / np.tanh(1.4)
+    est /= np.abs(est).max() / 10 ** (-1 / 20)
+    fim = int(0.03 * SR)
+    est[-fim:] *= np.linspace(1, 0, fim)[:, None]
+
+    with wave.open(str(RAIZ / "songs" / "fim_partida.wav"), "wb") as w:
+        w.setnchannels(2)
+        w.setsampwidth(2)
+        w.setframerate(SR)
+        w.writeframes((est * 32767).astype(np.int16).tobytes())
+    print("fanfarra do fim", round(est.shape[0] / SR, 2), "s")
+
+
+# ------------------------------------------------------------------ águia de lado
+# A águia do céu do Egito voando DE LADO (a da 4.6 é vista de baixo, de
+# cabeça para cima): falcão de Hórus de perfil, desenhado aqui no mesmo
+# estilo e cores; a asa de perto bate na frente do corpo, a de longe atrás.
+AG_K = 4                   # supersampling
+AG_W, AG_H = 160, 128      # quadro final
+MARROM = (74, 46, 26)
+MARROM_ESC = (48, 30, 18)
+MARROM_CLARO = (112, 74, 40)
+PEITO = (150, 104, 56)
+CABECA = (168, 116, 52)
+CABECA_CLARA = (214, 160, 78)
+BICO = (236, 186, 60)
+CONTORNO = (34, 20, 10)
+
+
+def _pena_shape(t):
+    """A asa no espaço (envergadura s 0..1, corda c): bordo de ataque e de
+    fuga; as pontas (primárias) separadas como dedos."""
+    lead = []
+    trail = []
+    n = 24
+    for i in range(n + 1):
+        s = i / n
+        # corda: larga no ombro, afina na ponta; o bordo de ataque recua
+        corda = 30 - 8 * s
+        frente = -6 * s * s
+        lead.append((s, frente))
+        trail.append((s, frente + corda))
+    return lead, trail
+
+
+def _asa_poligonos(ombro, dir_x, alcance_y, comprimento, escala_cor=1.0):
+    """Asa vista de lado: a envergadura vira altura (alcance_y = sen do
+    ângulo), a corda fica na horizontal (para trás = +x)."""
+    ox, oy = ombro
+    lead, trail = pena_shape(0)
+    pts = []
+    for s, c in lead:
+        pts.append((ox + c * AG_K * dir_x + s * 10 * AG_K * dir_x, oy - s * comprimento * alcance_y))
+    for s, c in reversed(trail):
+        pts.append((ox + c * AG_K * dir_x + s * 10 * AG_K * dir_x, oy - s * comprimento * alcance_y))
+    return pts
+
+
+def _quadro_aguia(teta, glide=False):
+    im = Image.new("RGBA", (AG_W * AG_K, AG_H * AG_K), (0, 0, 0, 0))
+    d = ImageDraw.Draw(im)
+    cx, cy = 78 * AG_K, 66 * AG_K
+    # a câmera um pouco abaixo da ave: a asa na horizontal ainda aparece
+    # um pouco (por baixo)
+    comp = 50 * AG_K
+    sen = math.sin(teta)
+    cos = math.cos(teta)
+    perto = sen * 0.92 - 0.28 * cos
+    longe = sen * 0.62 + 0.10 * cos
+    # -- asa de longe (atrás do corpo, mais escura)
+    ombro_l = (cx + 2 * AG_K, cy - 4 * AG_K)
+    _asa_aguia(d, ombro_l, longe, comp * 0.8, escuro=True)
+    # -- cauda
+    cauda = [(cx + 22 * AG_K, cy - 3 * AG_K), (cx + 50 * AG_K, cy - 9 * AG_K), (cx + 52 * AG_K, cy + 3 * AG_K), (cx + 22 * AG_K, cy + 6 * AG_K)]
+    d.polygon(cauda, fill=MARROM_ESC, outline=CONTORNO)
+    for i in range(4):
+        y0 = cy - 2 * AG_K + i * 2.5 * AG_K
+        d.line([(cx + 26 * AG_K, y0), (cx + 46 * AG_K, y0 - 5 * AG_K + i * 3.0 * AG_K)], fill=(60, 38, 22), width=AG_K)
+    # -- corpo (gota deitada) e peito claro
+    d.ellipse([cx - 22 * AG_K, cy - 11 * AG_K, cx + 28 * AG_K, cy + 9 * AG_K], fill=MARROM, outline=CONTORNO, width=AG_K)
+    d.ellipse([cx - 18 * AG_K, cy - 2 * AG_K, cx + 16 * AG_K, cy + 8 * AG_K], fill=PEITO)
+    # pés recolhidos
+    d.ellipse([cx + 10 * AG_K, cy + 4 * AG_K, cx + 20 * AG_K, cy + 10 * AG_K], fill=BICO)
+    # -- cabeça e bico (curvo, para a esquerda = frente)
+    hx, hy = cx - 26 * AG_K, cy - 9 * AG_K
+    d.ellipse([hx - 10 * AG_K, hy - 9 * AG_K, hx + 11 * AG_K, hy + 9 * AG_K], fill=CABECA, outline=CONTORNO, width=AG_K)
+    d.ellipse([hx - 7 * AG_K, hy - 6 * AG_K, hx + 6 * AG_K, hy + 2 * AG_K], fill=CABECA_CLARA)
+    bico = [(hx - 8 * AG_K, hy - 3 * AG_K), (hx - 18 * AG_K, hy + 0 * AG_K), (hx - 15 * AG_K, hy + 4 * AG_K), (hx - 9 * AG_K, hy + 3 * AG_K)]
+    d.polygon(bico, fill=BICO, outline=CONTORNO)
+    # olho (com a marca de Hórus)
+    d.ellipse([hx - 5 * AG_K, hy - 4 * AG_K, hx - 1 * AG_K, hy], fill=(20, 12, 6))
+    d.ellipse([hx - 4 * AG_K, hy - 3.5 * AG_K, hx - 3 * AG_K, hy - 2.5 * AG_K], fill=(255, 240, 200))
+    d.line([(hx - 3 * AG_K, hy), (hx - 2 * AG_K, hy + 6 * AG_K)], fill=(30, 18, 10), width=int(1.5 * AG_K))
+    # -- asa de perto (na frente do corpo)
+    ombro_p = (cx - 4 * AG_K, cy - 3 * AG_K)
+    _asa_aguia(d, ombro_p, perto, comp, escuro=False)
+    im = im.resize((AG_W, AG_H), Image.LANCZOS)
+    return im
+
+
+def _asa_aguia(d, ombro, alcance, comp, escuro):
+    ox, oy = ombro
+    n = 24
+    frente = []
+    tras = []
+    varre = 26 * AG_K          # a ponta fica para trás do ombro
+    for i in range(n + 1):
+        s = i / n
+        corda = (30 * (1.0 - 0.5 * s) + 6 * (1 - s) ** 3) * AG_K
+        xf = ox + varre * s ** 1.6 - 4 * AG_K * math.sin(s * math.pi)
+        y = oy - s * comp * alcance
+        frente.append((xf, y))
+        tras.append((xf + corda, y + 2 * AG_K * s * (1 if alcance >= 0 else -1)))
+    base = MARROM_ESC if escuro else MARROM
+    clara = (62, 40, 24) if escuro else MARROM_CLARO
+    contorno = frente + list(reversed(tras))
+    # primárias: 5 penas em leque saindo da ponta, ao longo da envergadura
+    ponta_f = frente[-1]
+    ponta_t = tras[-1]
+    dx = frente[-1][0] - frente[-6][0]
+    dy = frente[-1][1] - frente[-6][1]
+    L = math.hypot(dx, dy) or 1.0
+    ux, uy = dx / L, dy / L
+    comp_pena = max(10 * AG_K, abs(comp * alcance) * 0.28)
+    for k in range(5):
+        f = k / 4.0
+        bx = ponta_f[0] + (ponta_t[0] - ponta_f[0]) * f
+        by = ponta_f[1] + (ponta_t[1] - ponta_f[1]) * f
+        giro = (f - 0.3) * 0.55
+        vx = ux * math.cos(giro) - uy * math.sin(giro)
+        vy = ux * math.sin(giro) + uy * math.cos(giro)
+        if abs(alcance) < 0.12:
+            vx, vy = 1.0, 0.15 * (f - 0.5)
+        l = comp_pena * (1.0 - 0.18 * abs(f - 0.35))
+        ex, ey = bx + vx * l, by + vy * l
+        nx, ny = -vy * 2.6 * AG_K, vx * 2.6 * AG_K
+        d.polygon([(bx - nx, by - ny), (bx + nx, by + ny), (ex + nx * 0.25, ey + ny * 0.25), (ex - nx * 0.25, ey - ny * 0.25)],
+            fill=base, outline=CONTORNO)
+    d.polygon(contorno, fill=base, outline=CONTORNO)
+    # coberteiras: a faixa clara perto do bordo de ataque
+    faixa = frente[:20] + [(f[0] + (t[0] - f[0]) * 0.42, f[1] + (t[1] - f[1]) * 0.42) for f, t in zip(reversed(frente[:20]), reversed(tras[:20]))]
+    d.polygon(faixa, fill=clara)
+    # linhas das secundárias
+    for k in range(2, 20, 3):
+        fx, fy = frente[k]
+        tx, ty = tras[k]
+        d.line([(fx + (tx - fx) * 0.5, fy + (ty - fy) * 0.5), (tx, ty)], fill=CONTORNO, width=AG_K)
+
+
+# ciclo: 12 quadros de batida (a asa sobe e desce) + 1 planando, em 7 x 2
+def folha_aguia_lado():
+    quadros = []
+    for i in range(12):
+        f = i / 12.0
+        quadros.append(_quadro_aguia(math.radians(10 + 58 * math.cos(f * math.tau))))
+    quadros.append(_quadro_aguia(math.radians(14), True))
+    folha = Image.new("RGBA", (AG_W * 7, AG_H * 2), (0, 0, 0, 0))
+    for i, q in enumerate(quadros):
+        folha.alpha_composite(q, ((i % 7) * AG_W, (i // 7) * AG_H))
+    return folha
+
+
+def olho_recortado():
+    """As camadas do olho do astro (esclera e pálpebras) só existem onde o
+    furo do olho do disco pode mostrá-las, em qualquer posição que elas
+    andem (pálpebra de cima descendo, a de baixo subindo). Assim as quinas
+    retas delas nunca aparecem fora do círculo do disco. As medidas são as
+    de ASTRO em scripts/deserto.gd."""
+    E = 0.3125
+    o = np.array([-47.9 * E, -12.0 * E])
+    for astro in ["sol", "lua"]:
+        disco = np.asarray(Image.open(SAIDA / ("astro_%s_disco.png" % astro)).convert("RGBA")).astype(np.float32)
+        dh, dw = disco.shape[:2]
+        yy, xx = np.mgrid[0:dh, 0:dw]
+        dentro = np.hypot(xx - dw / 2 + 0.5, yy - dh / 2 + 0.5) < dw / 2 - 8.0   # sem a borda macia do disco
+        furo = dentro & (disco[:, :, 3] < 250)
+        pal_h = Image.open(SAIDA / ("astro_%s_palpebra.png" % astro)).height
+        # centro de cada camada (coords do olho) e quanto ela anda em y
+        camadas = {
+            "esclera": (o, [0.0]),
+            "palpebra": (o + np.array([0.0, -383.4 * E + pal_h * 0.5]), list(np.linspace(0.0, (263.6 + 0.03 * 342.2) * E, 24))),
+            "palpebra_baixo": (o + np.array([0.0, 394.9 * E]), list(np.linspace(-239.6 * E * 1.3, 0.0, 24))),
+        }
+        for nome, (centro, passos) in camadas.items():
+            arq = SAIDA / ("astro_%s_%s.png" % (astro, nome))
+            im = np.asarray(Image.open(arq).convert("RGBA")).astype(np.float32)
+            h, w = im.shape[:2]
+            vy, vx = np.mgrid[0:h, 0:w]
+            visto = np.zeros((h, w), bool)
+            for dy in passos:
+                # pixel da camada -> pixel do disco
+                px = np.round(centro[0] + (vx - w / 2) + dw / 2).astype(int)
+                py = np.round(centro[1] + dy + (vy - h / 2) + dh / 2).astype(int)
+                ok = (px >= 0) & (px < dw) & (py >= 0) & (py < dh)
+                v = np.zeros((h, w), bool)
+                v[ok] = furo[py[ok], px[ok]]
+                visto |= v
+            # folga de 3 px (borda macia do furo)
+            visto = np.asarray(Image.fromarray((visto * 255).astype(np.uint8)).filter(ImageFilter.MaxFilter(7))) > 0
+            im[:, :, 3] *= visto
+            Image.fromarray(im.astype(np.uint8), "RGBA").save(arq, optimize=True)
+    print("olho recortado no furo do disco")
+
+
+def aguia_de_lado():
+    folha_aguia_lado().save(SAIDA / "egito_aguia_lado.png", optimize=True)
+    print("águia de lado")
 
 
 # ------------------------------------------------------------------ folhas
@@ -635,8 +1043,7 @@ def main():
     fundo("fundo_init.png", "fundo_menu.jpg", corte_max=CORTE_MENU)
     brilhos_menu()
     fundo_abertura()
-    fundo("egito_fundo_sol.png", "fundo_egito_sol.jpg")
-    fundo("egito_fundo_lua.png", "fundo_egito_lua.jpg")
+    fundos_egito()
     mar = fundo("atlantis_fundo.png", "fundo_mar.jpg")
     fundo("back_new.png", "fundo_bar.jpg")
     raios_bar()
@@ -660,6 +1067,7 @@ def main():
     for astro in ["sol", "lua"]:
         for parte in ["disco", "esclera", "iris", "palpebra", "palpebra_baixo"]:
             copiar("egito_%s_%s.png" % (astro, parte), "astro_%s_%s.png" % (astro, parte), k)
+    olho_recortado()
     copiar("egito_cristal_morto_sol.png", "egito_cristal_morto_sol.png", 0.56)
     copiar("egito_cristal_morto_lua.png", "egito_cristal_morto_lua.png", 0.56)
     # águias: voo (11 quadros 256x160) e pousada (7 poses 160x128) em meia
@@ -668,6 +1076,8 @@ def main():
     pousada = Image.open(ORIG / "egito_aguia_pousada.png").convert("RGBA")
     pousada.resize((pousada.width // 2, pousada.height // 2), Image.LANCZOS).save(SAIDA / "egito_aguia_pousada.png", optimize=True)
     print("águias")
+    aguia_de_lado()
+    fanfarra_fim()
 
     # ---- alvos do Mar
     folhas_nitidas(dados)
@@ -890,6 +1300,18 @@ def escrever_imports():
 
 if __name__ == "__main__":
     if os.environ.get("SO_IMPORTS") == "1":
+        escrever_imports()
+    elif os.environ.get("SO_SONS") == "1":
+        fanfarra_fim()
+        escrever_imports()
+    elif os.environ.get("SO_EGITO") == "1":
+        fundos_egito()
+        k = ESCALA_FUNDO / 4.0
+        for astro in ["sol", "lua"]:
+            for parte in ["disco", "esclera", "iris", "palpebra", "palpebra_baixo"]:
+                copiar("egito_%s_%s.png" % (astro, parte), "astro_%s_%s.png" % (astro, parte), k)
+        olho_recortado()
+        aguia_de_lado()
         escrever_imports()
     elif os.environ.get("SO_ARENA") == "1":
         brilhos_arena()

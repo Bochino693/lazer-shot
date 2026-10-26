@@ -41,6 +41,9 @@ var _contadores: Label
 var _ultimo: Label
 var _desempenho: Label
 var _dica_rotacao: Label    # quem gira a tela agora (muda sozinho)
+var _camera_estado: Label = null
+var _camera_foto: Control = null
+var _camera_y = 0.0
 var _painel_caixa: Control
 var _mira: MiraDesenho
 var _saindo = false
@@ -93,6 +96,8 @@ func _montar() -> void:
 	_desempenho = null
 	if _pagina == "arma":
 		_montar_arma()
+	elif _pagina == "camera":
+		_montar_camera()
 	else:
 		_montar_principal()
 
@@ -153,16 +158,17 @@ func _montar_principal() -> void:
 	_volume("Efeitos", "audio/volume_fx")
 
 	_secao("ARMA E BOTÕES")
+	# o último botão recebido fica na linha do título da seção, à direita
+	_ultimo = Estilo.rotulo(_raiz, "Último botão recebido: —", 18, COR_APAGADO, 0, false, Label.ALIGN_RIGHT)
+	Estilo.colocar(_ultimo, Vector2(X0, _y - 26.0), Vector2(LARG - 8.0, 22))
 	_linha_sensibilidade()
 	_aprender("START na Zero Delay", "", "start")
 	_aprender("SELECT na Zero Delay", "ficha / crédito", "select")
-	_ultimo = Estilo.rotulo(_raiz, "Último botão recebido: —", 18, COR_APAGADO, 0, false)
-	Estilo.colocar(_ultimo, Vector2(X0, _y), Vector2(LARG, 26))
-	_y += 30.0
 
-	_secao("RANKING")
+	_secao("RANKING E FOTO")
 	_linha("Limpar o ranking", "apaga os 20 melhores (atire duas vezes)")
 	_botao("LIMPAR", Vector2(X0 + LARG - 190, _y - ALT_LINHA - 4 + Y_BOTAO), Vector2(178, ALT_BOTAO), 22, "_confirmado", ["ranking"])
+	_linha_foto()
 
 	_secao("CAIXA-PRETA")
 	_linha("Última sessão", Tela.resumo_sessao_anterior())
@@ -179,6 +185,69 @@ func _montar_principal() -> void:
 	_botao("PADRÃO", Vector2(X0 + 808, yr), Vector2(160, 70), 22, "_confirmado", ["padrao"])
 	var dica = Estilo.rotulo(_raiz, "F10 ou segure o SELECT 3 s na abertura para voltar aqui", 17, Color(COR_APAGADO.r, COR_APAGADO.g, COR_APAGADO.b, 0.7), 0, false)
 	Estilo.colocar(dica, Vector2(X0, yr + 80), Vector2(LARG, 26))
+
+
+## A foto do jogador na página principal (ligada/desligada) com o CÂMERA
+## ao lado (a página da webcam: teste, giro, espelho e o estado).
+func _linha_foto() -> void:
+	var y = _y
+	_linha("Foto do jogador", "a webcam fotografa no COMEÇOU! e a foto vai para o ranking")
+	var xd = X0 + LARG - 12.0
+	_botao("CÂMERA", Vector2(xd - 150, y + Y_BOTAO), Vector2(150, ALT_BOTAO), 20, "_ir_para", ["camera"], COR_DESTAQUE.darkened(0.35))
+	xd -= 160.0
+	for par in [[false, "DESLIGADA"], [true, "LIGADA"]]:
+		var b = _botao(par[1], Vector2(xd - 150, y + Y_BOTAO), Vector2(150, ALT_BOTAO), 19, "_escolher", ["camera/foto", par[0]])
+		b["ligado"] = ["camera/foto", par[0]]
+		xd -= 158.0
+
+
+## A página CÂMERA (a webcam da foto do jogador).
+func _montar_camera() -> void:
+	var titulo = Estilo.rotulo(_raiz, "CÂMERA", 48, COR_TEXTO, 0, true, Label.ALIGN_LEFT)
+	Estilo.colocar(titulo, Vector2(X0, 18), Vector2(560, 60))
+	var sub = Estilo.rotulo(_raiz, "a foto do jogador: a webcam USB fotografa no COMEÇOU! de cada partida", 20, COR_APAGADO, 0, false, Label.ALIGN_LEFT)
+	Estilo.colocar(sub, Vector2(X0, 76), Vector2(LARG, 28))
+	_y = 120.0
+
+	_secao("FOTO DO JOGADOR")
+	_opcoes("Foto do jogador", "aparece no resultado e no ranking", "camera/foto", [[true, "LIGADA"], [false, "DESLIGADA"]])
+	_opcoes("Qual câmera", "se a TV Box vê mais de uma", "camera/indice", [[0, "1ª"], [1, "2ª"], [2, "3ª"]])
+	_opcoes("Girar a foto", "webcam de lado ou de cabeça para baixo", "camera/girar", [[0, "0°"], [90, "90°"], [180, "180°"], [270, "270°"]])
+	_opcoes("Espelhar", "como num espelho", "camera/espelhar", [[false, "NÃO"], [true, "SIM"]])
+
+	_secao("TESTE")
+	_linha("Testar a câmera", "tira uma foto agora com o giro e o espelho escolhidos")
+	_botao("TESTAR", Vector2(X0 + LARG - 12 - 190, _y - ALT_LINHA - 4 + Y_BOTAO), Vector2(190, ALT_BOTAO), 22, "_testar_camera", [], COR_DESTAQUE.darkened(0.35))
+	_camera_estado = Estilo.rotulo(_raiz, "", 19, COR_APAGADO, 0, false, Label.ALIGN_LEFT)
+	_camera_estado.autowrap = true
+	Estilo.colocar(_camera_estado, Vector2(X0, _y + 4), Vector2(LARG, 54))
+	_camera_y = _y + 70.0
+	if not FotoJogador.is_connected("foto_pronta", self, "_camera_testou"):
+		FotoJogador.connect("foto_pronta", self, "_camera_testou")
+	if FotoJogador.ultima_textura != null:
+		_camera_testou(FotoJogador.ultima_textura)
+
+	var yr = Tela.TELA.y - 128.0
+	_aviso = Estilo.rotulo(_raiz, "", 22, COR_APAGADO, 0, false)
+	Estilo.colocar(_aviso, Vector2(X0, yr - 40), Vector2(LARG, 32))
+	_botao("VOLTAR", Vector2((Tela.TELA.x - 300.0) * 0.5, yr + 30), Vector2(300, 70), 28, "_ir_para", ["principal"], COR_OK)
+
+
+func _testar_camera() -> void:
+	if not FotoJogador.ligada():
+		_mostrar_aviso("Câmera indisponível: " + FotoJogador.status(), COR_APAGADO)
+		return
+	FotoJogador.preparar()
+	FotoJogador.fotografar()
+	_mostrar_aviso("Fotografando...", COR_TEXTO)
+
+
+func _camera_testou(tex: Texture) -> void:
+	if _pagina != "camera" or not is_instance_valid(_raiz):
+		return
+	if is_instance_valid(_camera_foto):
+		_camera_foto.queue_free()
+	_camera_foto = FotoJogador.moldura(_raiz, Vector2(Tela.TELA.x * 0.5, _camera_y + 230.0), 380.0, tex, -2.0, "TESTE")
 
 
 ## A página ARMA E MIRA.
@@ -828,6 +897,8 @@ func _process(delta: float) -> void:
 		_desempenho.text = "Agora: %d quadros/s  ·  memória %d MB  ·  vídeo %d MB  ·  tela %dx%d (%s)" % [int(round(Tela.fps())),
 			int(Tela.memoria_mb()), int(Tela.memoria_video_mb()), int(Tela.janela().x), int(Tela.janela().y),
 			"Android gira" if Tela.android_gira else ("jogo gira %d" % Tela.giro if Tela.giro != 0 else "sem giro")]
+	if is_instance_valid(_camera_estado) and int(_t * 2.0) != int((_t - delta) * 2.0):
+		_camera_estado.text = "Estado: " + FotoJogador.status()
 	if is_instance_valid(_dica_rotacao) and int(_t * 2.0) != int((_t - delta) * 2.0):
 		_dica_rotacao.text = "agora: " + Tela.quem_gira()
 	# alvos de teste acertados apagam devagar

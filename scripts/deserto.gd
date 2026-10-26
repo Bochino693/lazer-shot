@@ -71,16 +71,25 @@ const BRILHOS_CRISTAL = [Vector2(506, 634), Vector2(466, 721), Vector2(548, 721)
 	Vector2(527, 846), Vector2(505, 893), Vector2(461, 944), Vector2(551, 944)]
 const SAIDAS_DE_TRAS = [Vector2(507, 760), Vector2(209, 880), Vector2(812, 880)]
 const HORIZONTE = 700.0
+# pirâmides e chão (px da imagem 4.6): redesenhados por cima do astro, que
+# se põe e nasce atrás deles
+const POLI_HORIZONTE = [Vector2(224, 516), Vector2(200, 550), Vector2(200, 998), Vector2(822, 998), Vector2(822, 574),
+	Vector2(778, 514), Vector2(770, 518), Vector2(690, 632), Vector2(666, 660), Vector2(636, 624), Vector2(510, 444),
+	Vector2(502, 448), Vector2(382, 620), Vector2(348, 660), Vector2(336, 660), Vector2(326, 650), Vector2(230, 514)]
+const POENTE_Y = 880.0           # centro do astro escondido atrás do horizonte (px 4.6)
+const DESCE = 2.6                # s do sol (ou da lua) se pondo
+const SOBE = 2.8                 # s do outro nascendo
+const ESPERA_NASCER = 1.5        # s entre um começar a descer e o outro a subir
 # olho do astro (px das texturas 4x da 4.6, a partir do centro do disco)
 const ASTRO = {"olho": Vector2(-47.9, -12.0), "u": 342.2, "ux": 479.1, "iris": Vector2(0.0, -13.7),
 	"palpebra_y": -383.4, "abre": 263.6, "baixo_y": 394.9, "sobe": 239.6}
 const ESCALA_ASTRO = 0.3125      # as texturas do astro saem em 1,25/4 da 4.6
 const HUMORES = {
-	"calmo": {"topo": 0.30, "baixo": 0.12, "alcance": 0.55, "vel": 5.0, "mira": false, "piscar": Vector2(3.0, 6.0)},
+	"calmo": {"topo": 0.16, "baixo": 0.10, "alcance": 0.55, "vel": 5.0, "mira": false, "piscar": Vector2(3.0, 6.0)},
 	"feliz": {"topo": 0.08, "baixo": 0.52, "alcance": 0.35, "vel": 6.0, "mira": false, "piscar": Vector2(2.5, 5.0)},
 	"radiante": {"topo": 0.10, "baixo": 0.66, "alcance": 0.25, "vel": 7.0, "mira": false, "piscar": Vector2(2.0, 4.0)},
-	"atento": {"topo": 0.18, "baixo": 0.24, "alcance": 1.0, "vel": 14.0, "mira": true, "piscar": Vector2(4.5, 8.0)},
-	"bravo": {"topo": 0.50, "baixo": 0.28, "alcance": 0.7, "vel": 10.0, "mira": true, "piscar": Vector2(5.0, 9.0)},
+	"atento": {"topo": 0.10, "baixo": 0.22, "alcance": 1.0, "vel": 14.0, "mira": true, "piscar": Vector2(4.5, 8.0)},
+	"bravo": {"topo": 0.42, "baixo": 0.28, "alcance": 0.7, "vel": 10.0, "mira": true, "piscar": Vector2(5.0, 9.0)},
 	"surpreso": {"topo": 0.04, "baixo": 0.0, "alcance": 0.3, "vel": 18.0, "mira": false, "piscar": Vector2(5.0, 8.0)},
 }
 
@@ -118,6 +127,8 @@ var spawn_t = 0.0
 var _f_sol = {}
 var _f_lua = {}
 var _fundo_lua: Sprite
+var _horizonte_sol: Polygon2D
+var _horizonte_lua: Polygon2D
 var _noite = 0.0
 var _astros = {}
 var _humor = "calmo"
@@ -153,6 +164,12 @@ var _furos: Node2D
 var _poeira: Particulas
 var _brilhos = []
 var _aguias = []
+var _ceu_noite: Node2D           # estrelas piscando e a estrela cadente
+var _estrelas = []
+var _cadente: Sprite
+var _cadente_t = 4.0
+var _areia: Particulas           # rajadas de areia de dia
+var _rajada_t = 5.0
 var _t = 0.0
 
 var _som_tiro_lua: AudioStream
@@ -205,19 +222,41 @@ func _montar_cenario() -> void:
 	_som_aguia = load("res://songs/aguia.wav")
 	_som_aguia_noite = load("res://songs/aguia_noite.wav")
 
-	fundo_sprite("fundo_egito_sol")
+	var fundo_sol = fundo_sprite("fundo_egito_sol")
 	_fundo_lua = fundo_sprite("fundo_egito_lua")
 	_fundo_lua.modulate.a = 0.0
 	_fundo_lua.visible = false
+
+	# o céu da noite: estrelas que piscam e, de vez em quando, uma cadente
+	# (atrás do astro e das pirâmides)
+	_ceu_noite = Node2D.new()
+	_ceu_noite.visible = false
+	cenario.add_child(_ceu_noite)
+	for i in 16:
+		var pe = Vector2(rand_range(120.0, 904.0), rand_range(70.0, 560.0))
+		var st = luz_sprite("fx_estrela", _ceu_noite, pe, rand_range(12.0, 26.0), Color(0.85, 0.9, 1.0, 0.0))
+		st.rotation = randf() * PI
+		_estrelas.append({"no": st, "fase": randf() * TAU, "vel": rand_range(1.2, 3.6), "brilho": rand_range(0.35, 0.9)})
+	_cadente = luz_sprite("fx_rastro", _ceu_noite, Vector2.ZERO, 260.0, Color(0.9, 0.95, 1.0, 0.0))
+	_cadente.scale.y *= 0.6
+	_cadente.visible = false
 
 	# o astro: luz em volta, raios girando e o olho vivo
 	for a in [MODO_SOL, MODO_LUA]:
 		_astros[a] = _criar_astro(a)
 	_astros[MODO_LUA]["raiz"].visible = false
 
-	# águias planando no céu
+	# aves de longe: atrás das pirâmides (somem atrás delas), pequenas,
+	# lentas e apagadas na névoa
 	for i in 2:
-		_aguias.append(_criar_aguia(i))
+		_aguias.append(_criar_aguia(i, PLANO_LONGE))
+	# o horizonte por cima do astro (a mesma imagem do fundo, recortada)
+	_horizonte_sol = _horizonte(fundo_sol)
+	_horizonte_lua = _horizonte(_fundo_lua)
+	_horizonte_lua.visible = false
+	# aves do meio e de perto: na frente das pirâmides
+	_aguias.append(_criar_aguia(2, PLANO_MEIO))
+	_aguias.append(_criar_aguia(3, PLANO_PERTO))
 
 	# furos de bala (areia e pedra)
 	_furos = Node2D.new()
@@ -273,6 +312,10 @@ func _montar_cenario() -> void:
 	_poeira.somar = true
 	_poeira.add_to_group("efeito_opcional")
 	cenario.add_child(_poeira)
+	# rajadas de vento levantando areia rente ao chão (de dia)
+	_areia = Particulas.new()
+	_areia.add_to_group("efeito_opcional")
+	cenario.add_child(_areia)
 
 
 func _criar_astro(a: String) -> Dictionary:
@@ -289,14 +332,74 @@ func _criar_astro(a: String) -> Dictionary:
 	var o: Vector2 = ASTRO["olho"] * ESCALA_ASTRO
 	var esclera = _parte(olho, "astro_%s_esclera" % a, o)
 	var iris = _parte(olho, "astro_%s_iris" % a, o + ASTRO["iris"] * ESCALA_ASTRO)
+	# a pupila (dilata no escuro e com a emoção) e o brilho da luz no olho
+	var pupila = Node2D.new()
+	pupila.position = iris.position
+	pupila.set_meta("r", 0.0)
+	pupila.connect("draw", self, "_desenhar_pupila", [pupila])
+	olho.add_child(pupila)
 	var baixo = _parte(olho, "astro_%s_palpebra_baixo" % a, o + Vector2(0, ASTRO["baixo_y"]) * ESCALA_ASTRO)
 	var palp_tex: Texture = Estilo.tex("astro_%s_palpebra" % a)
 	var palpebra = _parte(olho, "astro_%s_palpebra" % a, o + Vector2(0, ASTRO["palpebra_y"] * ESCALA_ASTRO + palp_tex.get_height() * 0.5))
+	# a pele da pálpebra no tom do disco (sem a faixa clara que destacava)
+	palpebra.modulate = Color(0.86, 0.80, 0.74) if a == MODO_SOL else Color(0.84, 0.85, 0.90)
+	baixo.modulate = palpebra.modulate
 	var disco = _parte(olho, "astro_%s_disco" % a, Vector2.ZERO)
-	return {"raiz": raiz, "halo": halo, "raios": raios, "iris": iris, "palpebra": palpebra, "baixo": baixo, "disco": disco,
+	return {"raiz": raiz, "halo": halo, "raios": raios, "iris": iris, "pupila": pupila, "palpebra": palpebra, "baixo": baixo, "disco": disco,
 		"iris_0": iris.position, "palpebra_0": palpebra.position, "baixo_0": baixo.position,
 		"olhar": Vector2.ZERO, "alvo": Vector2.ZERO, "prox_olhar": 1.0, "piscar_t": rand_range(1.5, 3.5), "fase": -1.0,
-		"topo": 0.3, "baixo_v": 0.12, "c": c}
+		"topo": 0.16, "baixo_v": 0.10, "c": c, "sono": 0.0, "sono_alvo": 0.0, "pupila_r": 20.0, "dupla": false,
+		"tremor": Vector2.ZERO, "tremor_t": 0.0}
+
+
+## A pupila por cima da da imagem (só cresce dela para fora) e o brilho
+## da luz, parado em cima e à esquerda (o olho anda, o reflexo não gira).
+func _desenhar_pupila(no: Node2D) -> void:
+	var r: float = no.get_meta("r")
+	if r > 20.5:
+		no.draw_circle(Vector2.ZERO, r, Color(0.02, 0.015, 0.01))
+	no.draw_circle(Vector2(-9.0, -10.0), 5.5, Color(1, 1, 1, 0.85))
+	no.draw_circle(Vector2(8.0, 9.0), 2.4, Color(1, 1, 1, 0.55))
+
+
+## O horizonte (pirâmides e chão) redesenhado por cima do astro, com a
+## própria imagem do fundo: o sol se põe e a lua nasce atrás das pirâmides.
+func _horizonte(f: Sprite) -> Polygon2D:
+	var p = Polygon2D.new()
+	p.texture = f.texture
+	var pts = PoolVector2Array()
+	var uvs = PoolVector2Array()
+	for q in POLI_HORIZONTE:
+		var t = tela(q)
+		pts.append(t)
+		uvs.append(t / f.scale.x)
+	p.polygon = pts
+	p.uv = uvs
+	# fora da troca do dia só as pirâmides até o horizonte importam (o astro
+	# está lá em cima): o recorte baixo economiza pintura na Mali-450
+	var corte = PoolVector2Array([Vector2(-10, -10), Vector2(Tela.TELA.x + 10, -10),
+		Vector2(Tela.TELA.x + 10, tela(Vector2(0, 722)).y), Vector2(-10, tela(Vector2(0, 722)).y)])
+	var baixo = Geometry.intersect_polygons_2d(pts, corte)
+	if baixo.size() == 1:
+		var uvs2 = PoolVector2Array()
+		for q in baixo[0]:
+			uvs2.append(q / f.scale.x)
+		p.set_meta("completo", [pts, uvs])
+		p.set_meta("baixo", [baixo[0], uvs2])
+		p.polygon = baixo[0]
+		p.uv = uvs2
+	cenario.add_child(p)
+	return p
+
+
+## O horizonte inteiro só enquanto um astro se põe ou nasce.
+func _horizonte_inteiro(sim: bool) -> void:
+	for p in [_horizonte_sol, _horizonte_lua]:
+		var k = "completo" if sim else "baixo"
+		if p.has_meta(k):
+			var par: Array = p.get_meta(k)
+			p.polygon = par[0]
+			p.uv = par[1]
 
 
 func _parte(pai: Node2D, nome: String, pos: Vector2) -> Sprite:
@@ -307,13 +410,29 @@ func _parte(pai: Node2D, nome: String, pos: Vector2) -> Sprite:
 	return s
 
 
-func _criar_aguia(i: int) -> Dictionary:
+const PLANO_LONGE = 0
+const PLANO_MEIO = 1
+const PLANO_PERTO = 2
+# por plano: tamanho, velocidade (px/s), altura na tela, névoa, espera
+const PLANOS = [
+	{"esc": [0.30, 0.42], "vel": [42.0, 62.0], "y": [470.0, 700.0], "nevoa": 0.5, "espera": [3.0, 9.0], "bate": 1.7},
+	{"esc": [0.62, 0.80], "vel": [95.0, 135.0], "y": [230.0, 520.0], "nevoa": 0.18, "espera": [5.0, 13.0], "bate": 2.1},
+	{"esc": [1.15, 1.45], "vel": [190.0, 250.0], "y": [170.0, 640.0], "nevoa": 0.0, "espera": [12.0, 26.0], "bate": 2.6},
+]
+
+
+func _criar_aguia(i: int, plano: int) -> Dictionary:
 	var s = Sprite.new()
-	s.texture = Estilo.tex("egito_aguia")
-	s.hframes = 11
+	s.texture = Estilo.tex("egito_aguia_lado")
+	s.hframes = 7
+	s.vframes = 2
+	s.frame = 12
 	s.visible = false
 	cenario.add_child(s)
-	return {"no": s, "espera": 2.0 + i * 5.0, "t": 0.0, "dur": 9.0, "de": Vector2.ZERO, "ate": Vector2.ZERO, "esc": 0.8, "bate": 0.0}
+	var cfg: Dictionary = PLANOS[plano]
+	return {"no": s, "plano": plano, "cfg": cfg, "espera": rand_range(1.0, 4.0) + i * 3.0, "pos": Vector2.ZERO, "dir": 1.0,
+		"vel": 100.0, "fase": 0.0, "onda": 0.5, "amp": 30.0, "batendo": false, "bate_t": 0.0, "plana_t": 0.0, "quadro": 0.0,
+		"esc": 1.0, "vy": 0.0}
 
 
 # ------------------------------------------------------------ partida
@@ -343,34 +462,55 @@ func _jogo(delta: float) -> void:
 	_mover_alvos(delta)
 
 
+## O dia vira noite (e volta): o astro de agora fecha o olho e se põe
+## atrás das pirâmides, o céu escurece (ou clareia) e o outro nasce do
+## mesmo lugar, abrindo o olho. Os dois ficam inteiros o tempo todo (sem
+## transparência: nada de imagem por trás aparecendo).
 func _trocar_modo() -> void:
 	var antigo = modo
 	modo = MODO_LUA if modo == MODO_SOL else MODO_SOL
 	avisos.instrucao("MODO " + modo.to_upper(), (COR_SOL if modo == MODO_SOL else COR_LUA).linear_interpolate(Color.white, 0.3))
 	_troca_t = 0.0
-	var sai: Node2D = _astros[antigo]["raiz"]
-	var entra: Node2D = _astros[modo]["raiz"]
+	var d_sai: Dictionary = _astros[antigo]
+	var d_entra: Dictionary = _astros[modo]
+	var sai: Node2D = d_sai["raiz"]
+	var entra: Node2D = d_entra["raiz"]
 	var base = tela(CENTRO_ASTRO)
+	var poente = Vector2(base.x, tela(Vector2(0, POENTE_Y)).y)
+	d_sai["sono_alvo"] = 1.0
+	d_entra["sono"] = 1.0
+	d_entra["sono_alvo"] = 1.0
 	entra.visible = true
-	entra.position = base + Vector2(0, 170)
-	entra.modulate.a = 0.0
+	entra.position = poente
+	entra.modulate.a = 1.0
 	_fundo_lua.visible = true
+	_horizonte_lua.visible = true
+	_horizonte_inteiro(true)
 	var tw = create_tween().set_parallel(true)
-	tw.tween_property(sai, "position", base + Vector2(0, 170), 1.6).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
-	tw.tween_property(sai, "modulate:a", 0.0, 1.4)
-	tw.tween_property(entra, "position", base, 1.8).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT).set_delay(0.5)
-	tw.tween_property(entra, "modulate:a", 1.0, 1.4).set_delay(0.5)
-	tw.tween_property(_fundo_lua, "modulate:a", 1.0 if modo == MODO_LUA else 0.0, 2.0)
-	tw.tween_property(self, "_noite", 1.0 if modo == MODO_LUA else 0.0, 2.0)
+	tw.tween_property(sai, "position", poente, DESCE).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+	tw.tween_property(entra, "position", base, SOBE).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT).set_delay(ESPERA_NASCER)
+	tw.tween_property(_fundo_lua, "modulate:a", 1.0 if modo == MODO_LUA else 0.0, 2.6).set_delay(0.5)
+	tw.tween_property(self, "_noite", 1.0 if modo == MODO_LUA else 0.0, 2.6).set_delay(0.5)
+	tw.tween_callback(self, "_acordar", [d_entra]).set_delay(ESPERA_NASCER + SOBE * 0.55)
 	tw.chain().tween_callback(self, "_troca_feita", [sai])
 	_cristal_morto.texture = Estilo.tex("egito_cristal_morto_%s" % modo)
-	clarao(Color(1.0, 0.85, 0.6, 0.18) if modo == MODO_SOL else Color(0.5, 0.65, 1.0, 0.18), 0.6)
+	clarao(Color(1.0, 0.85, 0.6, 0.12) if modo == MODO_SOL else Color(0.5, 0.65, 1.0, 0.12), 0.8)
+
+
+func _acordar(d: Dictionary) -> void:
+	d["sono_alvo"] = 0.0
 
 
 func _troca_feita(sai: Node2D) -> void:
 	sai.visible = false
+	_horizonte_inteiro(false)
+	for a in _astros:
+		if _astros[a]["raiz"] == sai:
+			_astros[a]["sono"] = 0.0
+			_astros[a]["sono_alvo"] = 0.0
 	if modo == MODO_SOL:
 		_fundo_lua.visible = false
+		_horizonte_lua.visible = false
 
 
 # ------------------------------------------------------------ brasões
@@ -1041,8 +1181,16 @@ func _sempre(delta: float) -> void:
 			continue
 		d["raios"].rotation += delta * (0.12 if a == MODO_SOL else 0.05)
 		var c: Color = d["c"]
-		d["halo"].modulate = Color(c.r, c.g, c.b, 0.42 + 0.22 * e.x + 0.15 * e.y)
+		# perto do horizonte o sol avermelha (poente) e a lua amarela
+		var base_y = tela(CENTRO_ASTRO).y
+		var baixo_k = clamp((d["raiz"].position.y - base_y) / (tela(Vector2(0, POENTE_Y)).y - base_y), 0.0, 1.0)
+		var poente_c = Color(1.0, 0.42, 0.16) if a == MODO_SOL else Color(1.0, 0.86, 0.6)
+		c = c.linear_interpolate(poente_c, baixo_k * 0.8)
+		d["halo"].modulate = Color(c.r, c.g, c.b, (0.42 + 0.22 * e.x + 0.15 * e.y) * (1.0 + 0.4 * baixo_k))
+		d["raios"].modulate.a = (0.35 if a == MODO_SOL else 0.16) * (1.0 - 0.7 * baixo_k)
 		_animar_olho(d, delta)
+	_horizonte_lua.modulate.a = _fundo_lua.modulate.a
+	_animar_ceu(delta)
 	# cristal, feixes e obeliscos: a energia
 	_atualizar_energia(delta, e)
 	# brilhos que piscam (sem energia, o cristal e as pontas não cintilam)
@@ -1072,6 +1220,46 @@ func _sempre(delta: float) -> void:
 		if _reacao_t <= 0.0:
 			_reacao = ""
 	_erros_recentes = max(0.0, _erros_recentes - delta / 3.5)
+
+
+## As estrelas piscam de noite e às vezes uma cadente risca o céu; de dia o
+## vento levanta rajadas de areia rente ao chão.
+func _animar_ceu(delta: float) -> void:
+	if _noite > 0.05:
+		_ceu_noite.visible = true
+		for st in _estrelas:
+			st["fase"] += delta * st["vel"]
+			st["no"].modulate.a = _noite * st["brilho"] * (0.55 + 0.45 * sin(st["fase"]))
+		_cadente_t -= delta
+		if _cadente_t <= 0.0 and not _cadente.visible and Maquina.fator_efeitos() > 0.6:
+			_cadente_t = rand_range(5.0, 12.0)
+			var de = Vector2(rand_range(160.0, 860.0), rand_range(70.0, 260.0))
+			var dir = Vector2(-1.0 if de.x > 512.0 else 1.0, rand_range(0.35, 0.6)).normalized()
+			_cadente.position = de
+			_cadente.rotation = dir.angle()
+			_cadente.modulate.a = 0.0
+			_cadente.visible = true
+			var tw = create_tween().set_parallel(true)
+			tw.tween_property(_cadente, "position", de + dir * rand_range(380.0, 520.0), 0.75).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+			tw.tween_property(_cadente, "modulate:a", 0.95 * _noite, 0.15)
+			tw.tween_property(_cadente, "modulate:a", 0.0, 0.4).set_delay(0.35)
+			tw.chain().tween_callback(_cadente, "hide")
+	elif _ceu_noite.visible:
+		_ceu_noite.visible = false
+	_rajada_t -= delta
+	if _rajada_t <= 0.0:
+		_rajada_t = rand_range(7.0, 14.0)
+		if _noite < 0.5:
+			var esq = randf() < 0.5
+			var c = Color(0.95, 0.78, 0.50, 0.24)
+			var c1 = Color(0.95, 0.78, 0.50, 0.0)
+			for i in int(16 * Maquina.fator_efeitos()):
+				var y = rand_range(1180.0, 1700.0)
+				# nasce na borda (as partículas somem a 80 px fora da tela)
+				var p = Vector2(rand_range(-70.0, 0.0) if esq else Tela.TELA.x + rand_range(0.0, 70.0), y)
+				var v = Vector2((1.0 if esq else -1.0) * rand_range(260.0, 460.0), rand_range(-30.0, 10.0))
+				_areia.soltar(p, v, rand_range(2.4, 3.6), rand_range(60.0, 110.0), rand_range(130.0, 200.0), c, c1, Estilo.tex("fx_nuvem"),
+					-6.0, 0.15, rand_range(-0.6, 0.6))
 
 
 func _regenerar_cristal() -> void:
@@ -1128,85 +1316,146 @@ func _olhar_para(d: Dictionary, p: Vector2, alcance: float) -> Vector2:
 	return Vector2(clamp(dd.x / 320.0, -1.0, 1.0) * 0.36 * alcance * ASTRO["ux"], clamp(dd.y / 420.0, -1.0, 1.0) * 0.05 * ASTRO["u"]) * ESCALA_ASTRO
 
 
+## O olho vivo: olha em sacadas rápidas (como olho de verdade) e fica
+## parado com um tremor mínimo; quando está atento acompanha a mira. Pisca
+## (às vezes duas vezes seguidas), a pupila abre no escuro e na alegria e
+## fecha no susto. Na troca do dia ele fecha devagar (sono) e abre ao nascer.
 func _animar_olho(d: Dictionary, delta: float) -> void:
-	var h: Dictionary = HUMORES.get(_humor_atual(), HUMORES["calmo"])
+	var nome_h = _humor_atual()
+	var h: Dictionary = HUMORES.get(nome_h, HUMORES["calmo"])
 	var u: float = ASTRO["u"] * ESCALA_ASTRO
 	_espiar_t = max(0.0, _espiar_t - delta)
+	var seguindo = false
 	if _espiar_t > 0.0:
 		d["alvo"] = _olhar_para(d, _espiar_p, 1.0)
+		seguindo = true
 	elif h["mira"]:
 		d["alvo"] = _olhar_para(d, MiraGlobal.mira(), h["alcance"])
+		seguindo = true
 	else:
 		d["prox_olhar"] -= delta
 		if d["prox_olhar"] <= 0.0:
-			d["prox_olhar"] = rand_range(1.2, 3.0)
-			if randf() < 0.3:
+			d["prox_olhar"] = rand_range(0.7, 2.6)
+			if randf() < 0.35:
 				d["alvo"] = _olhar_para(d, MiraGlobal.mira(), h["alcance"])
 			else:
-				var e: Vector2 = [Vector2(0, 0), Vector2(-0.30, 0.0), Vector2(0.30, 0.0), Vector2(-0.22, -0.04), Vector2(0.22, -0.04), Vector2(0.0, -0.04)][randi() % 6]
+				var e: Vector2 = [Vector2(0, 0), Vector2(-0.30, 0.0), Vector2(0.30, 0.0), Vector2(-0.22, -0.04), Vector2(0.22, -0.04), Vector2(0.0, -0.04), Vector2(-0.12, 0.03), Vector2(0.12, 0.03)][randi() % 8]
 				d["alvo"] = Vector2(e.x * h["alcance"] * ASTRO["ux"] * 1.2 * ESCALA_ASTRO, e.y * u)
-	d["olhar"] = d["olhar"].linear_interpolate(d["alvo"], 1.0 - exp(-delta * h["vel"]))
+	# sacada: chega em ~60 ms; seguindo a mira, desliza
+	var vel = h["vel"] if seguindo else 38.0
+	d["olhar"] = d["olhar"].linear_interpolate(d["alvo"], 1.0 - exp(-delta * vel))
+	d["tremor_t"] -= delta
+	if d["tremor_t"] <= 0.0:
+		d["tremor_t"] = rand_range(0.08, 0.2)
+		d["tremor"] = Vector2(rand_range(-0.7, 0.7), rand_range(-0.5, 0.5))
 	var k = 1.0 - exp(-delta * 7.0)
 	d["topo"] = lerp(d["topo"], h["topo"], k)
 	d["baixo_v"] = lerp(d["baixo_v"], h["baixo"], k)
+	d["sono"] = lerp(d["sono"], d["sono_alvo"], 1.0 - exp(-delta * 2.2))
 	var p = 0.0
 	if d["fase"] < 0.0:
 		d["piscar_t"] -= delta
-		if d["piscar_t"] <= 0.0:
+		if d["piscar_t"] <= 0.0 and d["sono"] < 0.5:
 			d["fase"] = 0.0
 	else:
 		d["fase"] += delta
 		var f: float = d["fase"]
-		if f < 0.09:
-			p = f / 0.09
-		elif f < 0.15:
+		if f < 0.07:
+			p = f / 0.07
+		elif f < 0.11:
 			p = 1.0
-		elif f < 0.31:
-			p = 1.0 - (f - 0.15) / 0.16
+		elif f < 0.27:
+			p = 1.0 - (f - 0.11) / 0.16
 		else:
 			d["fase"] = -1.0
-			var faixa: Vector2 = h["piscar"]
-			d["piscar_t"] = rand_range(faixa.x, faixa.y)
-	d["iris"].position = d["iris_0"] + d["olhar"]
+			if not d["dupla"] and randf() < 0.22:
+				d["dupla"] = true
+				d["piscar_t"] = 0.12
+			else:
+				d["dupla"] = false
+				var faixa: Vector2 = h["piscar"]
+				d["piscar_t"] = rand_range(faixa.x, faixa.y)
+	d["iris"].position = d["iris_0"] + d["olhar"] + d["tremor"]
+	# pupila: abre no escuro e na alegria, fecha no susto
+	var alvo_r = lerp(20.0, 24.0, _noite)
+	if nome_h == "radiante" or nome_h == "feliz":
+		alvo_r += 2.5
+	elif nome_h == "surpreso":
+		alvo_r = 20.0
+	d["pupila_r"] = lerp(d["pupila_r"], alvo_r, 1.0 - exp(-delta * 3.0))
+	var pup: Node2D = d["pupila"]
+	pup.position = d["iris"].position
+	if abs(float(pup.get_meta("r")) - d["pupila_r"]) > 0.15:
+		pup.set_meta("r", d["pupila_r"])
+		pup.update()
 	var fecha = p * p * (3.0 - 2.0 * p)
+	fecha = max(fecha, d["sono"])
 	var topo: float = lerp(d["topo"], 1.0, fecha)
 	d["palpebra"].position = d["palpebra_0"] + Vector2(0.0, topo * (ASTRO["abre"] + 0.03 * ASTRO["u"]) * ESCALA_ASTRO)
-	d["baixo"].position = d["baixo_0"] - Vector2(0.0, d["baixo_v"] * ASTRO["sobe"] * ESCALA_ASTRO)
+	# a de baixo sobe um pouco na piscada
+	var baixo_v: float = d["baixo_v"] + 0.18 * fecha
+	d["baixo"].position = d["baixo_0"] - Vector2(0.0, baixo_v * ASTRO["sobe"] * ESCALA_ASTRO)
 
 
-## Águia planando no céu entre as colunas, batendo as asas de vez em quando;
-## de noite vira silhueta. Grita às vezes.
+## Águia (falcão de Hórus) voando de lado, com a cabeça para a frente:
+## bate as asas para subir e plana descendo, sobe e desce em ondas largas e
+## inclina o corpo conforme sobe ou desce. Três planos de profundidade: as
+## de longe são pequenas, lentas, apagadas na névoa e passam atrás das
+## pirâmides; as de perto são grandes e rápidas. De noite viram silhueta.
 func _animar_aguia(g: Dictionary, delta: float) -> void:
 	var s: Sprite = g["no"]
+	var cfg: Dictionary = g["cfg"]
 	if not s.visible:
 		g["espera"] -= delta
 		if g["espera"] <= 0.0:
 			var esq = randf() < 0.5
-			var y = rand_range(250.0, 470.0)
-			g["de"] = Vector2(-80.0 if esq else 1104.0, y)
-			g["ate"] = Vector2(1104.0 if esq else -80.0, y + rand_range(-90.0, 90.0))
-			g["dur"] = rand_range(8.0, 12.0)
-			g["t"] = 0.0
-			g["esc"] = rand_range(0.55, 0.95)
-			s.flip_h = not esq
+			g["dir"] = 1.0 if esq else -1.0
+			g["esc"] = rand_range(cfg["esc"][0], cfg["esc"][1])
+			var margem = 90.0 * g["esc"]
+			g["pos"] = Vector2(-margem if esq else Tela.TELA.x + margem, rand_range(cfg["y"][0], cfg["y"][1]))
+			g["vel"] = rand_range(cfg["vel"][0], cfg["vel"][1])
+			g["onda"] = rand_range(0.18, 0.4)
+			g["amp"] = rand_range(18.0, 46.0) * (0.6 + g["esc"] * 0.4)
+			g["fase"] = randf() * TAU
+			g["batendo"] = true
+			g["bate_t"] = rand_range(0.8, 1.6)
+			g["quadro"] = 0.0
+			s.flip_h = esq            # o desenho olha para a esquerda
+			s.scale = Vector2.ONE * g["esc"]
 			s.visible = true
-			if randf() < 0.6:
-				Maquina.efeito(_som_aguia_noite if modo == MODO_LUA else _som_aguia, -14.0, rand_range(0.9, 1.1))
+			if g["plano"] != PLANO_LONGE and randf() < 0.5:
+				Maquina.efeito(_som_aguia_noite if modo == MODO_LUA else _som_aguia, -16.0 + 4.0 * g["plano"], rand_range(0.9, 1.1))
 		return
-	g["t"] += delta
-	var k: float = g["t"] / g["dur"]
-	if k >= 1.0:
+	# sobe e desce em ondas: bate as asas subindo, plana descendo
+	g["fase"] += delta * TAU * g["onda"]
+	var vy = cos(g["fase"]) * g["amp"] * TAU * g["onda"]
+	g["vy"] = lerp(g["vy"], vy, 1.0 - exp(-delta * 3.0))
+	g["pos"] += Vector2(g["dir"] * g["vel"], -g["vy"] * 0.5) * delta
+	var subindo = g["vy"] > 4.0
+	if subindo and not g["batendo"]:
+		g["batendo"] = true
+	if g["batendo"]:
+		g["quadro"] = fmod(g["quadro"] + delta * 12.0 * cfg["bate"], 12.0)
+		s.frame = int(g["quadro"])
+		# parou de subir: termina a batida na asa aberta e plana
+		if not subindo and int(g["quadro"]) == 3:
+			g["batendo"] = false
+			s.frame = 12
+	else:
+		s.frame = 12
+	s.position = g["pos"]
+	# o corpo inclina com a subida (o bico aponta para onde vai)
+	s.rotation = -g["dir"] * clamp(g["vy"] * 0.5 / max(g["vel"], 1.0), -0.35, 0.35)
+	# névoa da distância e a noite
+	var ceu = Color(1.0, 0.80, 0.52).linear_interpolate(Color(0.30, 0.38, 0.6), _noite)
+	var cor = Color(1, 1, 1).linear_interpolate(ceu, cfg["nevoa"])
+	cor = cor.linear_interpolate(Color(0.12, 0.12, 0.2), _noite * (0.85 - cfg["nevoa"] * 0.4))
+	cor.a = 1.0 - cfg["nevoa"] * 0.35
+	s.modulate = cor
+	var margem2 = 100.0 * g["esc"]
+	if g["pos"].x < -margem2 - 1.0 or g["pos"].x > Tela.TELA.x + margem2 + 1.0:
 		s.visible = false
-		g["espera"] = rand_range(6.0, 14.0)
-		return
-	var pos: Vector2 = g["de"].linear_interpolate(g["ate"], k)
-	pos.y += sin(k * TAU * 1.5) * 28.0
-	s.position = pos
-	s.scale = Vector2.ONE * g["esc"]
-	g["bate"] = fmod(g["bate"] + delta * 12.0, 40.0)
-	var q = int(g["bate"])
-	s.frame = (1 + q) if q < 10 else 0
-	s.modulate = Color(1, 1, 1, 1).linear_interpolate(Color(0.12, 0.12, 0.2, 0.9), _noite)
+		g["espera"] = rand_range(cfg["espera"][0], cfg["espera"][1])
 
 
 func atirar(p: Vector2) -> void:

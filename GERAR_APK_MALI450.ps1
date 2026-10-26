@@ -448,85 +448,6 @@ if (-not (Test-Path (Join-Path $PastaModelos "android_release.apk"))) {
     Diz "      Modelos de exportacao $VersaoModelos confirmados." "Green"
 }
 
-# A SETA DO ANDROID. No Android 7 o Godot 3.6 nao esconde a seta do mouse e
-# muitas TV Box nao aceitam a seta transparente: a seta ficava junto com a
-# mira (andando ao contrario com a tela girada). Este gerador faz uma copia
-# dos modelos (build\android\modelos) em que todos os formatos de seta do
-# Godot viram o "nenhum" do Android (o mesmo que os outros jogos de tiro
-# usam), e o jogo pede esse formato. Os modelos originais nao mudam; a copia
-# so e refeita quando os originais mudam.
-function Modelo-Sem-Seta([string]$Origem, [string]$Destino) {
-    $Latin = [System.Text.Encoding]::GetEncoding(28591)
-    $Valores = @(1000, 1008, 1002, 1007, 1004, 1004, 1021, 1021, 1000, 1015, 1014, 1017, 1016, 1020, 1015, 1014, 1003)
-    $Tabela = New-Object byte[] ($Valores.Count * 4)
-    for ($i = 0; $i -lt $Valores.Count; $i++) { [BitConverter]::GetBytes([int]$Valores[$i]).CopyTo($Tabela, $i * 4) }
-    $Procura = $Latin.GetString($Tabela)
-    Copy-Item -LiteralPath $Origem -Destination $Destino -Force
-    $Certo = $true
-    $Zip = [System.IO.Compression.ZipFile]::Open($Destino, [System.IO.Compression.ZipArchiveMode]::Update)
-    try {
-        foreach ($Nome in @("lib/armeabi-v7a/libgodot_android.so", "lib/arm64-v8a/libgodot_android.so")) {
-            $Entrada = $Zip.GetEntry($Nome)
-            if (-not $Entrada) { $Certo = $false; break }
-            $Memoria = New-Object System.IO.MemoryStream
-            $Fluxo = $Entrada.Open()
-            try { $Fluxo.CopyTo($Memoria) } finally { $Fluxo.Dispose() }
-            $Bytes = $Memoria.ToArray()
-            $Memoria.Dispose()
-            $Texto = $Latin.GetString($Bytes)
-            $Pos = $Texto.IndexOf($Procura, [StringComparison]::Ordinal)
-            # a tabela tem de estar la uma vez so; senao a copia nao vale
-            if ($Pos -lt 0 -or $Texto.IndexOf($Procura, $Pos + 1, [StringComparison]::Ordinal) -ge 0) { $Certo = $false; break }
-            $Texto = $null
-            [Array]::Clear($Bytes, $Pos, $Tabela.Length)
-            $Entrada.Delete()
-            $Nova = $Zip.CreateEntry($Nome, [System.IO.Compression.CompressionLevel]::Optimal)
-            $Fluxo = $Nova.Open()
-            try { $Fluxo.Write($Bytes, 0, $Bytes.Length) } finally { $Fluxo.Dispose() }
-        }
-    } finally {
-        $Zip.Dispose()
-    }
-    if (-not $Certo) { Remove-Item -LiteralPath $Destino -Force -ErrorAction SilentlyContinue }
-    return $Certo
-}
-
-$PastaSemSeta = Join-Path $Saida "modelos"
-$ModeloRelease = Join-Path $PastaSemSeta "android_release.apk"
-$ModeloDebug = Join-Path $PastaSemSeta "android_debug.apk"
-$SetaNula = $false
-try {
-    $Originais = @(Get-Item -LiteralPath (Join-Path $PastaModelos "android_release.apk"), (Join-Path $PastaModelos "android_debug.apk"))
-    $Assinatura = ($Originais | ForEach-Object { "{0} {1} {2}" -f $_.Name, $_.Length, $_.LastWriteTimeUtc.Ticks }) -join "`n"
-    $MarcaSemSeta = Join-Path $PastaSemSeta "sem_seta.txt"
-    if ((Test-Path -LiteralPath $MarcaSemSeta) -and (Test-Path -LiteralPath $ModeloRelease) -and (Test-Path -LiteralPath $ModeloDebug) -and
-        ([IO.File]::ReadAllText($MarcaSemSeta).Trim() -eq $Assinatura)) {
-        $SetaNula = $true
-    } else {
-        Diz "      Preparando os modelos sem a seta do mouse (primeira vez: ~1 min)..." "Cyan"
-        New-Item -ItemType Directory -Path $PastaSemSeta -Force | Out-Null
-        Remove-Item -LiteralPath $MarcaSemSeta -Force -ErrorAction SilentlyContinue
-        if ((Modelo-Sem-Seta $Originais[0].FullName $ModeloRelease) -and (Modelo-Sem-Seta $Originais[1].FullName $ModeloDebug)) {
-            [IO.File]::WriteAllText($MarcaSemSeta, $Assinatura, $Utf8)
-            $SetaNula = $true
-        }
-    }
-} catch {
-    Diz ("      (modelos sem a seta: {0})" -f $_.Exception.Message)
-    $SetaNula = $false
-}
-if ($SetaNula) {
-    Diz "      Seta do mouse: escondida pelo Android (formato 'nenhum')." "Green"
-    $ProjetoAgora = [IO.File]::ReadAllText($ProjectGodot)
-    $ProjetoSemSeta = [Regex]::Replace($ProjetoAgora, '(?m)^tela/seta_nula=.*$', 'tela/seta_nula=true')
-    if ($ProjetoSemSeta -ne $ProjetoAgora) {
-        if (-not $ProjetoParaVoltar) { $ProjetoParaVoltar = $ProjetoAgora }
-        [IO.File]::WriteAllText($ProjectGodot, $ProjetoSemSeta, $Utf8)
-    }
-} else {
-    Diz "      AVISO: nao deu para preparar os modelos sem a seta; o APK sai com a seta transparente do jogo." "Yellow"
-}
-
 # ------------------------------------------------------------------
 # [2/4] ANDROID SDK, JAVA E A CHAVE. Quem assina o APK e este gerador (veja
 # "A ASSINATURA", mais abaixo), com o apksigner.jar do build-tools mais novo.
@@ -590,6 +511,136 @@ if ($ApksignerJar) {
 }
 Diz "      Java: $Java"
 
+# ------------------------------------------------------------------
+# OS MODELOS DO LAZER (build\android\modelos): uma copia dos modelos do
+# Godot com duas coisas a mais, so para este jogo (os originais nao mudam):
+#  - A SETA DO ANDROID. No Android 7 o Godot 3.6 nao esconde a seta do mouse
+#    e muitas TV Box nao aceitam a seta transparente: a seta ficava junto com
+#    a mira. Na copia todos os formatos de seta do Godot viram o "nenhum" do
+#    Android (o mesmo que os outros jogos de tiro usam).
+#  - A CAMERA. A foto do jogador sai pela classe android_camera\camera_foto.jar
+#    (a API classica de camera do Android, por onde a TV Box mostra a webcam
+#    USB). O d8 do Android SDK deste PC a converte em classes2.dex, que vai
+#    dentro do modelo; o jogo a chama pelo JavaClassWrapper. Sem o d8 (um
+#    build-tools muito antigo), o APK sai sem camera (no ranking, a silhueta).
+# A copia so e refeita quando os modelos, a classe da camera ou o d8 mudam.
+function Modelo-Do-Lazer([string]$Origem, [string]$Destino, [string]$Dex) {
+    $Latin = [System.Text.Encoding]::GetEncoding(28591)
+    $Valores = @(1000, 1008, 1002, 1007, 1004, 1004, 1021, 1021, 1000, 1015, 1014, 1017, 1016, 1020, 1015, 1014, 1003)
+    $Tabela = New-Object byte[] ($Valores.Count * 4)
+    for ($i = 0; $i -lt $Valores.Count; $i++) { [BitConverter]::GetBytes([int]$Valores[$i]).CopyTo($Tabela, $i * 4) }
+    $Procura = $Latin.GetString($Tabela)
+    Copy-Item -LiteralPath $Origem -Destination $Destino -Force
+    $Certo = $true
+    $Zip = [System.IO.Compression.ZipFile]::Open($Destino, [System.IO.Compression.ZipArchiveMode]::Update)
+    try {
+        foreach ($Nome in @("lib/armeabi-v7a/libgodot_android.so", "lib/arm64-v8a/libgodot_android.so")) {
+            $Entrada = $Zip.GetEntry($Nome)
+            if (-not $Entrada) { $Certo = $false; break }
+            $Memoria = New-Object System.IO.MemoryStream
+            $Fluxo = $Entrada.Open()
+            try { $Fluxo.CopyTo($Memoria) } finally { $Fluxo.Dispose() }
+            $Bytes = $Memoria.ToArray()
+            $Memoria.Dispose()
+            $Texto = $Latin.GetString($Bytes)
+            $Pos = $Texto.IndexOf($Procura, [StringComparison]::Ordinal)
+            # a tabela tem de estar la uma vez so; senao a copia nao vale
+            if ($Pos -lt 0 -or $Texto.IndexOf($Procura, $Pos + 1, [StringComparison]::Ordinal) -ge 0) { $Certo = $false; break }
+            $Texto = $null
+            [Array]::Clear($Bytes, $Pos, $Tabela.Length)
+            $Entrada.Delete()
+            $Nova = $Zip.CreateEntry($Nome, [System.IO.Compression.CompressionLevel]::Optimal)
+            $Fluxo = $Nova.Open()
+            try { $Fluxo.Write($Bytes, 0, $Bytes.Length) } finally { $Fluxo.Dispose() }
+        }
+        if ($Certo -and $Dex) {
+            $Velha = $Zip.GetEntry("classes2.dex")
+            if ($Velha) { $Velha.Delete() }
+            $BytesDex = [IO.File]::ReadAllBytes($Dex)
+            $Nova = $Zip.CreateEntry("classes2.dex", [System.IO.Compression.CompressionLevel]::Optimal)
+            $Fluxo = $Nova.Open()
+            try { $Fluxo.Write($BytesDex, 0, $BytesDex.Length) } finally { $Fluxo.Dispose() }
+        }
+    } finally {
+        $Zip.Dispose()
+    }
+    if (-not $Certo) { Remove-Item -LiteralPath $Destino -Force -ErrorAction SilentlyContinue }
+    return $Certo
+}
+
+# a classe da camera em classes2.dex (o d8 do build-tools mais novo)
+$JarCamera = Join-Path $Projeto "android_camera\camera_foto.jar"
+$DexCamera = $null
+$D8 = $null
+$VersaoD8 = [version]"0.0"
+foreach ($PastaBt in (Get-ChildItem -LiteralPath (Join-Path $Sdk "build-tools") -Directory -ErrorAction SilentlyContinue)) {
+    $Numero = [Regex]::Match($PastaBt.Name, '^\d+(\.\d+){0,3}').Value
+    $Versao = [version]"0.0"
+    if ($Numero) { try { $Versao = [version]$(if ($Numero.Contains('.')) { $Numero } else { "$Numero.0" }) } catch { } }
+    $Jar = Join-Path $PastaBt.FullName "lib\d8.jar"
+    if ((Test-Path -LiteralPath $Jar) -and (-not $D8 -or $Versao -gt $VersaoD8)) { $D8 = $Jar; $VersaoD8 = $Versao }
+}
+if ((Test-Path -LiteralPath $JarCamera) -and $D8) {
+    $PastaDex = Join-Path $Saida "dex"
+    if (Test-Path -LiteralPath $PastaDex) { Remove-Item -LiteralPath $PastaDex -Recurse -Force }
+    New-Item -ItemType Directory -Path $PastaDex -Force | Out-Null
+    $OpcoesD8 = @("-cp", $D8, "com.android.tools.r8.D8", "--release", "--min-api", "24", "--output", $PastaDex)
+    $Plataforma = Get-ChildItem -LiteralPath (Join-Path $Sdk "platforms") -Directory -ErrorAction SilentlyContinue |
+        Where-Object { Test-Path -LiteralPath (Join-Path $_.FullName "android.jar") } | Sort-Object Name | Select-Object -Last 1
+    if ($Plataforma) { $OpcoesD8 += @("--lib", (Join-Path $Plataforma.FullName "android.jar")) }
+    $OpcoesD8 += @($JarCamera)
+    $Codigo = Rodar $JavaExe (($OpcoesD8 | ForEach-Object { Aspas $_ }) -join " ") (Join-Path $Saida "d8.log") 5 "" 0 $null "" -SoHistorico
+    $SaidaDex = Join-Path $PastaDex "classes.dex"
+    if ($Codigo -eq 0 -and (Test-Path -LiteralPath $SaidaDex)) {
+        $DexCamera = $SaidaDex
+    } else {
+        Diz "      AVISO: o d8 nao converteu a classe da camera (codigo $Codigo, veja build\android\d8.log). O APK sai sem a foto do jogador." "Yellow"
+    }
+} elseif (-not $D8) {
+    Diz "      AVISO: o build-tools do Android SDK nao tem o d8 (lib\d8.jar). O APK sai sem a foto do jogador." "Yellow"
+}
+
+$PastaSemSeta = Join-Path $Saida "modelos"
+$ModeloRelease = Join-Path $PastaSemSeta "android_release.apk"
+$ModeloDebug = Join-Path $PastaSemSeta "android_debug.apk"
+$SetaNula = $false
+$CameraNativa = $false
+try {
+    $Originais = @(Get-Item -LiteralPath (Join-Path $PastaModelos "android_release.apk"), (Join-Path $PastaModelos "android_debug.apk"))
+    $Assinatura = ($Originais | ForEach-Object { "{0} {1} {2}" -f $_.Name, $_.Length, $_.LastWriteTimeUtc.Ticks }) -join "`n"
+    if ($DexCamera) { $Assinatura += "`ncamera " + (Get-FileHash -LiteralPath $DexCamera -Algorithm SHA256).Hash }
+    $MarcaSemSeta = Join-Path $PastaSemSeta "sem_seta.txt"
+    if ((Test-Path -LiteralPath $MarcaSemSeta) -and (Test-Path -LiteralPath $ModeloRelease) -and (Test-Path -LiteralPath $ModeloDebug) -and
+        ([IO.File]::ReadAllText($MarcaSemSeta).Trim() -eq $Assinatura)) {
+        $SetaNula = $true
+    } else {
+        Diz "      Preparando os modelos do Lazer (seta escondida e camera; primeira vez: ~1 min)..." "Cyan"
+        New-Item -ItemType Directory -Path $PastaSemSeta -Force | Out-Null
+        Remove-Item -LiteralPath $MarcaSemSeta -Force -ErrorAction SilentlyContinue
+        if ((Modelo-Do-Lazer $Originais[0].FullName $ModeloRelease $DexCamera) -and (Modelo-Do-Lazer $Originais[1].FullName $ModeloDebug $DexCamera)) {
+            [IO.File]::WriteAllText($MarcaSemSeta, $Assinatura, $Utf8)
+            $SetaNula = $true
+        }
+    }
+    $CameraNativa = $SetaNula -and [bool]$DexCamera
+} catch {
+    Diz ("      (modelos do Lazer: {0})" -f $_.Exception.Message)
+    $SetaNula = $false
+}
+if ($SetaNula) {
+    Diz "      Seta do mouse: escondida pelo Android (formato 'nenhum')." "Green"
+    if ($CameraNativa) { Diz "      Camera: a foto do jogador vai no APK (d8 $VersaoD8)." "Green" }
+    $ProjetoAgora = [IO.File]::ReadAllText($ProjectGodot)
+    $ProjetoNovo = [Regex]::Replace($ProjetoAgora, '(?m)^tela/seta_nula=.*$', 'tela/seta_nula=true')
+    $ProjetoNovo = [Regex]::Replace($ProjetoNovo, '(?m)^camera/nativa=.*$', "camera/nativa=$(if ($CameraNativa) { 'true' } else { 'false' })")
+    if ($ProjetoNovo -ne $ProjetoAgora) {
+        if (-not $ProjetoParaVoltar) { $ProjetoParaVoltar = $ProjetoAgora }
+        [IO.File]::WriteAllText($ProjectGodot, $ProjetoNovo, $Utf8)
+    }
+} else {
+    Diz "      AVISO: nao deu para preparar os modelos do Lazer; o APK sai com a seta transparente do jogo e sem a camera." "Yellow"
+}
+
 # A CHAVE: a de depuracao do Godot (%APPDATA%\Godot\keystores), a mesma dos
 # outros jogos. O APK novo instala POR CIMA do anterior sem apagar ranking e
 # configuracao. Se este PC nunca gerou APK, a chave e criada.
@@ -641,7 +692,7 @@ $PresetNovo = [Regex]::Replace($PresetTexto, '(?m)^package/signed=.*$', 'package
 foreach ($Campo in @("keystore/release", "keystore/release_user", "keystore/release_password")) {
     $PresetNovo = [Regex]::Replace($PresetNovo, '(?m)^' + [Regex]::Escape($Campo) + '=.*$', "$Campo=`"`"")
 }
-# Os modelos sem a seta do mouse (veja "A SETA DO ANDROID"), so nesta geracao.
+# Os modelos do Lazer (veja "OS MODELOS DO LAZER"), so nesta geracao.
 if ($SetaNula) {
     $PresetNovo = [Regex]::Replace($PresetNovo, '(?m)^custom_template/release=.*$', "custom_template/release=`"$($ModeloRelease.Replace('\', '/'))`"")
     $PresetNovo = [Regex]::Replace($PresetNovo, '(?m)^custom_template/debug=.*$', "custom_template/debug=`"$($ModeloDebug.Replace('\', '/'))`"")

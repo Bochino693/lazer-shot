@@ -116,6 +116,7 @@ func _ready() -> void:
 	fim.connect("escolheu", self, "_fim_escolheu")
 	nome = NomeRanking.criar(self)
 	nome.connect("confirmado", self, "_nome_confirmado")
+	FotoJogador.connect("foto_pronta", self, "_foto_pronta")
 	como_jogar = ComoJogar.criar(self, id_fase, _icones())
 	mira_desenho = MiraDesenho.criar(self, cor)
 	_som_tiro = load(som_tiro_path) if som_tiro_path != "" else null
@@ -282,6 +283,8 @@ func _comecar_contagem() -> void:
 	estado = CONTAGEM
 	como_jogar.fechar()
 	contagem.rodar()
+	# a webcam liga agora (acerta a luz durante a contagem)
+	FotoJogador.preparar()
 
 
 func _contagem_terminou() -> void:
@@ -289,6 +292,7 @@ func _contagem_terminou() -> void:
 	tempo_jogo = 0.0
 	avisos.instrucao("COMEÇOU!", cor.linear_interpolate(Color.white, 0.4))
 	_comecar()
+	FotoJogador.fotografar()
 
 
 # ------------------------------------------------------------ tiro
@@ -535,7 +539,38 @@ static func quadro(f: Dictionary, i: int) -> AtlasTexture:
 	return a
 
 
+## A webcam tirou a foto do jogador: flash, o clique da câmera e a foto
+## instantânea entra no canto, fica um pouco e voa para fora.
+func _foto_pronta(tex: Texture) -> void:
+	if estado == FIM or _saindo:
+		return
+	Maquina.efeito(load("res://songs/foto_obturador.wav"), -6.0)
+	clarao(Color(1, 1, 1, 0.30), 0.22)
+	var camada = CanvasLayer.new()
+	camada.layer = 115
+	add_child(camada)
+	var m = FotoJogador.moldura(camada, Vector2(Tela.TELA.x - 150.0, 330.0), 190.0, tex, 7.0, "VOCÊ!")
+	m.rect_scale = Vector2(1.8, 1.8)
+	m.modulate.a = 0.0
+	var tw = create_tween()
+	tw.set_parallel(true)
+	tw.tween_property(m, "modulate:a", 1.0, 0.18)
+	tw.tween_property(m, "rect_scale", Vector2.ONE, 0.32).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.chain().tween_interval(2.4)
+	tw.chain().tween_property(m, "rect_position:y", -400.0, 0.45).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_IN)
+	tw.chain().tween_callback(camada, "queue_free")
+
+
 # ------------------------------------------------------------ fim
+func _musica_depois_do_fim() -> void:
+	if _musica == null or not is_instance_valid(_musica):
+		return
+	_musica.volume_db = -40.0
+	_musica.play()
+	var tw = create_tween()
+	tw.tween_property(_musica, "volume_db", -9.0, 2.5)
+
+
 func encerrar(texto: String = "TEMPO ESGOTADO!") -> void:
 	if estado == FIM:
 		return
@@ -545,12 +580,15 @@ func encerrar(texto: String = "TEMPO ESGOTADO!") -> void:
 	_encerrou()
 	_precisao = int(round(float(acertos) / float(tiros) * 100.0)) if tiros > 0 else 0
 	faixa(texto, cor.linear_interpolate(Color.white, 0.3), 1.4)
+	# a fanfarra da vitória (rufar, metais, pratos, sinos e aplausos) e,
+	# depois dela, a música da fase volta baixinho para a tela final
 	if _musica != null:
 		var tw = create_tween()
-		tw.tween_property(_musica, "volume_db", -40.0, 0.6)
+		tw.tween_property(_musica, "volume_db", -40.0, 0.5)
 		tw.tween_callback(_musica, "stop")
-	var fim_som = load("res://songs/end_game.mp3")
-	Maquina.musica(self, fim_som, -2.0)
+		tw.tween_interval(5.0)
+		tw.tween_callback(self, "_musica_depois_do_fim")
+	Maquina.musica(self, load("res://songs/fim_partida.wav"), -1.0)
 	yield(esperar(1.5), "timeout")
 	if RankingManager.deve_entrar_no_ranking(pontos, _precisao):
 		nome.abrir(cor, pontos, _precisao)
@@ -564,7 +602,7 @@ func _dados_fim(recorde: String) -> Dictionary:
 
 
 func _nome_confirmado(n: String) -> void:
-	RankingManager.adicionar_resultado(n, pontos, cenario_ranking, _precisao)
+	RankingManager.adicionar_resultado(n, pontos, cenario_ranking, _precisao, FotoJogador.ultima)
 	fim.mostrar(_dados_fim(n))
 
 
@@ -579,4 +617,5 @@ func _sair(caminho: String) -> void:
 	if _saindo:
 		return
 	_saindo = true
+	FotoJogador.cancelar()
 	TransicaoGlobal.trocar_cena(caminho)

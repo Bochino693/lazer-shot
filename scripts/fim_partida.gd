@@ -26,6 +26,7 @@ var _restante = 17.0
 var _t = 0.0
 var _sob = false
 var _trava = 0.0
+var _foto: Control = null
 
 
 static func criar(pai: Node, cor: Color) -> FimPartida:
@@ -98,6 +99,12 @@ func mostrar(d: Dictionary) -> void:
 		_titulo.text = str(d.get("titulo", "FIM DE JOGO"))
 	_corpo.text = texto
 	_chamada.text = Maquina.texto_jogar_novamente()
+	# a foto do jogador (webcam) em cima do cartão
+	if _foto != null:
+		_foto.queue_free()
+		_foto = null
+	if FotoJogador.ultima_textura != null:
+		_foto = FotoJogador.moldura(_raiz, Vector2(Tela.TELA.x * 0.5, 240.0), 240.0, FotoJogador.ultima_textura, 3.0, "VOCÊ JOGOU!")
 	_restante = Maquina.tempo_volta_menu()
 	_t = 0.0
 	_trava = 0.5

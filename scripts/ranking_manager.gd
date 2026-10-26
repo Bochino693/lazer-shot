@@ -44,7 +44,7 @@ func salvar() -> void:
 	f.close()
 
 
-func adicionar_resultado(nome: String, pontos: int, cenario: String, precisao: int = 0) -> bool:
+func adicionar_resultado(nome: String, pontos: int, cenario: String, precisao: int = 0, foto: String = "") -> bool:
 	if pontos <= PONTOS_MINIMOS:
 		return false
 	carregar()
@@ -55,6 +55,7 @@ func adicionar_resultado(nome: String, pontos: int, cenario: String, precisao: i
 		"cenario": cenario.to_upper(),
 		"precisao": int(clamp(precisao, 0, 100)),
 		"modo": "FACIL",
+		"foto": foto,
 		"data": "%04d-%02d-%02d %02d:%02d:%02d" % [d.year, d.month, d.day, d.hour, d.minute, d.second],
 	})
 	salvar()

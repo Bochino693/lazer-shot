@@ -53,6 +53,12 @@ const PADRAO = {
 	"arma/modo": "auto",
 	"arma/sensibilidade": 0.0,
 	"arma/compensar_aceleracao": true,
+	# A FOTO DO JOGADOR (webcam USB da TV Box): ligada, qual câmera, giro
+	# (0, 90, 180, 270) e espelho (scripts/foto_jogador.gd)
+	"camera/foto": true,
+	"camera/indice": 0,
+	"camera/girar": 0,
+	"camera/espelhar": false,
 	"jogo/tempo_partida": 120,
 	"jogo/tempo_modal_final": 17,
 	"ranking/tempo_nome": 50,
@@ -576,11 +582,13 @@ func _criar_barramentos_de_audio() -> void:
 		AudioServer.add_bus_effect(_bus_musica, analisador)
 	# os efeitos passam por um limitador antes de somar com a música: muitos
 	# tiros e recargas juntos não estouram a saída (o estouro corta o som
-	# todo, música inclusive)
+	# todo, música inclusive). Ele só pega o pico (limiar alto): não abaixa
+	# um som por causa do outro
 	if AudioServer.get_bus_effect_count(_bus_efeitos) == 0:
 		var lim = AudioEffectLimiter.new()
-		lim.ceiling_db = -1.0
-		lim.threshold_db = -4.0
+		lim.ceiling_db = -0.8
+		lim.threshold_db = -1.0
+		lim.soft_clip_db = 1.5
 		AudioServer.add_bus_effect(_bus_efeitos, lim)
 	var mestre = AudioServer.get_bus_index("Master")
 	if AudioServer.get_bus_effect_count(mestre) == 0:
@@ -637,13 +645,15 @@ func pulso_vivo() -> Vector2:
 	return Vector2(max(e.x, (0.16 + 0.12 * sint) * peso), max(e.y, sint * 0.5 * peso))
 
 
-## EFEITOS SONOROS sem criar nó a cada som: 3 vozes fixas por efeito, em
-## rodízio (tiros seguidos não se cortam). Tudo junto, no máximo MAX_VOZES
-## tocando; o mesmo som repetido em menos de 45 ms vale uma vez só (a TV Box
-## não engasga a mistura e a música segue firme).
-const VOZES = 3
-const MAX_VOZES = 10
-const REPETIDO_MS = 45
+## EFEITOS SONOROS sem criar nó a cada som: cada efeito tem as suas vozes
+## (nascem conforme a precisão, até VOZES_POR_SOM). O som novo vai para uma
+## voz livre; só sem voz livre ele toma a que está tocando há mais tempo
+## (o fim dela, o mais baixo). No máximo MAX_VOZES tocando juntas; o mesmo
+## som repetido em menos de REPETIDO_MS vale uma vez só. Nada abaixa os
+## outros sons: o limitador só segura o pico do estouro.
+const VOZES_POR_SOM = 6
+const MAX_VOZES = 24
+const REPETIDO_MS = 30
 var _efeitos = {}
 var _ultimo_ms = {}
 var _tocando = []
@@ -655,28 +665,33 @@ func efeito(stream: AudioStream, volume_db: float = 0.0, pitch: float = 1.0, ini
 	if agora - int(_ultimo_ms.get(stream, -1000)) < REPETIDO_MS:
 		return
 	_ultimo_ms[stream] = agora
-	# vozes demais tocando: a mais antiga para (a música não perde a vez)
 	var i_t = _tocando.size() - 1
 	while i_t >= 0:
 		if not is_instance_valid(_tocando[i_t]) or not _tocando[i_t].playing:
 			_tocando.remove(i_t)
 		i_t -= 1
-	while _tocando.size() >= MAX_VOZES:
+	var lista: Array = _efeitos.get(stream, [])
+	_efeitos[stream] = lista
+	var pl: AudioStreamPlayer = null
+	var mais_velha: AudioStreamPlayer = null
+	for v in lista:
+		if not v.playing:
+			pl = v
+			break
+		if mais_velha == null or v.get_playback_position() > mais_velha.get_playback_position():
+			mais_velha = v
+	if pl == null and lista.size() < VOZES_POR_SOM:
+		pl = AudioStreamPlayer.new()
+		pl.bus = "Efeitos"
+		pl.stream = stream
+		add_child(pl)
+		lista.append(pl)
+	if pl == null:
+		pl = mais_velha
+	elif _tocando.size() >= MAX_VOZES:
+		# a mistura cheia: cede a voz mais antiga de todas
 		var velho = _tocando.pop_front()
 		velho.stop()
-	var lista: Array = _efeitos.get(stream, [])
-	if lista.empty():
-		for i in VOZES:
-			var p = AudioStreamPlayer.new()
-			p.bus = "Efeitos"
-			p.stream = stream
-			add_child(p)
-			lista.append(p)
-		lista.append(0)    # a próxima voz
-		_efeitos[stream] = lista
-	var i: int = lista[VOZES]
-	lista[VOZES] = (i + 1) % VOZES
-	var pl: AudioStreamPlayer = lista[i]
 	pl.volume_db = volume_db
 	pl.pitch_scale = max(0.05, pitch)
 	pl.play(max(0.0, inicio))
@@ -689,10 +704,10 @@ func soltar_efeitos(manter: Array = []) -> void:
 	for s in _efeitos.keys():
 		if s in manter:
 			continue
-		var lista: Array = _efeitos[s]
-		for i in VOZES:
-			(lista[i] as Node).queue_free()
+		for v in _efeitos[s]:
+			(v as Node).queue_free()
 		_efeitos.erase(s)
+	_tocando.clear()
 
 
 ## Toca uma música no barramento da música (um player por chamada; a tela

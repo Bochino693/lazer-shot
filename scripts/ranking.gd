@@ -7,7 +7,9 @@ extends Node2D
 ##
 ## Na abertura (vindo da tela inicial parada) é a vitrine: sem botões,
 ## "APERTE START" piscando, START começa; volta sozinho para a tela inicial.
-## A câmera da 4.6 não existe na TV Box Mali-450: a foto é a silhueta.
+## A foto é a da webcam no começo da partida (scripts/foto_jogador.gd); sem
+## foto, a silhueta. As fotos entram na tabela uma por quadro (abrir todas de
+## uma vez engasgaria a TV Box).
 
 const CENA_CENARIOS = "res://scenes/cenarios.tscn"
 const CENA_MENU = "res://scenes/menu.tscn"
@@ -43,6 +45,7 @@ var _musica: AudioStreamPlayer
 var _som_tiro: AudioStream
 var _saindo = false
 var _t = 0.0
+var _fotos_pendentes = []       # [TextureRect, caminho]
 
 
 func _ready() -> void:
@@ -196,7 +199,7 @@ func _linha(i: int, e: Dictionary) -> void:
 		nome = "PLAYER"
 	var x = 0.0
 	x = _campo(l, medalha + str(pos), x, larg * COLUNAS[0][1], 46, Color.white, true)
-	# foto: a silhueta, com a borda da cor da linha
+	# foto: a do jogador (ou a silhueta), com a borda da cor da linha
 	var w_foto = larg * COLUNAS[1][1]
 	var lado = min(96.0, w_foto - 8.0)
 	var foto = TextureRect.new()
@@ -207,6 +210,9 @@ func _linha(i: int, e: Dictionary) -> void:
 	foto.rect_position = Vector2(x + (w_foto - lado) * 0.5, (ALTURA_LINHA - lado) * 0.5)
 	foto.rect_size = Vector2(lado, lado)
 	l.add_child(foto)
+	var caminho = str(e.get("foto", ""))
+	if caminho != "":
+		_fotos_pendentes.append([foto, caminho])
 	var mold = StyleBoxFlat.new()
 	mold.draw_center = false
 	mold.border_color = Color(borda.r, borda.g, borda.b, max(borda.a, 0.7))
@@ -255,6 +261,12 @@ func _atualizar_setas() -> void:
 
 # ------------------------------------------------------------ quadro e tiro
 func _process(delta: float) -> void:
+	if not _fotos_pendentes.empty():
+		var par: Array = _fotos_pendentes.pop_front()
+		if is_instance_valid(par[0]):
+			var tex = FotoJogador.textura(par[1])
+			if tex != null:
+				par[0].texture = tex
 	_t += delta
 	if vitrine:
 		if _t >= TEMPO_VITRINE and not _saindo:
