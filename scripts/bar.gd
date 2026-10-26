@@ -70,7 +70,6 @@ const BARRIL = [Vector2(800, 995), Vector2(1024, 995), Vector2(1024, 1435), Vect
 	Vector2(785, 1300), Vector2(776, 1160), Vector2(785, 1060)]
 const VIDRACAS = [Rect2(90, 82, 48, 56), Rect2(144, 82, 46, 56), Rect2(211, 82, 47, 56), Rect2(264, 82, 46, 56),
 	Rect2(90, 145, 48, 55), Rect2(144, 145, 46, 55), Rect2(211, 145, 47, 55), Rect2(264, 145, 46, 55)]
-const CHAO_BAR = 1590.0
 # o feixe de sol: contorno da parte acesa de bar_raios_sol.png (px da textura
 # 256x384 da 4.6, que cobre o fundo 1024x1536) e pontos de poeira dentro dele
 # (px do fundo 1024x1536)
@@ -610,29 +609,23 @@ func _acertar(g: Garrafa, p: Vector2) -> void:
 	_estourar(g, p)
 
 
-## A garrafa estoura: cacos da própria imagem caem na prateleira e quicam, a
-## bebida espirra no ar na cor dela e pinga na prateleira de baixo.
+## A garrafa estoura: cacos da própria imagem caem reto e somem ao sair da
+## tela, a bebida espirra no ar na cor dela.
 func _estourar(g: Garrafa, p: Vector2) -> void:
 	var cel: Vector2 = g.f["cel"]
 	var xf = g.no.get_transform() * g.spr.get_transform() * Transform2D(0.0, g.spr.offset + cel * 0.5)
-	var prat_y: float = PE_PRATELEIRA[g.prateleira] - 2.0
-	cacos.estourar(g.f["tex"], Rect2(Vector2.ZERO, cel), xf, p, {"n": 10, "forca": 1.0, "grav": 1700.0, "chao": prat_y, "vida": 1.3, "sobe": 240.0})
+	cacos.estourar(g.f["tex"], Rect2(Vector2.ZERO, cel), xf, p, {"n": 10, "forca": 1.0, "grav": 1700.0, "vida": 1.3, "sobe": 240.0})
 	var liq: Color = LIQUIDO[g.tipo]
 	particulas.explosao(p, {"n": 16, "tex": Estilo.tex("fx_ponto"), "vel": [120.0, 460.0], "vida": [0.5, 1.0], "tam": [8.0, 18.0], "fim": 0.6,
-		"cor": liq, "grav": 1300.0, "chao": prat_y, "arrasto": 0.6})
+		"cor": liq, "grav": 1300.0, "arrasto": 0.6})
 	particulas.explosao(p, {"n": 3, "tex": Estilo.tex("fx_nuvem"), "vel": [20.0, 80.0], "vida": [0.4, 0.7], "tam": [60.0, 90.0], "fim": 1.5,
 		"cor": Color(liq.r, liq.g, liq.b, 0.35)})
 	particulas_luz.explosao(p, {"n": 9, "vel": [150.0, 420.0], "vida": [0.25, 0.5], "tam": [6.0, 12.0], "cor": Color(1.0, 0.95, 0.85),
 		"grav": 500.0, "estica": 0.03})
 	luz_sprite_breve(p, 220.0, Color(1.0, 0.92, 0.75, 0.75), 0.25)
-	# pingos escorrendo da beirada da tábua para a de baixo (ou o chão)
-	var baixo = CHAO_BAR
-	for prat in [80, 50, 20]:
-		if PE_PRATELEIRA[prat] > PE_PRATELEIRA[g.prateleira]:
-			baixo = PE_PRATELEIRA[prat]
-			break
+	# pingos escorrendo da beirada da tábua
 	particulas.explosao(Vector2(g.x, BASE_TABUA[g.prateleira] + 2.0), {"n": 5, "tex": Estilo.tex("fx_ponto"), "vel": [0.0, 30.0], "ang": [80.0, 100.0],
-		"vida": [1.0, 1.6], "tam": [6.0, 9.0], "fim": 0.8, "cor": liq, "grav": 900.0, "chao": baixo, "espalha": 30.0})
+		"vida": [1.0, 1.6], "tam": [6.0, 9.0], "fim": 0.8, "cor": liq, "grav": 900.0, "espalha": 30.0})
 	# a bebida espirrada fica na parede atrás e (nas tábuas de baixo) no tampo
 	_manchar(Vector2(g.x + rand_range(-10, 10), PE_PRATELEIRA[g.prateleira] - 70.0 * g.spr.scale.y * 2.0), liq, Vector2(1.1, 1.3))
 	if g.prateleira <= 50:

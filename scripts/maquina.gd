@@ -574,6 +574,20 @@ func _criar_barramentos_de_audio() -> void:
 		analisador.buffer_length = 0.1
 		analisador.fft_size = AudioEffectSpectrumAnalyzer.FFT_SIZE_512
 		AudioServer.add_bus_effect(_bus_musica, analisador)
+	# os efeitos passam por um limitador antes de somar com a música: muitos
+	# tiros e recargas juntos não estouram a saída (o estouro corta o som
+	# todo, música inclusive)
+	if AudioServer.get_bus_effect_count(_bus_efeitos) == 0:
+		var lim = AudioEffectLimiter.new()
+		lim.ceiling_db = -1.0
+		lim.threshold_db = -4.0
+		AudioServer.add_bus_effect(_bus_efeitos, lim)
+	var mestre = AudioServer.get_bus_index("Master")
+	if AudioServer.get_bus_effect_count(mestre) == 0:
+		var lim2 = AudioEffectLimiter.new()
+		lim2.ceiling_db = -0.3
+		lim2.threshold_db = -1.0
+		AudioServer.add_bus_effect(mestre, lim2)
 
 
 func _bus(nome: String) -> int:
@@ -624,13 +638,32 @@ func pulso_vivo() -> Vector2:
 
 
 ## EFEITOS SONOROS sem criar nó a cada som: 3 vozes fixas por efeito, em
-## rodízio (tiros seguidos não se cortam).
+## rodízio (tiros seguidos não se cortam). Tudo junto, no máximo MAX_VOZES
+## tocando; o mesmo som repetido em menos de 45 ms vale uma vez só (a TV Box
+## não engasga a mistura e a música segue firme).
 const VOZES = 3
+const MAX_VOZES = 10
+const REPETIDO_MS = 45
 var _efeitos = {}
+var _ultimo_ms = {}
+var _tocando = []
 
 func efeito(stream: AudioStream, volume_db: float = 0.0, pitch: float = 1.0, inicio: float = 0.0) -> void:
 	if stream == null:
 		return
+	var agora = OS.get_ticks_msec()
+	if agora - int(_ultimo_ms.get(stream, -1000)) < REPETIDO_MS:
+		return
+	_ultimo_ms[stream] = agora
+	# vozes demais tocando: a mais antiga para (a música não perde a vez)
+	var i_t = _tocando.size() - 1
+	while i_t >= 0:
+		if not is_instance_valid(_tocando[i_t]) or not _tocando[i_t].playing:
+			_tocando.remove(i_t)
+		i_t -= 1
+	while _tocando.size() >= MAX_VOZES:
+		var velho = _tocando.pop_front()
+		velho.stop()
 	var lista: Array = _efeitos.get(stream, [])
 	if lista.empty():
 		for i in VOZES:
@@ -647,6 +680,8 @@ func efeito(stream: AudioStream, volume_db: float = 0.0, pitch: float = 1.0, ini
 	pl.volume_db = volume_db
 	pl.pitch_scale = max(0.05, pitch)
 	pl.play(max(0.0, inicio))
+	_tocando.erase(pl)
+	_tocando.append(pl)
 
 
 ## Solta os sons de efeito que não são da tela nova (troca de tela).
