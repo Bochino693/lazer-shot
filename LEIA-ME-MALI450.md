@@ -119,6 +119,13 @@ O gerador não usa o Gradle (o jogo não tem plugin). Por isso é mais rápido e
 
 O giro e quem gira também se trocam **na própria TV Box**, na CONFIGURAÇÃO do jogo, em "Giro da tela" e "Quem gira a tela". Não precisa gerar outro APK.
 
+### Se o APK não sair
+
+- **"O APK nao saiu (codigo 1853227063)" ou erro da NVIDIA:** o código é `0x6E760037`, o driver da placa de vídeo NVIDIA fechando o Godot ("Error code 7"). Acontece em placa antiga, como a GeForce 8400GS.
+  - Desde esta versão o gerador monta o APK sem desenhar nada (`--disable-render-loop`): a placa só abre o OpenGL e fica parada. O APK sai igual, arquivo por arquivo.
+  - Se ainda acontecer: reinicie o PC, feche jogos e navegadores e rode de novo. Se continuar, reinstale o driver da placa (para a 8400GS, o último é o 342.01) ou gere o APK em outro PC.
+  - Quando falha, o gerador mostra as últimas linhas do Godot e o motivo da saída.
+
 ### Se a TV Box não instalar
 
 1. **"O pacote parece estar corrompido":** gere o APK de novo com esta versão (2.0.2 ou mais nova) e confira a linha **Assinatura** no fim da janela. Apague da TV Box (ou do pendrive) o APK antigo e copie o novo.
