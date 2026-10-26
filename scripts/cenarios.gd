@@ -2,7 +2,8 @@ extends Node2D
 
 ## ESCOLHA DE CENÁRIO: "ESCOLHA SEU CENÁRIO" com a contagem, os quatro
 ## cartões (2x2) com a capa, o nome, o nível e as estrelas de dificuldade, e
-## o botão RANKING. Tudo pela mira da arma: a mira em cima de um cartão o
+## os botões ALEATÓRIO (a roleta sorteia o cenário na hora) e RANKING. Tudo
+## pela mira da arma: a mira em cima de um cartão o
 ## destaca e troca o fundo pela arte daquele cenário; o tiro escolhe.
 ## Contagem no fim: a roleta corre pelos cartões (rápida no começo, freando)
 ## e escolhe sozinha. Escolhido, abre a MISSÃO (scripts/missao.gd): o alvo
@@ -30,6 +31,10 @@ var _ranking: Panel
 var _sb_ranking: StyleBoxFlat
 var _sb_ranking_mira: StyleBoxFlat
 var _ranking_mira = false
+var _aleatorio: Panel
+var _sb_aleatorio: StyleBoxFlat
+var _sb_aleatorio_mira: StyleBoxFlat
+var _aleatorio_mira = false
 var _contador: Panel
 var _contador_linha: ColorRect
 var _contador_num: Label
@@ -65,6 +70,7 @@ func _ready() -> void:
 	_montar_contador(raiz)
 	_montar_cartoes(raiz)
 	_montar_ranking(raiz)
+	_montar_aleatorio(raiz)
 	_missao = Missao.criar(self)
 	_missao.connect("escolheu", self, "_missao_escolheu")
 	_trajetoria = Trajetoria.criar(self)
@@ -82,8 +88,9 @@ func _tocar_tema() -> void:
 
 # ------------------------------------------------------------ montagem
 func _montar_contador(raiz: Control) -> void:
-	var w = 720.0
-	_contador = Estilo.painel(raiz, Vector2((Tela.TELA.x - w) * 0.5, 34), Vector2(w, 218),
+	# (estreito: não cobre o logo Lazer & Sport do canto do fundo)
+	var w = 600.0
+	_contador = Estilo.painel(raiz, Vector2((Tela.TELA.x - w) * 0.5 - 60.0, 34), Vector2(w, 218),
 		Estilo.caixa(Color(0.012, 0.006, 0.010, 0.94), Color(1.0, 0.0, 0.08), 5, 42, 58, Color(1.0, 0.0, 0.08, 0.70)))
 	_contador.rect_pivot_offset = _contador.rect_size * 0.5
 	var titulo = Estilo.rotulo(_contador, "ESCOLHA SEU CENÁRIO", 46, Color(1.0, 0.94, 0.78), 10)
@@ -158,6 +165,32 @@ func _montar_ranking(raiz: Control) -> void:
 	Estilo.colocar(t, Vector2.ZERO, _ranking.rect_size)
 
 
+## O ALEATÓRIO: entre os cartões e o RANKING, em dourado.
+func _montar_aleatorio(raiz: Control) -> void:
+	var ouro = Color(1.0, 0.78, 0.12)
+	_sb_aleatorio = Estilo.caixa(Color(0.03, 0.02, 0.0, 0.94), ouro, 4, 39, 30, Color(ouro.r, ouro.g, ouro.b, 0.5))
+	_sb_aleatorio_mira = Estilo.caixa(Color(0.10, 0.07, 0.0, 0.98), ouro.linear_interpolate(Color.white, 0.35), 5, 39, 44, Color(ouro.r, ouro.g, ouro.b, 0.8))
+	var ultimo: Panel = _cartoes[3]
+	var y = ultimo.rect_position.y + CARTAO.y + 70.0
+	_aleatorio = Estilo.painel(raiz, Vector2((Tela.TELA.x - 560.0) * 0.5, y), Vector2(560, 96), _sb_aleatorio)
+	_aleatorio.rect_pivot_offset = _aleatorio.rect_size * 0.5
+	var t = Estilo.rotulo(_aleatorio, "🎯 ALEATÓRIO", 44, Color(1.0, 0.95, 0.8), 6)
+	Estilo.colocar(t, Vector2.ZERO, _aleatorio.rect_size)
+
+
+func _no_aleatorio(p: Vector2) -> bool:
+	return _aleatorio.visible and Rect2(_aleatorio.rect_position, _aleatorio.rect_size).grow(10.0).has_point(p)
+
+
+func _destacar_aleatorio(sim: bool) -> void:
+	if sim == _aleatorio_mira:
+		return
+	_aleatorio_mira = sim
+	_aleatorio.add_stylebox_override("panel", _sb_aleatorio_mira if sim else _sb_aleatorio)
+	var tw = create_tween()
+	tw.tween_property(_aleatorio, "rect_scale", Vector2.ONE * (1.06 if sim else 1.0), 0.12).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+
+
 ## Tudo entra suave: o contador cresce, os cartões aparecem um a um.
 func _entrada(raiz: Control) -> void:
 	var tw = create_tween().set_parallel(true)
@@ -172,6 +205,8 @@ func _entrada(raiz: Control) -> void:
 		c.rect_scale = Vector2(0.92, 0.92)
 		tw.tween_property(c, "modulate:a", 1.0, 0.34).set_delay(d)
 		tw.tween_property(c, "rect_scale", Vector2.ONE, 0.34).set_delay(d).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	_aleatorio.modulate.a = 0.0
+	tw.tween_property(_aleatorio, "modulate:a", 1.0, 0.34).set_delay(0.56)
 	_ranking.modulate.a = 0.0
 	_ranking.rect_scale = Vector2(0.94, 0.94)
 	tw.tween_property(_ranking, "modulate:a", 1.0, 0.34).set_delay(0.62)
@@ -187,6 +222,7 @@ func _process(delta: float) -> void:
 	elif not _roleta and not _bloqueado:
 		_destacar(_cartao_em(p))
 		_destacar_ranking(_no_ranking(p))
+		_destacar_aleatorio(_no_aleatorio(p))
 	# o botão RANKING pulsa de leve
 	if not _ranking_mira:
 		_ranking.rect_scale = Vector2.ONE * (1.0 + 0.02 * sin(_t * 3.2))
@@ -285,6 +321,11 @@ func _tiro(p: Vector2) -> void:
 		tw.tween_property(c, "rect_scale", Vector2(1.03, 1.03), 0.08).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 		_abrir_missao(i)
 		return
+	if _no_aleatorio(p):
+		_contando = false
+		_destacar_aleatorio(false)
+		_rodar_roleta()
+		return
 	if _no_ranking(p):
 		_contando = false
 		_bloqueado = true
@@ -336,6 +377,7 @@ func _abrir_missao(i: int) -> void:
 	_contando = false
 	_fundo.mostrar(FUNDOS[i], true)
 	_contador.visible = false
+	_aleatorio.visible = false
 	_missao.abrir(CENAS[i])
 
 
@@ -352,6 +394,7 @@ func _missao_escolheu(acao: String) -> void:
 	_restante = TEMPO_AUTO
 	_contando = true
 	_contador.visible = true
+	_aleatorio.visible = true
 	_atualizar_contador()
 	for k in 4:
 		_marcar(k, false)

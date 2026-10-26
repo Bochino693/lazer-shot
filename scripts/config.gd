@@ -44,6 +44,7 @@ var _dica_rotacao: Label    # quem gira a tela agora (muda sozinho)
 var _camera_estado: Label = null
 var _camera_foto: Control = null
 var _camera_y = 0.0
+var _camera_pose = null
 var _painel_caixa: Control
 var _mira: MiraDesenho
 var _saindo = false
@@ -211,12 +212,12 @@ func _montar_camera() -> void:
 
 	_secao("FOTO DO JOGADOR")
 	_opcoes("Foto do jogador", "aparece no resultado e no ranking", "camera/foto", [[true, "LIGADA"], [false, "DESLIGADA"]])
-	_opcoes("Qual câmera", "se a TV Box vê mais de uma", "camera/indice", [[0, "1ª"], [1, "2ª"], [2, "3ª"]])
+	_opcoes("Qual câmera", "AUTO: a primeira que abrir (a webcam USB costuma ser a última)", "camera/indice", [[-1, "AUTO"], [0, "1ª"], [1, "2ª"], [2, "3ª"]])
 	_opcoes("Girar a foto", "webcam de lado ou de cabeça para baixo", "camera/girar", [[0, "0°"], [90, "90°"], [180, "180°"], [270, "270°"]])
 	_opcoes("Espelhar", "como num espelho", "camera/espelhar", [[false, "NÃO"], [true, "SIM"]])
 
 	_secao("TESTE")
-	_linha("Testar a câmera", "tira uma foto agora com o giro e o espelho escolhidos")
+	_linha("Testar a câmera", "abre a pose da partida: imagem ao vivo, 3-2-1 e a foto")
 	_botao("TESTAR", Vector2(X0 + LARG - 12 - 190, _y - ALT_LINHA - 4 + Y_BOTAO), Vector2(190, ALT_BOTAO), 22, "_testar_camera", [], COR_DESTAQUE.darkened(0.35))
 	_camera_estado = Estilo.rotulo(_raiz, "", 19, COR_APAGADO, 0, false, Label.ALIGN_LEFT)
 	_camera_estado.autowrap = true
@@ -237,9 +238,10 @@ func _testar_camera() -> void:
 	if not FotoJogador.ligada():
 		_mostrar_aviso("Câmera indisponível: " + FotoJogador.status(), COR_APAGADO)
 		return
-	FotoJogador.preparar()
-	FotoJogador.fotografar()
-	_mostrar_aviso("Fotografando...", COR_TEXTO)
+	if is_instance_valid(_camera_pose):
+		return
+	_camera_pose = preload("res://scripts/pose_foto.gd").criar(self, COR_DESTAQUE)
+	_mostrar_aviso("", COR_TEXTO)
 
 
 func _camera_testou(tex: Texture) -> void:
@@ -263,6 +265,7 @@ func _montar_arma() -> void:
 	_opcoes("Tipo de arma", "AUTO: a mira é a seta quando o Android gira a tela", "arma/modo", [["auto", "AUTO"], ["absoluta", "SETA"], ["giroscopio", "GIROSCÓPIO"]])
 	_passos_real("Sensibilidade", "AUTO: a mira acompanha a arma (também na tela principal)", "arma/sensibilidade", MiraGlobal.SENS_MIN, MiraGlobal.SENS_MAX, 0.05)
 	_opcoes("Aceleração do Android", "desfaz o \"rápido anda mais\" do ponteiro", "arma/compensar_aceleracao", [[true, "COMPENSAR"], [false, "DEIXAR"]])
+	_opcoes("Alvo de partida", "no COMO JOGAR, o tiro no alvo recoloca a mira onde a arma aponta", "arma/alvo_partida", [[true, "LIGADO"], [false, "DESLIGADO"]])
 	_linha("Calibrar a arma", "aponte no centro de 4 alvos e atire (sem a mira)")
 	_botao("CALIBRAR", Vector2(X0 + LARG - 12 - 190, _y - ALT_LINHA - 4 + Y_BOTAO), Vector2(190, ALT_BOTAO), 22, "_calibrar", [], COR_DESTAQUE.darkened(0.35))
 
@@ -274,7 +277,7 @@ func _montar_arma() -> void:
 	_y += 34.0
 
 	_secao("TESTE")
-	var dica = Estilo.rotulo(_raiz, "Atire nos alvos dos cantos e no do meio: a mira tem que chegar em todos e o tiro tem que cair onde a arma aponta. Se a mira andar demais ou de menos, mude a SENSIBILIDADE (ou a velocidade do ponteiro nas configurações do Android, Idioma e entrada); no giroscópio dá para CALIBRAR.", 18, COR_APAGADO, 0, false, Label.ALIGN_LEFT)
+	var dica = Estilo.rotulo(_raiz, "Atire nos alvos dos cantos e no do meio: a mira tem que chegar em todos e o tiro tem que cair onde a arma aponta. Se não cair, toque em CALIBRAR com a arma na distância de jogo (40 a 60 cm da tela) e aponte com a arma em cada alvo, sem olhar a mira.", 18, COR_APAGADO, 0, false, Label.ALIGN_LEFT)
 	dica.autowrap = true
 	Estilo.colocar(dica, Vector2(X0, _y), Vector2(LARG, 104))
 
@@ -294,6 +297,12 @@ func _montar_arma() -> void:
 	Estilo.colocar(_calib_texto, Vector2(60, 620), Vector2(Tela.TELA.x - 120, 200))
 
 
+## Da página principal direto para a calibragem (na página ARMA E MIRA).
+func _ir_calibrar() -> void:
+	_ir_para("arma")
+	_calibrar()
+
+
 func _ir_para(pagina: String) -> void:
 	_pagina = pagina
 	MiraGlobal.ativa = true
@@ -304,11 +313,11 @@ func _ir_para(pagina: String) -> void:
 ## MIRA), com o AJUSTAR (calibragem, START e RECARGA da arma) ao lado.
 func _linha_sensibilidade() -> void:
 	var y = _y
-	var d = _linha("Sensibilidade da mira", "AUTO: a mira acompanha a arma  ·  + anda mais, − anda menos")
+	var d = _linha("Mira da arma", "CALIBRAR: aponte a arma em 4 alvos, na distância de jogo  ·  + anda mais, − anda menos")
 	if d != null:
 		d.rect_size.x = 520.0
 	var xd = X0 + LARG - 12.0
-	_botao("AJUSTAR", Vector2(xd - 150, y + Y_BOTAO), Vector2(150, ALT_BOTAO), 20, "_ir_para", ["arma"], COR_DESTAQUE.darkened(0.35))
+	_botao("CALIBRAR", Vector2(xd - 150, y + Y_BOTAO), Vector2(150, ALT_BOTAO), 20, "_ir_calibrar", [], COR_DESTAQUE.darkened(0.35))
 	xd -= 160.0
 	var lim = [MiraGlobal.SENS_MIN, MiraGlobal.SENS_MAX]
 	_botao("+", Vector2(xd - 64, y + Y_BOTAO), Vector2(64, ALT_BOTAO), 34, "_mudar_real", ["arma/sensibilidade", 0.05, lim[0], lim[1]])
@@ -332,6 +341,9 @@ func _passos_real(titulo: String, dica: String, chave: String, minimo: float, ma
 
 func _mostrar_real(valor: Label, chave: String) -> void:
 	var v = float(Maquina.valor(chave))
+	if chave == "arma/sensibilidade" and not MiraGlobal.giroscopio and MiraGlobal.calib.size() == 4:
+		valor.text = "CALIBR."
+		return
 	if chave == "arma/sensibilidade" and v <= 0.0:
 		valor.text = "AUTO"
 		return
@@ -347,6 +359,10 @@ func _mudar_real(chave: String, d: float, minimo: float, maximo: float) -> void:
 	var v = stepify(clamp(atual + d, minimo, maximo), 0.01)
 	if chave == "arma/sensibilidade" and atual + d < minimo - 0.001:
 		v = 0.0
+	if chave == "arma/sensibilidade":
+		# mexer na sensibilidade à mão desfaz a calibragem da seta
+		Maquina.definir("arma/calib", [])
+		MiraGlobal.zerar_desvio()
 	Maquina.definir(chave, v)
 	MiraGlobal.aplicar_config()
 	_atualizar_tudo()
@@ -356,11 +372,9 @@ func _mudar_real(chave: String, d: float, minimo: float, maximo: float) -> void:
 func _calibrar() -> void:
 	if _desenho == null:
 		return
-	if not MiraGlobal.giroscopio:
-		# a mira é a própria seta: não tem o que medir
-		_mostrar_aviso("A mira já é a seta (o Android gira a tela): não precisa calibrar", COR_OK)
-		return
-	_calib = {"passo": 0, "medidas": [], "bordas": false}
+	# no giroscópio mede o movimento (a sensibilidade); na seta mede onde a
+	# seta está em cada alvo (a escala e o deslocamento de cada eixo)
+	_calib = {"passo": 0, "medidas": [], "setas": [], "bordas": false}
 	MiraGlobal.ativa = false
 	MiraGlobal.zerar_borda()
 	_calib_mostrar()
@@ -379,6 +393,11 @@ func _calib_mostrar() -> void:
 func _calib_tiro() -> void:
 	var n = int(_calib["passo"])
 	_calib["medidas"].append(MiraGlobal.movimento)
+	_calib["setas"].append(MiraGlobal.seta_jogo)
+	if not MiraGlobal.giroscopio:
+		var sj: Vector2 = MiraGlobal.seta_jogo
+		if sj.x <= 1.0 or sj.y <= 1.0 or sj.x >= Tela.TELA.x - 1.0 or sj.y >= Tela.TELA.y - 1.0:
+			_calib["bordas"] = true
 	if n % 2 == 1:
 		# fim de um par medido (de cima a baixo, da esquerda à direita): a
 		# seta presa numa beirada no sentido do par andou menos que a arma
@@ -397,6 +416,9 @@ func _calib_tiro() -> void:
 ## Do alvo de cima ao de baixo e do da esquerda ao da direita: distância na
 ## tela dividida pelo movimento da arma (na direção entre os alvos).
 func _calib_terminar() -> void:
+	if not MiraGlobal.giroscopio:
+		_calib_terminar_seta()
+		return
 	var m: Array = _calib["medidas"]
 	var tela = 0.0
 	var arma = 0.0
@@ -424,6 +446,38 @@ func _calib_terminar() -> void:
 	_atualizar_tudo()
 	var era = "AUTO" if antes <= 0.0 else ("%.2fx" % antes).replace(".", ",")
 	_mostrar_aviso(("Calibrada: %.2fx" % s).replace(".", ",") + " (era %s)  ·  salve na tela anterior" % era, COR_OK)
+
+
+## Na seta: do alvo de cima ao de baixo sai a escala e o deslocamento em y;
+## do da esquerda ao da direita, em x. A mira passa a cair onde a arma
+## aponta, na distância em que o jogador calibrou (ex.: 40-60 cm).
+func _calib_terminar_seta() -> void:
+	var st: Array = _calib["setas"]
+	var bordas: bool = _calib["bordas"]
+	_calib = {}
+	_calib_texto.visible = false
+	MiraGlobal.ativa = true
+	_desenho.update()
+	if bordas:
+		_mostrar_aviso("A seta do Android encostou na borda: calibre de novo, devagar", COR_DESTAQUE)
+		return
+	var dy: float = st[1].y - st[0].y
+	var dx: float = st[3].x - st[2].x
+	if abs(dy) < 40.0 or abs(dx) < 40.0:
+		_mostrar_aviso("A arma quase não andou: calibre de novo, apontando em cada alvo", COR_DESTAQUE)
+		return
+	var ey = (CALIB_ALVOS[1].y - CALIB_ALVOS[0].y) / dy
+	var ex = (CALIB_ALVOS[3].x - CALIB_ALVOS[2].x) / dx
+	if ex < 0.25 or ex > 4.0 or ey < 0.25 or ey > 4.0:
+		_mostrar_aviso("A medida saiu fora do normal: calibre de novo", COR_DESTAQUE)
+		return
+	var oy = ((CALIB_ALVOS[0].y - st[0].y * ey) + (CALIB_ALVOS[1].y - st[1].y * ey)) * 0.5
+	var ox = ((CALIB_ALVOS[2].x - st[2].x * ex) + (CALIB_ALVOS[3].x - st[3].x * ex)) * 0.5
+	Maquina.definir("arma/calib", [stepify(ex, 0.001), stepify(ey, 0.001), stepify(ox, 0.1), stepify(oy, 0.1)])
+	MiraGlobal.zerar_desvio()
+	MiraGlobal.aplicar_config()
+	_atualizar_tudo()
+	_mostrar_aviso("Mira calibrada  ·  atire nos alvos de teste para conferir e SALVE na tela anterior", COR_OK)
 
 
 func _desenhar_alvos() -> void:
@@ -784,6 +838,9 @@ func _input(ev: InputEvent) -> void:
 	elif ev is InputEventJoypadButton and ev.pressed:
 		_mostrar_ultimo("ZERO DELAY " + Maquina.nome_do_descritor(Maquina.descrever(ev)))
 	if _saindo:
+		return
+	# testando a câmera: a pose está por cima (os botões não recebem o tiro)
+	if is_instance_valid(_camera_pose):
 		return
 	# calibrando: cada tiro é uma medida; ESC desiste
 	if not _calib.empty():

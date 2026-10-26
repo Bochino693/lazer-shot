@@ -14,6 +14,9 @@ class_name ComoJogar
 ##            -100 e recomeça, sequência fixa completa +50, rápido +10
 ##
 ## Montado uma vez (só Controls); some com o tiro que começa a partida.
+## Embaixo, o ALVO DE PARTIDA: com a mira escondida, o jogador aponta a arma
+## no centro dele e atira; a mira passa a cair onde a arma aponta
+## (MiraGlobal.recentrar). Desligável na CONFIGURAÇÃO (ARMA E MIRA).
 
 const VERDE = Color(0.42, 1.0, 0.48)
 const VERMELHO = Color(1.0, 0.30, 0.26)
@@ -161,11 +164,12 @@ func _montar() -> void:
 	y += 82.0
 	_alvo = Sprite.new()
 	_alvo.texture = Estilo.tex("ui_alvo")
-	_alvo.scale = Vector2.ONE * (64.0 / 256.0)
-	_alvo.position = Vector2(150, y + 34)
+	var com_alvo = bool(Maquina.valor("arma/alvo_partida"))
+	_alvo.scale = Vector2.ONE * ((96.0 if com_alvo else 64.0) / 256.0)
+	_alvo.position = Vector2(110, y + 34)
 	_painel.add_child(_alvo)
-	_rodape = Estilo.rotulo(_painel, "ATIRE PARA COMEÇAR", 46, Color.white, 5)
-	Estilo.colocar(_rodape, Vector2(190, y), Vector2(larg - 260, 70))
+	_rodape = Estilo.rotulo(_painel, "APONTE A ARMA NO ALVO E ATIRE" if com_alvo else "ATIRE PARA COMEÇAR", 38 if com_alvo else 46, Color.white, 5)
+	Estilo.colocar(_rodape, Vector2(176, y), Vector2(larg - 200, 70))
 	_rodape.align = Label.ALIGN_LEFT
 
 
@@ -211,6 +215,11 @@ func _desenhar_bola(n: Node2D, c: Color, txt: String) -> void:
 	var f = Estilo.fonte(42, true, 4)
 	var s = f.get_string_size(txt)
 	n.draw_string(f, Vector2(-s.x * 0.5, f.get_ascent() * 0.5 - 6.0), txt, Color.white)
+
+
+## O centro do alvo de partida (pontos do jogo).
+func ponto_alvo() -> Vector2:
+	return _painel.rect_position + _alvo.position
 
 
 func fechar() -> void:

@@ -1,33 +1,38 @@
-# Lazer Shot 2.5 — TV Box Mali-450
+# Lazer Shot 2.6 — TV Box Mali-450
 
 Esta pasta é o **Lazer Shot para a TV Box da placa Mali-450** (S905L / S905W, Android 7.1). A placa de vídeo dela só tem OpenGL ES 2.0, por isso este jogo é feito no **Godot 3.6.2 (GLES2)**. A versão 4.6 (Pro Ultra / TX9) é outro projeto, na branch `tvbox-ultra-pro`.
 
-## Novidades da 2.5
+## Novidades da 2.6
 
-- **Deserto com o céu de verdade.** O sol e a lua estavam pintados no próprio fundo. Quando o astro animado saía, o pintado aparecia por trás.
-  - O fundo agora tem só o céu no lugar do astro (nuvens de dia, estrelas de noite).
-  - Na troca do dia, o sol fecha o olho e **se põe atrás das pirâmides**, avermelhando. O céu escurece e a lua **nasce do mesmo lugar**, abrindo o olho. Nada fica transparente, então não aparece imagem por trás.
-- **Olho do sol e da lua mais natural:**
-  - olha em movimentos rápidos, como olho de verdade, e fica parado com um tremor mínimo;
-  - pisca, às vezes duas vezes seguidas;
-  - a pupila abre no escuro e na alegria, e um brilho de luz fica na íris;
-  - a pálpebra ficou no tom do disco, sem a faixa clara, e nenhuma camada do olho passa mais da borda do disco.
-- **Águias voando de lado**, com a cabeça para a frente (antes eram vistas de baixo, de cabeça para cima).
-  - Batem as asas para subir, planam descendo e inclinam o corpo.
-  - **Profundidade:** as de longe são pequenas, lentas, apagadas na névoa e passam atrás das pirâmides. As de perto são grandes e rápidas.
-- **Mais vida no Deserto:** estrelas piscando e estrelas cadentes de noite; rajadas de areia rente ao chão de dia.
-- **Sons que não se cortam.**
-  - Cada som tem até 6 vozes e usa uma livre antes de tomar outra (antes eram 3 em rodízio, e o 4º tiro cortava o 1º).
-  - Até 24 sons juntos.
-  - O limitador só segura o pico: não abaixa mais um som por causa do outro.
-- **Fim de partida com ânimo.** Uma fanfarra de vitória: rufar, metais subindo, acorde final com tímpanos, pratos, sinos e aplausos. Depois a música da fase volta baixinho. O som antigo (`end_game.mp3`) era um grave repetido e saiu do jogo.
-- **Foto do jogador pela webcam USB.**
-  - Tirada no COMEÇOU! de cada partida, com flash e o clique da câmera. A foto instantânea "VOCÊ!" entra no canto da tela.
-  - Aparece na tela do nome ("SEU RECORDE"), no resultado e no ranking. Sem câmera, fica a silhueta.
-  - A câmera só fica ligada o tempo da foto, para não gastar processador na partida.
-  - **CONFIGURAÇÃO → RANKING E FOTO → Foto do jogador** liga e desliga. O botão **CÂMERA** abre a página com qual câmera usar, girar (0°, 90°, 180°, 270°), espelhar, o estado e o **TESTAR**.
-  - Na primeira vez o Android pergunta se o jogo pode usar a câmera: escolha **Permitir**.
-  - **Precisa gerar o APK de novo** com este gerador. Na janela aparece "Camera: a foto do jogador vai no APK".
+- **A foto do jogador é pedida antes de cada partida.** Depois do START (ou do tiro no alvo do COMO JOGAR) aparece a tela **"SORRIA PARA A FOTO!"**, com a imagem ao vivo da webcam numa foto instantânea grande, a contagem 3-2-1, o clique com flash e a foto pronta ("FICOU ÓTIMO!"). Depois vem a contagem da partida. START pula a foto.
+  - A câmera liga quando a fase abre (enquanto o jogador lê o COMO JOGAR) e desliga logo depois da foto.
+  - **Câmera reconhecida:** em AUTO o jogo tenta todas as câmeras que o Android vê, da última para a primeira (a webcam USB costuma ser a última; a primeira pode ser a entrada HDMI da TV Box). Antes abria sempre a primeira.
+  - Se o Android não deu a permissão, a página CÂMERA da configuração diz "SEM PERMISSÃO" e como liberar.
+  - Sem câmera, a pose não aparece e o jogo segue normal.
+  - No fim da geração, o gerador diz em verde **"Camera: a foto do jogador esta no APK"** ou em vermelho que ela ficou de fora (e por quê).
+- **Céu do Deserto refeito, sem borrões.**
+  - De dia, os raios pintados em volta do sol continuam até o centro: um clarão de sol, que fica no céu enquanto ele se põe.
+  - De noite, o lugar da lua é preenchido com pedaços das nuvens do próprio céu, com a mesma nitidez do resto.
+- **Águias nítidas.** O desenho é 1,6 vez maior e nunca é ampliado na tela; as de longe usam mipmaps (sem serrilhado).
+- **Mira casando com a arma a 40-60 cm.**
+  - **CONFIGURAÇÃO → ARMA E BOTÕES → Mira da arma → CALIBRAR:** com a mira escondida, aponte a arma no centro de 4 alvos e atire. O jogo mede quanto a seta anda entre os alvos e passa a pôr a mira onde a arma aponta, naquela distância. Vale também quando o Android gira a tela (antes só calibrava no giroscópio).
+  - **Alvo de partida:** a arma de giroscópio escorrega com o tempo. No COMO JOGAR, a mira fica escondida e aparece o alvo **"APONTE A ARMA NO ALVO E ATIRE"**: o tiro nele recoloca a mira onde a arma aponta, a cada partida. Um tiro muito longe do alvo não mexe na mira. Desliga em ARMA E MIRA → Alvo de partida.
+  - Mexer na sensibilidade com − e + desfaz a calibragem.
+- **Botão ALEATÓRIO** na escolha de cenário: a roleta sorteia o cenário na hora.
+- **Vídeo da tela inicial de volta.** Ele sumia quando a TV Box achava a tela pesada. Agora somem os outros enfeites e a tela vai a 30 quadros/s, mas o vídeo fica (só a CONFIGURAÇÃO desliga).
+- **Música contínua.** Sem som de fim de partida: a música da fase segue no resultado e na tela do nome. Toda música recomeça sozinha se acabar com a tela ainda aberta (a do ranking também).
+- **Telas sem sobreposição:**
+  - o quadro da contagem da escolha de cenário não cobre mais o logo Lazer & Sport;
+  - na tela inicial, "APERTE START" e o selo JOGO LIVRE saíram de cima do logo LAZER SHOT.
+
+## Da 2.5
+
+- **Deserto:** o sol e a lua pintados saíram do fundo. Na troca do dia, o sol fecha o olho e se põe atrás das pirâmides, e a lua nasce do mesmo lugar.
+- **Olho do sol e da lua mais natural:** movimentos rápidos de olho de verdade, piscada, pupila e brilho na íris, pálpebra no tom do disco.
+- **Águias voando de lado**, com a cabeça para a frente, em três distâncias (as de longe passam atrás das pirâmides).
+- **Mais vida no Deserto:** estrelas piscando e estrelas cadentes de noite; rajadas de areia de dia.
+- **Sons que não se cortam:** até 6 vozes por som e 24 no total; o limitador só segura o pico.
+- **Foto do jogador pela webcam USB**, no resultado e no ranking. Na primeira vez o Android pergunta se o jogo pode usar a câmera: escolha **Permitir**. A página **CÂMERA** fica em CONFIGURAÇÃO → RANKING E FOTO.
 
 ## Da 2.4
 
@@ -128,7 +133,7 @@ Esta pasta é o **Lazer Shot para a TV Box da placa Mali-450** (S905L / S905W, A
 
    Tudo aparece na janela na hora e fica gravado em `build\android\GERACAO-COMPLETA.log`. A janela termina sozinha.
 
-3. O APK fica em **`APK-Pronto\LazerShot-Mali450-2.5.0.apk`** (a versão vai no nome do arquivo). Copie para o pendrive, use **Ejetar** no Windows antes de tirar o pendrive e instale na TV Box.
+3. O APK fica em **`APK-Pronto\LazerShot-Mali450-2.6.0.apk`** (a versão vai no nome do arquivo). Copie para o pendrive, use **Ejetar** no Windows antes de tirar o pendrive e instale na TV Box.
 
    No fim aparece **APK PRONTO E CONFERIDO**, com a linha **Assinatura: v1 + v2**. Antes disso o gerador confere o APK por dentro: o motor ARM 32 e 64 bits, os scripts e as imagens em ETC1. As mensagens técnicas do Godot que não são problema (PC sem placa de som, por exemplo) não aparecem na janela; ficam só no histórico.
 
@@ -183,7 +188,7 @@ O giro e quem gira também se trocam **na própria TV Box**, na CONFIGURAÇÃO d
   - Para a TV Box girar: se ela tiver **Configurações → Tela → Rotação da tela** (o nome muda de uma para outra), escolha **Original** (ou "seguir o app"). Nas TV Box Amlogic, as opções do tipo "retrato no meio" (middle_port) e "forçar paisagem" (force_land) não giram. Depois, na CONFIGURAÇÃO do jogo, toque em **AUTO** em "Quem gira a tela" para ele tentar de novo.
   - **Imagem de cabeça para baixo:** CONFIGURAÇÃO → "Giro da tela" → troque ESQUERDA por DIREITA.
 - A **arma** é o mouse: o **gatilho** atira; o **clique direito** (o botão perto do gatilho) recarrega; os **outros botões do lado** dão START (na partida, também recarregam).
-- **Mira correndo demais ou de menos:** mude a **Sensibilidade da mira** (CONFIGURAÇÃO → ARMA E BOTÕES, − e +; AUTO volta ao normal). Quando o jogo gira por dentro dá para CALIBRAR também (AJUSTAR → CALIBRAR). Se ainda correr demais, diminua a **Velocidade do ponteiro** nas configurações do Android (Idioma e entrada).
+- **A mira não cai onde a arma aponta:** CONFIGURAÇÃO → ARMA E BOTÕES → **Mira da arma → CALIBRAR**. Fique na distância de jogo (40 a 60 cm da tela), aponte a arma no centro de cada um dos 4 alvos e atire (a mira fica escondida: olhe pela arma, não pela mira). Depois atire nos alvos de teste para conferir e toque em SALVAR. A cada partida, o tiro no alvo do COMO JOGAR acerta o que a arma escorregou. Se a mira ainda correr demais, diminua a **Velocidade do ponteiro** nas configurações do Android (Idioma e entrada) e calibre de novo.
 - **Zero Delay:** START = botão 0, RECARGA = 1, TIRO = 2, SELECT = 4.
   - O SELECT soma crédito no modo crédito.
   - Os botões podem ser aprendidos de novo na CONFIGURAÇÃO.
@@ -207,6 +212,6 @@ O giro e quem gira também se trocam **na própria TV Box**, na CONFIGURAÇÃO d
 - Quem gira a tela está em `scripts/tela.gd`: o app abre deitado, lê `persist.sys.app.rotation` (Amlogic), pede o retrato e confere pela janela (em pé do tamanho da tela inteira = o Android girou; faixa no meio ou nada em 5 s = o jogo gira por dentro). A resposta fica em `user://tela.cfg`. No PC dá para fingir a TV Box com `LAZER_GIRO=1` e `LAZER_PROP_ROTACAO`.
 - A mira da arma está em `scripts/mira_global.gd` (a seta com filtro 1€ quando o Android gira; giroscópio, aceleração do Android e beiradas quando o jogo gira) e o ajuste dela em `scripts/config.gd` (página Arma e mira).
 - O vídeo da tela inicial é `videos/back_init.webm` (VP8, 540x960, 24 quadros/s, sem som), feito do `back_init.mp4` da versão 4.6 com o ffmpeg: `-vf "crop=698:1088:11:0,scale=540:960:flags=lanczos" -r 24 -c:v libvpx -b:v 1500k -crf 8 -qmin 4 -qmax 40 -auto-alt-ref 0 -g 48 -an`.
-- A foto do jogador: `scripts/foto_jogador.gd` (o autoload FotoJogador) chama a classe Java `android_camera/src/org/lazershot/CameraFoto.java` pelo JavaClassWrapper. A classe é compilada em `android_camera/camera_foto.jar` por `android_camera/COMPILAR.sh` (javac, com as assinaturas do Android em `android_camera/stubs/`). No PC dá para testar com `LAZER_CAMERA_FALSA=foto.jpg`.
-- O céu do Deserto sem o astro, a águia de lado, o recorte das camadas do olho e a fanfarra do fim saem de `tools/preparar_mali.py` (`SO_EGITO=1` e `SO_SONS=1`).
+- A foto do jogador: `scripts/foto_jogador.gd` (o autoload FotoJogador) chama a classe Java `android_camera/src/org/lazershot/CameraFoto.java` pelo JavaClassWrapper; a pose é `scripts/pose_foto.gd`. A classe é compilada em `android_camera/camera_foto.jar` por `android_camera/COMPILAR.sh` (javac, com as assinaturas do Android em `android_camera/stubs/`). No PC dá para testar com `LAZER_CAMERA_FALSA=foto.jpg`.
+- O céu do Deserto sem o astro (raios de dia, remendos de nuvem de noite), a águia de lado e o recorte das camadas do olho saem de `tools/preparar_mali.py` (`SO_EGITO=1`, cerca de 2 minutos).
 - A abertura do Android (no lugar do símbolo do Godot) está em `splash/`, uma imagem para cada giro, feita por `tools/preparar_mali.py`. Como o app abre deitado, o gerador escolhe a já girada para o lado do giro pedido.

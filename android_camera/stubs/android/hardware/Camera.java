@@ -10,6 +10,10 @@ public class Camera {
     public final void startPreview() { throw new RuntimeException("stub"); }
     public final void stopPreview() { throw new RuntimeException("stub"); }
     public final void release() { throw new RuntimeException("stub"); }
+    public final void setErrorCallback(ErrorCallback cb) { throw new RuntimeException("stub"); }
+    public interface ErrorCallback {
+        void onError(int error, Camera camera);
+    }
     public interface PreviewCallback {
         void onPreviewFrame(byte[] data, Camera camera);
     }

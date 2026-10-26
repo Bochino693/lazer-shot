@@ -105,7 +105,8 @@ func _montar_tela() -> void:
 	camada.layer = 30
 	add_child(camada)
 	_chamada = Estilo.rotulo(camada, Maquina.texto_chamada(), 38, Color.white, 6)
-	Estilo.colocar(_chamada, Vector2(152, Tela.TELA.y - 137), Vector2(720, 90))
+	# à direita: o logo LAZER SHOT do fundo ocupa a esquerda de baixo
+	Estilo.colocar(_chamada, Vector2(560, Tela.TELA.y - 137), Vector2(440, 90))
 	_flash = ColorRect.new()
 	_flash.rect_size = Tela.TELA
 	_flash.color = Color(1, 1, 1, 0)

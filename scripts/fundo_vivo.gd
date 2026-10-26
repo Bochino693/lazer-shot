@@ -8,9 +8,9 @@ class_name FundoVivo
 ## (videos/back_init.webm, VP8 540x960 sem som: a TV Box decodifica VP8 com
 ## NEON, leve) tocando em volta, por cima do quadro parado (fundo_menu). O
 ## vídeo pausa quando não aparece (demonstração por cima, outro cenário na
-## frente) e some sozinho se a tela pesar (grupo "efeito_opcional", ver
-## MiraGlobal) ou se estiver desligado na CONFIGURAÇÃO; aí fica o quadro
-## parado vivo: o título, o alvo e o logo acendem na batida da música e as
+## frente) e só some se estiver desligado na CONFIGURAÇÃO (se a tela pesar,
+## somem os outros enfeites e ela vai a 30 quadros/s; o vídeo fica). Sem ele
+## fica o quadro parado vivo: o título, o alvo e o logo acendem na batida da música e as
 ## luzes do corredor piscam com o grave (duas camadas de luz somada, de meia
 ## resolução, tiradas do próprio fundo por tools/preparar_mali.py). Os cenários ("deserto", "mar", "bar",
 ## "arena") são as artes das fases. Por cima de todos, brasas subindo e uma
@@ -123,7 +123,8 @@ func _criar_video(fundo: Sprite) -> VideoPlayer:
 	v.rect_position = -tam * 0.5
 	v.rect_size = tam
 	v.connect("finished", self, "_video_de_novo")
-	v.add_to_group("efeito_opcional")
+	# o vídeo nunca é enfeite: se a tela pesar, somem os outros enfeites e
+	# ela vai para 30 quadros/s (o vídeo é de 24), mas ele fica
 	fundo.add_child(v)
 	fundo.move_child(v, 0)
 	v.play()

@@ -79,57 +79,87 @@ def fundo(nome_orig, nome_saida, nitidez=True, corte_max=None, preparo=None):
     return im
 
 
+def _remendar(a, buraco, fonte, P, O, rng, cand=1500):
+    """Enche `buraco` (bool) com remendos P x P tirados de onde `fonte` (bool)
+    permite, em ordem de linhas e sobrepostos O px (image quilting): cada
+    remendo é o que mais casa com o que já está em volta (entre os 8
+    melhores de `cand` sorteados, metade espelhada). O vazio recebe o remendo
+    inteiro; o que já existe só se mistura numa faixa junto do vazio."""
+    import cv2
+    a = a.astype(np.float32).copy()
+    h, w = buraco.shape
+    conhecido = ~buraco
+    ok = cv2.erode(fonte.astype(np.uint8), np.ones((P, P), np.uint8), anchor=(0, 0),
+                   borderType=cv2.BORDER_CONSTANT, borderValue=0)
+    ys, xs = np.nonzero(ok[:h - P + 1, :w - P + 1])
+    passo = P - O
+    by, bx = np.nonzero(buraco)
+    for ty in range(max(0, by.min() - O), min(h - P, by.max()) + passo, passo):
+        ty = min(ty, h - P)
+        for tx in range(max(0, bx.min() - O), min(w - P, bx.max()) + passo, passo):
+            tx = min(tx, w - P)
+            vazio = buraco[ty:ty + P, tx:tx + P] & ~conhecido[ty:ty + P, tx:tx + P]
+            if not vazio.any():
+                continue
+            m = conhecido[ty:ty + P, tx:tx + P].astype(np.float32)
+            alvo = a[ty:ty + P, tx:tx + P]
+            idx = rng.randint(0, len(ys), cand)
+            pats = np.stack([a[ys[i]:ys[i] + P, xs[i]:xs[i] + P] for i in idx])
+            pats[::2] = pats[::2, :, ::-1]
+            if m.sum() > 0:
+                err = (((pats - alvo[None]) ** 2).sum(-1) * m[None]).sum((1, 2)) / m.sum()
+            else:
+                err = np.zeros(len(idx))
+            melhores = np.argsort(err)[:8]
+            p = pats[melhores[rng.randint(0, len(melhores))]]
+            dU = cv2.distanceTransform((~vazio).astype(np.uint8), cv2.DIST_L2, 3)
+            ja_cheio = buraco[ty:ty + P, tx:tx + P] & ~vazio
+            alfa = np.where(vazio, 1.0, np.where(ja_cheio, np.clip(1.0 - dU / O, 0, 1), np.clip(1.0 - dU / (O * 0.5), 0, 1) * 0.7))
+            a[ty:ty + P, tx:tx + P] = alvo * (1 - alfa[..., None]) + p * alfa[..., None]
+            conhecido[ty:ty + P, tx:tx + P] |= buraco[ty:ty + P, tx:tx + P]
+    return a
+
+
 def ceu_sem_astro(im, noite=False):
-    """O sol (ou a lua) pintado no fundo do Egito vira céu: o astro do jogo
-    é desenhado por cima, em camadas, e se põe atrás das pirâmides; no lugar
-    dele fica o céu (a cor de volta por inpainting suave, nuvens geradas e,
-    de noite, estrelas), sem a ponta da pirâmide do meio."""
+    """O sol (ou a lua) pintado no fundo do Egito sai: o astro do jogo é
+    desenhado por cima, em camadas, e se põe atrás das pirâmides. Nada de
+    borrão no lugar dele:
+    - DE DIA os raios pintados em volta continuam até o centro (cada ponto
+      pega o anel de luz logo fora, no mesmo ângulo): um clarão de sol, que
+      o sol do jogo cobre e que fica no céu enquanto ele se põe;
+    - DE NOITE o lugar da lua é enchido com remendos das nuvens do próprio
+      céu (image quilting), com a mesma nitidez do resto.
+    A ponta da pirâmide do meio fica como está."""
     import cv2
     a = np.asarray(im.convert("RGB")).astype(np.float32)
     h, w = a.shape[:2]
     s = w / 1024.0
-    cx, cy = 512.0 * s, 300.0 * s
-    rx, ry = 182.0 * s, 160.0 * s
+    cx, cy, rx, ry = 512.0 * s, 300.0 * s, 186.0 * s, 176.0 * s
     yy, xx = np.mgrid[0:h, 0:w].astype(np.float32)
-    dx, dy = xx - cx, yy - cy
-    e = np.sqrt((dx / rx) ** 2 + (dy / ry) ** 2)
-    buraco = (e < 1.3).astype(np.uint8)
-    k = int(8 * s)
-    pq = cv2.resize(a, (w // k, h // k), interpolation=cv2.INTER_AREA).astype(np.uint8)
-    mpq = cv2.resize(buraco * 255, (w // k, h // k), interpolation=cv2.INTER_NEAREST)
-    mpq = cv2.dilate(mpq, np.ones((3, 3), np.uint8))
-    base = cv2.inpaint(pq, mpq, 8, cv2.INPAINT_TELEA)
-    base = cv2.resize(base, (w, h), interpolation=cv2.INTER_CUBIC).astype(np.float32)
-    base = cv2.GaussianBlur(base, (0, 0), 10 * s)
-    # nuvens geradas (ruído suave em várias escalas, sem desenho repetido):
-    # o céu em volta do astro fica claro e enevoado, com textura viva
-    rng = np.random.RandomState(7)
-    ruido = np.zeros((h, w), np.float32)
-    amp = 1.0
-    for oit in range(5):
-        lado = int(6 * 2 ** oit)
-        r = rng.rand(lado * 3 // 2 + 2, lado + 2).astype(np.float32)
-        ruido += cv2.resize(r, (w, h), interpolation=cv2.INTER_CUBIC) * amp
-        amp *= 0.55
-    ruido = (ruido - ruido.mean()) / (ruido.std() + 1e-6)
-    # veios esticados na horizontal, como as nuvens do quadro
-    ruido = cv2.GaussianBlur(ruido, (0, 0), sigmaX=6 * s, sigmaY=2 * s)
-    lum = base.mean(axis=2, keepdims=True)
-    if noite:
-        # de noite as nuvens são veios claros e há estrelas
-        veio = np.clip(ruido - 0.6, 0, None)[..., None]
-        ceu = base * (1.0 + 0.12 * ruido[..., None]) + veio * np.array([60.0, 80.0, 120.0], np.float32) * 0.55
-        est = (rng.rand(h, w) > 0.99975).astype(np.float32)
-        est = cv2.GaussianBlur(est, (0, 0), 0.7 * s) * 900.0
-        ceu += est[..., None] * np.array([0.85, 0.9, 1.0], np.float32)
+    dx, dy = (xx - cx) / rx, (yy - cy) / ry
+    e = np.sqrt(dx ** 2 + dy ** 2) + 1e-6
+    pir = np.zeros((h, w), np.uint8)
+    cv2.fillPoly(pir, [np.array([[508 * s, 441 * s], [296 * s, 744 * s], [720 * s, 744 * s]], np.int32)], 1)
+    if not noite:
+        E0, F = 1.1, 0.22
+        buraco = (e < E0) & (pir == 0)
+        fonte = cv2.inpaint(np.clip(a, 0, 255).astype(np.uint8), cv2.dilate(pir, np.ones((9, 9), np.uint8)) * 255, 12,
+                            cv2.INPAINT_TELEA).astype(np.float32)
+        e2 = E0 + (E0 - np.minimum(e, E0)) * F
+        sx = (cx + dx / e * e2 * rx).astype(np.float32)
+        sy = (cy + dy / e * e2 * ry).astype(np.float32)
+        novo = cv2.remap(fonte, sx, sy, cv2.INTER_LINEAR, borderMode=cv2.BORDER_REFLECT)
+        luz = np.clip(1.0 - e / E0, 0, 1)[..., None]
+        novo = novo + luz ** 2 * 40.0 + luz ** 4 * np.array([90.0, 70.0, 30.0], np.float32)
+        borda = 10 * s
     else:
-        ceu = base * (1.0 + 0.10 * ruido[..., None]) + np.clip(ruido[..., None] - 0.8, 0, None) * 0.18 * lum
-    alfa = np.clip((1.18 - e) / 0.18, 0, 1)
-    piramide = np.zeros((h, w), np.uint8)
-    cv2.fillPoly(piramide, [np.array([[508 * s, 443 * s], [298 * s, 742 * s], [718 * s, 742 * s]], np.int32)], 255)
-    piramide = cv2.GaussianBlur(piramide.astype(np.float32), (0, 0), 0.8 * s) / 255.0
-    alfa = (alfa * (1.0 - piramide))[..., None]
-    out = a * (1 - alfa) + np.clip(ceu, 0, 255) * alfa
+        buraco = (e < 1.32) & (pir == 0)
+        fonte = (e > 1.47) & (xx > 185 * s) & (xx < 840 * s) & (yy < 420 * s) & (yy > 6 * s)
+        novo = _remendar(a, buraco, fonte, int(56 * s), int(18 * s), np.random.RandomState(12))
+        borda = 1.0
+    dentro = cv2.distanceTransform(buraco.astype(np.uint8), cv2.DIST_L2, 3)
+    alfa = np.clip(dentro / borda, 0, 1)[..., None]
+    out = a * (1 - alfa) + novo * alfa
     return Image.fromarray(np.clip(out, 0, 255).astype(np.uint8), "RGB")
 
 
@@ -138,163 +168,14 @@ def fundos_egito():
     fundo("egito_fundo_lua.png", "fundo_egito_lua.jpg", preparo=lambda im: ceu_sem_astro(im, True))
 
 
-# ------------------------------------------------------------------ fanfarra
-def fanfarra_fim():
-    """O som do fim da partida (songs/fim_partida.wav): rufar da caixa,
-    fanfarra de metais subindo (tchan-tchan-tchan-TCHAAAN), o acorde final
-    com tímpanos, pratos e sinos brilhando, e aplausos. Tudo sintetizado
-    aqui (a 4.6 tocava end_game.mp3, um grave repetido sem ânimo)."""
-    import wave
-    SR = 44100
-    DUR = 6.2
-    N = int(SR * DUR)
-    rng = np.random.RandomState(42)
-    L = np.zeros(N); R = np.zeros(N)
-
-    def nota_hz(n):            # n: semitons a partir do A4
-        return 440.0 * 2 ** (n / 12.0)
-    C4, E4, G4 = -9, -5, -2
-    C5, D5, E5, F5, G5, A5 = 3, 5, 7, 8, 10, 12
-    C6 = 15
-
-    def put(sig, t0, pan=0.0, g=1.0):
-        i = int(t0 * SR)
-        n = min(len(sig), N - i)
-        if n <= 0: return
-        L[i:i + n] += sig[:n] * g * np.sqrt(0.5 * (1 - pan))
-        R[i:i + n] += sig[:n] * g * np.sqrt(0.5 * (1 + pan))
-
-    def env_adsr(n, a, d, s, r, dur):
-        t = np.arange(n) / SR
-        e = np.where(t < a, t / a, np.where(t < a + d, 1 - (1 - s) * (t - a) / d, s))
-        rel = np.clip((dur - t) / r, 0, 1)
-        return e * np.minimum(1.0, rel)
-
-    def metal(hz, dur, vol=1.0, brilho=1.0, vib=True):
-        """Metal (trompete) sintético: dente de serra aditivo, brilho que abre
-        no ataque, coro de 3 vozes e vibrato depois do ataque."""
-        n = int((dur + 0.25) * SR)
-        t = np.arange(n) / SR
-        out = np.zeros(n)
-        for det in (-0.004, 0.0, 0.0045):
-            f = hz * (1 + det)
-            vibr = 1 + (0.006 * np.sin(2 * np.pi * 5.6 * t) * np.clip((t - 0.18) / 0.2, 0, 1) if vib else 0)
-            fase = 2 * np.pi * np.cumsum(f * vibr) / SR
-            bri = 0.35 + 0.65 * np.exp(-t / 0.12) * brilho + 0.25 * brilho
-            k = 1
-            while k * f < 9000 and k <= 18:
-                out += np.sin(k * fase) / k * np.exp(-(k - 1) * (0.55 - 0.4 * np.minimum(bri, 1.2)))
-                k += 1
-        out /= 3.0
-        out *= env_adsr(n, 0.025, 0.12, 0.78, 0.18, dur + 0.05)
-        return out * vol
-
-    def timpano(hz, vol=1.0):
-        n = int(1.4 * SR); t = np.arange(n) / SR
-        f = hz * (1 + 0.25 * np.exp(-t / 0.03))
-        s = np.sin(2 * np.pi * np.cumsum(f) / SR) * np.exp(-t / 0.45)
-        s += 0.3 * np.sin(2 * np.pi * np.cumsum(f * 1.5) / SR) * np.exp(-t / 0.2)
-        s += rng.randn(n) * np.exp(-t / 0.012) * 0.25
-        return s * vol
-
-    def caixa(vol=1.0, dur=0.12):
-        n = int(dur * SR); t = np.arange(n) / SR
-        ruido = rng.randn(n)
-        ruido = ruido - np.convolve(ruido, np.ones(6) / 6, 'same')     # passa-alta
-        corpo = np.sin(2 * np.pi * 190 * t) * np.exp(-t / 0.03)
-        return (ruido * 0.7 + corpo * 0.5) * np.exp(-t / 0.045) * vol
-
-    def prato(vol=1.0, dur=2.6):
-        n = int(dur * SR); t = np.arange(n) / SR
-        r = rng.randn(n)
-        r = r - np.convolve(r, np.ones(3) / 3, 'same')
-        r = r - np.convolve(r, np.ones(3) / 3, 'same')
-        return r * np.exp(-t / 0.75) * (1 - np.exp(-t / 0.004)) * vol
-
-    def sino(hz, vol=1.0):
-        n = int(1.2 * SR); t = np.arange(n) / SR
-        s = np.sin(2 * np.pi * hz * t) * np.exp(-t / 0.45) + 0.4 * np.sin(2 * np.pi * hz * 2.76 * t) * np.exp(-t / 0.12)
-        s += 0.18 * np.sin(2 * np.pi * hz * 5.4 * t) * np.exp(-t / 0.05)
-        return s * (1 - np.exp(-t / 0.002)) * vol
-
-    def aplausos(t0, dur, vol=1.0):
-        """Aplausos: centenas de palmas curtas (ruído filtrado) em ritmo
-        aleatório, crescendo e diminuindo."""
-        n = int(dur * SR)
-        out_l = np.zeros(n); out_r = np.zeros(n)
-        taxa = 70.0
-        k = int(taxa * dur)
-        for _ in range(k):
-            i = int(rng.rand() ** 0.8 * (n - 2000))
-            m = int(SR * rng.uniform(0.006, 0.014))
-            tt = np.arange(m) / SR
-            palma = rng.randn(m) * np.exp(-tt / rng.uniform(0.003, 0.007))
-            palma = palma - np.convolve(palma, np.ones(4) / 4, 'same')
-            p = rng.uniform(-0.9, 0.9)
-            a = rng.uniform(0.3, 1.0)
-            out_l[i:i + m] += palma * a * np.sqrt(0.5 * (1 - p))
-            out_r[i:i + m] += palma * a * np.sqrt(0.5 * (1 + p))
-        t = np.arange(n) / SR
-        env = np.clip(t / 0.4, 0, 1) * np.clip((dur - t) / 1.6, 0, 1)
-        i0 = int(t0 * SR)
-        m = min(n, N - i0)
-        L[i0:i0 + m] += out_l[:m] * env[:m] * vol
-        R[i0:i0 + m] += out_r[:m] * env[:m] * vol
-
-    b = 60.0 / 132.0            # a batida
-    # rufar da caixa crescendo
-    t = 0.0
-    while t < 0.62:
-        put(caixa(0.25 + 0.75 * (t / 0.62), 0.08), t, rng.uniform(-0.2, 0.2), 0.32)
-        t += 0.032
-    put(timpano(nota_hz(C4 - 24)), 0.62, 0.0, 0.55)
-    put(prato(0.6, 1.4), 0.62, 0.3, 0.12)
-    # a fanfarra: tchan-tchan-tchan-TCHAAAN
-    t0 = 0.66
-    frase = [(G4, 0.5), (C5, 0.5), (E5, 0.5), (G5, 1.0), (E5, 0.5), (G5, 2.0)]
-    for nota, dur_b in frase:
-        d = dur_b * b * 0.92
-        put(metal(nota_hz(nota), d, 1.0, 1.0), t0, -0.25, 0.30)
-        put(metal(nota_hz(nota - 12), d, 0.8, 0.7), t0, 0.25, 0.20)      # oitava de baixo
-        if dur_b >= 1.0:
-            put(caixa(0.9), t0, 0.1, 0.35)
-        t0 += dur_b * b
-    # o acorde final, com tudo
-    tf = t0
-    acorde = [(C4, -0.5), (E4, 0.5), (G4, -0.3), (C5, 0.3), (E5, -0.1), (G5, 0.15), (C6, 0.0)]
-    for nota, p in acorde:
-        put(metal(nota_hz(nota), 2.4, 1.0, 1.15), tf, p, 0.20)
-    put(metal(nota_hz(C4 - 12), 2.4, 1.0, 0.6, False), tf, 0.0, 0.30)    # baixo
-    put(timpano(nota_hz(C4 - 24)), tf, -0.1, 0.8)
-    put(timpano(nota_hz(G4 - 36)), tf - b * 0.5, 0.1, 0.5)
-    put(prato(1.0, 3.0), tf, -0.3, 0.22)
-    put(prato(1.0, 3.0), tf + 0.01, 0.35, 0.18)
-    # brilho de sinos subindo por cima do acorde
-    for i, nota in enumerate([C6, C6 + 4, C6 + 7, C6 + 12, C6 + 16, C6 + 19, C6 + 24]):
-        put(sino(nota_hz(nota)), tf + 0.05 + i * 0.07, (-0.6 + i * 0.2), 0.12)
-    aplausos(tf - 0.1, DUR - tf + 0.1, 0.10)
-    # mistura: tira o DC, satura leve e normaliza a -1 dBFS
-    est = np.stack([L, R], 1)
-    est -= est.mean(0)
-    est = np.tanh(est * 1.4) / np.tanh(1.4)
-    est /= np.abs(est).max() / 10 ** (-1 / 20)
-    fim = int(0.03 * SR)
-    est[-fim:] *= np.linspace(1, 0, fim)[:, None]
-
-    with wave.open(str(RAIZ / "songs" / "fim_partida.wav"), "wb") as w:
-        w.setnchannels(2)
-        w.setsampwidth(2)
-        w.setframerate(SR)
-        w.writeframes((est * 32767).astype(np.int16).tobytes())
-    print("fanfarra do fim", round(est.shape[0] / SR, 2), "s")
-
-
 # ------------------------------------------------------------------ águia de lado
 # A águia do céu do Egito voando DE LADO (a da 4.6 é vista de baixo, de
 # cabeça para cima): falcão de Hórus de perfil, desenhado aqui no mesmo
 # estilo e cores; a asa de perto bate na frente do corpo, a de longe atrás.
-AG_K = 4                   # supersampling
-AG_W, AG_H = 160, 128      # quadro final
+AG_ESC = 1.6               # o desenho (feito em 160x128) sai 1,6x maior
+AG_K = 4 * AG_ESC          # supersampling
+AG_W, AG_H = 160, 128      # o espaço do desenho
+AG_CEL = 256               # célula da folha (4 x 4, potência de 2: mipmaps)
 MARROM = (74, 46, 26)
 MARROM_ESC = (48, 30, 18)
 MARROM_CLARO = (112, 74, 40)
@@ -335,7 +216,7 @@ def _asa_poligonos(ombro, dir_x, alcance_y, comprimento, escala_cor=1.0):
 
 
 def _quadro_aguia(teta, glide=False):
-    im = Image.new("RGBA", (AG_W * AG_K, AG_H * AG_K), (0, 0, 0, 0))
+    im = Image.new("RGBA", (int(AG_W * AG_K), int(AG_H * AG_K)), (0, 0, 0, 0))
     d = ImageDraw.Draw(im)
     cx, cy = 78 * AG_K, 66 * AG_K
     # a câmera um pouco abaixo da ave: a asa na horizontal ainda aparece
@@ -353,15 +234,15 @@ def _quadro_aguia(teta, glide=False):
     d.polygon(cauda, fill=MARROM_ESC, outline=CONTORNO)
     for i in range(4):
         y0 = cy - 2 * AG_K + i * 2.5 * AG_K
-        d.line([(cx + 26 * AG_K, y0), (cx + 46 * AG_K, y0 - 5 * AG_K + i * 3.0 * AG_K)], fill=(60, 38, 22), width=AG_K)
+        d.line([(cx + 26 * AG_K, y0), (cx + 46 * AG_K, y0 - 5 * AG_K + i * 3.0 * AG_K)], fill=(60, 38, 22), width=int(AG_K))
     # -- corpo (gota deitada) e peito claro
-    d.ellipse([cx - 22 * AG_K, cy - 11 * AG_K, cx + 28 * AG_K, cy + 9 * AG_K], fill=MARROM, outline=CONTORNO, width=AG_K)
+    d.ellipse([cx - 22 * AG_K, cy - 11 * AG_K, cx + 28 * AG_K, cy + 9 * AG_K], fill=MARROM, outline=CONTORNO, width=int(AG_K))
     d.ellipse([cx - 18 * AG_K, cy - 2 * AG_K, cx + 16 * AG_K, cy + 8 * AG_K], fill=PEITO)
     # pés recolhidos
     d.ellipse([cx + 10 * AG_K, cy + 4 * AG_K, cx + 20 * AG_K, cy + 10 * AG_K], fill=BICO)
     # -- cabeça e bico (curvo, para a esquerda = frente)
     hx, hy = cx - 26 * AG_K, cy - 9 * AG_K
-    d.ellipse([hx - 10 * AG_K, hy - 9 * AG_K, hx + 11 * AG_K, hy + 9 * AG_K], fill=CABECA, outline=CONTORNO, width=AG_K)
+    d.ellipse([hx - 10 * AG_K, hy - 9 * AG_K, hx + 11 * AG_K, hy + 9 * AG_K], fill=CABECA, outline=CONTORNO, width=int(AG_K))
     d.ellipse([hx - 7 * AG_K, hy - 6 * AG_K, hx + 6 * AG_K, hy + 2 * AG_K], fill=CABECA_CLARA)
     bico = [(hx - 8 * AG_K, hy - 3 * AG_K), (hx - 18 * AG_K, hy + 0 * AG_K), (hx - 15 * AG_K, hy + 4 * AG_K), (hx - 9 * AG_K, hy + 3 * AG_K)]
     d.polygon(bico, fill=BICO, outline=CONTORNO)
@@ -372,7 +253,7 @@ def _quadro_aguia(teta, glide=False):
     # -- asa de perto (na frente do corpo)
     ombro_p = (cx - 4 * AG_K, cy - 3 * AG_K)
     _asa_aguia(d, ombro_p, perto, comp, escuro=False)
-    im = im.resize((AG_W, AG_H), Image.LANCZOS)
+    im = im.resize((int(AG_W * AG_ESC), int(AG_H * AG_ESC)), Image.LANCZOS)
     return im
 
 
@@ -422,19 +303,21 @@ def _asa_aguia(d, ombro, alcance, comp, escuro):
     for k in range(2, 20, 3):
         fx, fy = frente[k]
         tx, ty = tras[k]
-        d.line([(fx + (tx - fx) * 0.5, fy + (ty - fy) * 0.5), (tx, ty)], fill=CONTORNO, width=AG_K)
+        d.line([(fx + (tx - fx) * 0.5, fy + (ty - fy) * 0.5), (tx, ty)], fill=CONTORNO, width=int(AG_K))
 
 
-# ciclo: 12 quadros de batida (a asa sobe e desce) + 1 planando, em 7 x 2
+# ciclo: 12 quadros de batida (a asa sobe e desce) + 1 planando, numa folha
+# 4 x 4 de 256 px (1024 x 1024: com mipmaps a de longe não serrilha e a de
+# perto nunca é ampliada)
 def folha_aguia_lado():
     quadros = []
     for i in range(12):
         f = i / 12.0
         quadros.append(_quadro_aguia(math.radians(10 + 58 * math.cos(f * math.tau))))
     quadros.append(_quadro_aguia(math.radians(14), True))
-    folha = Image.new("RGBA", (AG_W * 7, AG_H * 2), (0, 0, 0, 0))
+    folha = Image.new("RGBA", (AG_CEL * 4, AG_CEL * 4), (0, 0, 0, 0))
     for i, q in enumerate(quadros):
-        folha.alpha_composite(q, ((i % 7) * AG_W, (i // 7) * AG_H))
+        folha.alpha_composite(q, ((i % 4) * AG_CEL + (AG_CEL - q.width) // 2, (i // 4) * AG_CEL + (AG_CEL - q.height) // 2))
     return folha
 
 
@@ -1077,7 +960,6 @@ def main():
     pousada.resize((pousada.width // 2, pousada.height // 2), Image.LANCZOS).save(SAIDA / "egito_aguia_pousada.png", optimize=True)
     print("águias")
     aguia_de_lado()
-    fanfarra_fim()
 
     # ---- alvos do Mar
     folhas_nitidas(dados)
@@ -1167,7 +1049,7 @@ compress/bptc_ldr=0
 compress/normal_map=0
 flags/repeat=0
 flags/filter=true
-flags/mipmaps=false
+flags/mipmaps={mipmaps}
 flags/anisotropic=false
 flags/srgb=2
 process/fix_alpha_border=true
@@ -1235,7 +1117,7 @@ loop_offset=0
 """
 
 # músicas que tocam em volta (o resto toca uma vez: vozes, fim, ranking)
-MUSICAS_EM_LOOP = {"egito.mp3", "pirate.mp3", "song-oldwest.mp3", "arena_song.mp3", "audio_intro.mp3", "theme.ogg"}
+MUSICAS_EM_LOOP = {"egito.mp3", "pirate.mp3", "song-oldwest.mp3", "arena_song.mp3", "audio_intro.mp3", "theme.ogg", "ranking-song.mp3"}
 
 
 def _opcoes(texto):
@@ -1265,6 +1147,11 @@ def _gravar_import(arq, texto):
         md5.unlink()
 
 
+# imagens em potência de 2 que aparecem bem pequenas (mipmaps sem custo de
+# esticar no OpenGL ES 2)
+COM_MIPMAPS = {"egito_aguia_lado.png"}
+
+
 def escrever_imports():
     """As opções de importação da Mali-450 (Godot 3.6) de cada arquivo:
     - JPG (fundos e capas, sem transparência): comprimido na placa (ETC1);
@@ -1276,10 +1163,11 @@ def escrever_imports():
     - músicas em loop; vozes e vinhetas uma vez."""
     for arq in sorted(SAIDA.glob("*")):
         rel = str(arq.relative_to(RAIZ)).replace("\\", "/")
+        mip = "true" if arq.name in COM_MIPMAPS else "false"
         if arq.suffix == ".jpg":
-            texto = IMPORT_TEXTURA.format(caminho=rel, modo=2)
+            texto = IMPORT_TEXTURA.format(caminho=rel, modo=2, mipmaps=mip)
         elif arq.suffix == ".png":
-            texto = IMPORT_TEXTURA.format(caminho=rel, modo=0)
+            texto = IMPORT_TEXTURA.format(caminho=rel, modo=0, mipmaps=mip)
         else:
             continue
         _gravar_import(arq, texto)
@@ -1300,9 +1188,6 @@ def escrever_imports():
 
 if __name__ == "__main__":
     if os.environ.get("SO_IMPORTS") == "1":
-        escrever_imports()
-    elif os.environ.get("SO_SONS") == "1":
-        fanfarra_fim()
         escrever_imports()
     elif os.environ.get("SO_EGITO") == "1":
         fundos_egito()

@@ -21,6 +21,14 @@ extends Node
 ##     altura inteira do jogo: a mira chega na borda junto com a seta (sem o
 ##     salto de quando a seta parava antes). Calibrável atirando em 4 alvos.
 ## Tipo ABSOLUTA força a mira na seta; GIROSCÓPIO força o movimento.
+##
+## A MIRA CERTA NA DISTÂNCIA DO JOGADOR (40-60 cm da tela): a CALIBRAGEM
+## (CONFIGURAÇÃO -> CALIBRAR: a arma aponta em 4 alvos, sem a mira na tela)
+## mede quanto a seta anda entre os alvos. Na seta ela guarda a escala e o
+## deslocamento de cada eixo (`calib`: a mira cai onde a arma aponta); no
+## giroscópio, a sensibilidade. A arma de giroscópio escorrega com o tempo
+## (a seta presa na borda perde o passo): no começo de cada partida o alvo
+## do COMO JOGAR recoloca a mira (`recentrar`), com a mira escondida.
 ## A SENSIBILIDADE (CONFIGURAÇÃO) vale nos dois: no giroscópio multiplica o
 ## movimento; na seta, AUTO é a própria seta e um número faz a mira andar
 ## mais ou menos que ela (ver `_com_ganho`).
@@ -75,6 +83,11 @@ var bateu_borda = false
 var bordas_eixos = Vector2.ZERO
 ## Último ponto do ponteiro do sistema (pixels da janela).
 var ponteiro = Vector2(-1, -1)
+## A seta em pontos do jogo, antes da calibragem (a calibragem mede aqui).
+var seta_jogo = Vector2(512, 910)
+## Calibragem da seta: [escala x, escala y, deslocamento x, deslocamento y]
+## (a mira = seta * escala + deslocamento); vazia = sem calibragem.
+var calib = []
 
 var _tipo = "auto"
 var _sens_auto = true
@@ -90,6 +103,7 @@ var _alvo = Vector2(512, 910)  # a seta no jogo (mira absoluta), antes do filtro
 var _segue = 0.0               # s que o filtro ainda anda
 var _f_x = Vector2(512, 910)
 var _f_v = Vector2.ZERO
+var _desvio = Vector2.ZERO     # o acerto do alvo de partida (só nesta sessão)
 
 var _ritmo_lento = {}
 var _telas_leves = {}
@@ -126,6 +140,8 @@ func aplicar_config() -> void:
 	_sens_auto = s <= 0.0
 	sensibilidade = clamp(s, SENS_MIN, SENS_MAX)
 	compensar = bool(Maquina.valor("arma/compensar_aceleracao"))
+	var c = Maquina.valor("arma/calib")
+	calib = c if typeof(c) == TYPE_ARRAY and c.size() == 4 else []
 	_atualizar_modo()
 
 
@@ -218,7 +234,8 @@ func _input(event: InputEvent) -> void:
 		p = Tela.hdmi_para_jogo_direto(event.global_position)
 	else:
 		p = event.position
-	_alvo = _com_ganho(Vector2(clamp(p.x, 0.0, tela.x), clamp(p.y, 0.0, tela.y)))
+	seta_jogo = Vector2(clamp(p.x, 0.0, tela.x), clamp(p.y, 0.0, tela.y))
+	_alvo = _na_tela(_mapear(seta_jogo) + _desvio)
 	if event is InputEventMouseButton:
 		# o clique vale onde a seta está: a mira vai junto na hora
 		pos = _alvo
@@ -227,6 +244,42 @@ func _input(event: InputEvent) -> void:
 		_segue = 0.0
 	else:
 		_segue = FILTRO_SEGUE
+
+
+## A seta (pontos do jogo) na mira: pela calibragem, se houver; senão pela
+## sensibilidade.
+func _mapear(p: Vector2) -> Vector2:
+	if calib.size() == 4:
+		return Vector2(p.x * float(calib[0]) + float(calib[2]), p.y * float(calib[1]) + float(calib[3]))
+	return _com_ganho(p)
+
+
+func _na_tela(p: Vector2) -> Vector2:
+	return Vector2(clamp(p.x, 0.0, Tela.TELA.x), clamp(p.y, 0.0, Tela.TELA.y))
+
+
+## O alvo de partida: a arma aponta em `alvo` (a mira estava escondida). A
+## mira passa a cair ali. Uma correção grande demais (o jogador atirou longe
+## do alvo) é ignorada. Devolve se acertou a mira.
+func recentrar(alvo: Vector2) -> bool:
+	var lim = Tela.TELA * 0.3
+	if giroscopio:
+		var dg = alvo - pos
+		if abs(dg.x) > lim.x or abs(dg.y) > lim.y:
+			return false
+		levar_para(alvo)
+		return true
+	var novo = alvo - _mapear(seta_jogo)
+	if abs(novo.x) > lim.x or abs(novo.y) > lim.y:
+		return false
+	_desvio = novo
+	levar_para(_na_tela(_mapear(seta_jogo) + _desvio))
+	return true
+
+
+## Esquece o acerto do alvo de partida (calibragem nova).
+func zerar_desvio() -> void:
+	_desvio = Vector2.ZERO
 
 
 ## A seta com a sensibilidade escolhida (AUTO: a mira é a própria seta). No

@@ -31,6 +31,7 @@ const VERMELHO = Color(1.0, 0.32, 0.28)
 ## Os fundos de 1080x1920 (tools/preparar_mali.py) cobrem a tela 1024x1820 na
 ## escala 1024/1080. As posições da versão 4.6 estão em pixels da imagem
 ## 1024x1536 (escala 1,25 e 100 px cortados de cada lado): tela() converte.
+const POSE = preload("res://scripts/pose_foto.gd")
 const K_FUNDO = 1.25 * 1024.0 / 1080.0
 const DX_FUNDO = -100.0 * 1024.0 / 1080.0
 
@@ -95,6 +96,7 @@ var _tremor = 0.0
 var _tremor_forca = 0.0
 var _precisao = 0
 var _saindo = false
+var _pose = null                # a pose da foto (scripts/pose_foto.gd)
 
 
 func _ready() -> void:
@@ -116,7 +118,6 @@ func _ready() -> void:
 	fim.connect("escolheu", self, "_fim_escolheu")
 	nome = NomeRanking.criar(self)
 	nome.connect("confirmado", self, "_nome_confirmado")
-	FotoJogador.connect("foto_pronta", self, "_foto_pronta")
 	como_jogar = ComoJogar.criar(self, id_fase, _icones())
 	mira_desenho = MiraDesenho.criar(self, cor)
 	_som_tiro = load(som_tiro_path) if som_tiro_path != "" else null
@@ -124,8 +125,11 @@ func _ready() -> void:
 	_som_recarga = load(som_recarga_path)
 	if musica_path != "":
 		_musica = Maquina.musica(self, load(musica_path), 0.0)
-	MiraGlobal.ativa = true
+	# o alvo de partida (COMO JOGAR): a mira fica escondida até o tiro nele
+	MiraGlobal.ativa = not bool(Maquina.valor("arma/alvo_partida"))
 	estado = INTRO
+	# a webcam já liga (acerta a luz enquanto o jogador lê o COMO JOGAR)
+	FotoJogador.ligar_previa()
 	Tela.marca("fase %s montada (memória %d MB)" % [id_fase, int(Tela.memoria_mb())])
 
 
@@ -253,6 +257,9 @@ func _gatilho() -> void:
 	var p = MiraGlobal.mira()
 	match estado:
 		INTRO:
+			# o tiro no alvo de partida recoloca a mira onde a arma aponta
+			if not MiraGlobal.ativa and is_instance_valid(como_jogar):
+				MiraGlobal.recentrar(como_jogar.ponto_alvo())
 			_comecar_contagem()
 		JOGO:
 			atirar(p)
@@ -269,6 +276,9 @@ func _start() -> void:
 	match estado:
 		INTRO:
 			_comecar_contagem()
+		CONTAGEM:
+			if _pose != null and is_instance_valid(_pose):
+				_pose.pular()
 		FIM:
 			if nome.ativo:
 				return
@@ -281,10 +291,20 @@ func _comecar_contagem() -> void:
 	if estado != INTRO:
 		return
 	estado = CONTAGEM
+	MiraGlobal.ativa = true
 	como_jogar.fechar()
-	contagem.rodar()
-	# a webcam liga agora (acerta a luz durante a contagem)
-	FotoJogador.preparar()
+	# antes da contagem a pose pede a foto do jogador (se houver câmera)
+	if FotoJogador.ligada():
+		_pose = POSE.criar(self, cor)
+		_pose.connect("terminou", self, "_depois_da_pose")
+	else:
+		contagem.rodar()
+
+
+func _depois_da_pose() -> void:
+	_pose = null
+	if estado == CONTAGEM and not _saindo:
+		contagem.rodar()
 
 
 func _contagem_terminou() -> void:
@@ -292,7 +312,6 @@ func _contagem_terminou() -> void:
 	tempo_jogo = 0.0
 	avisos.instrucao("COMEÇOU!", cor.linear_interpolate(Color.white, 0.4))
 	_comecar()
-	FotoJogador.fotografar()
 
 
 # ------------------------------------------------------------ tiro
@@ -539,38 +558,7 @@ static func quadro(f: Dictionary, i: int) -> AtlasTexture:
 	return a
 
 
-## A webcam tirou a foto do jogador: flash, o clique da câmera e a foto
-## instantânea entra no canto, fica um pouco e voa para fora.
-func _foto_pronta(tex: Texture) -> void:
-	if estado == FIM or _saindo:
-		return
-	Maquina.efeito(load("res://songs/foto_obturador.wav"), -6.0)
-	clarao(Color(1, 1, 1, 0.30), 0.22)
-	var camada = CanvasLayer.new()
-	camada.layer = 115
-	add_child(camada)
-	var m = FotoJogador.moldura(camada, Vector2(Tela.TELA.x - 150.0, 330.0), 190.0, tex, 7.0, "VOCÊ!")
-	m.rect_scale = Vector2(1.8, 1.8)
-	m.modulate.a = 0.0
-	var tw = create_tween()
-	tw.set_parallel(true)
-	tw.tween_property(m, "modulate:a", 1.0, 0.18)
-	tw.tween_property(m, "rect_scale", Vector2.ONE, 0.32).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	tw.chain().tween_interval(2.4)
-	tw.chain().tween_property(m, "rect_position:y", -400.0, 0.45).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_IN)
-	tw.chain().tween_callback(camada, "queue_free")
-
-
 # ------------------------------------------------------------ fim
-func _musica_depois_do_fim() -> void:
-	if _musica == null or not is_instance_valid(_musica):
-		return
-	_musica.volume_db = -40.0
-	_musica.play()
-	var tw = create_tween()
-	tw.tween_property(_musica, "volume_db", -9.0, 2.5)
-
-
 func encerrar(texto: String = "TEMPO ESGOTADO!") -> void:
 	if estado == FIM:
 		return
@@ -580,15 +568,7 @@ func encerrar(texto: String = "TEMPO ESGOTADO!") -> void:
 	_encerrou()
 	_precisao = int(round(float(acertos) / float(tiros) * 100.0)) if tiros > 0 else 0
 	faixa(texto, cor.linear_interpolate(Color.white, 0.3), 1.4)
-	# a fanfarra da vitória (rufar, metais, pratos, sinos e aplausos) e,
-	# depois dela, a música da fase volta baixinho para a tela final
-	if _musica != null:
-		var tw = create_tween()
-		tw.tween_property(_musica, "volume_db", -40.0, 0.5)
-		tw.tween_callback(_musica, "stop")
-		tw.tween_interval(5.0)
-		tw.tween_callback(self, "_musica_depois_do_fim")
-	Maquina.musica(self, load("res://songs/fim_partida.wav"), -1.0)
+	# a música da fase segue tocando no resultado (sem som de fim)
 	yield(esperar(1.5), "timeout")
 	if RankingManager.deve_entrar_no_ranking(pontos, _precisao):
 		nome.abrir(cor, pontos, _precisao)
