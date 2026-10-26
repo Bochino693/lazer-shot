@@ -81,6 +81,7 @@ var _sens_auto = true
 var _android = false
 var _seta: ImageTexture
 var _seta_cena = 0
+var _seta_ms = 0               # quando a seta transparente foi reaplicada
 var _ultimo = Vector2(INF, INF)
 var _quadro_d = Vector2.ZERO   # o quanto o ponteiro andou neste quadro (pixels da janela)
 var _na_borda = Vector2.ZERO   # borda do jogo para onde a arma passou (-1, 0, 1 em cada eixo)
@@ -174,6 +175,7 @@ func _esconder_seta(todos: bool = false) -> void:
 	Input.set_custom_mouse_cursor(_seta, Input.CURSOR_ARROW, Vector2.ZERO)
 	Input.set_custom_mouse_cursor(_seta, Input.CURSOR_ARROW, Vector2.ZERO)
 	Input.set_mouse_mode(Input.MOUSE_MODE_HIDDEN)
+	_seta_ms = OS.get_ticks_msec()
 
 
 func _notification(what: int) -> void:
@@ -187,6 +189,11 @@ func _notification(what: int) -> void:
 func _input(event: InputEvent) -> void:
 	if not (event is InputEventMouseMotion or event is InputEventMouseButton):
 		return
+	# o Android de algumas TV Box volta a mostrar a seta normal (troca de
+	# janela, foco, giro da tela): com a arma andando, a transparente é
+	# reaplicada uma vez por segundo
+	if _android and OS.get_ticks_msec() - _seta_ms > 1000:
+		_esconder_seta()
 	if giroscopio:
 		if event is InputEventMouseMotion:
 			_mover(event.global_position)
