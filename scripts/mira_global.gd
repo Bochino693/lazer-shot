@@ -21,6 +21,9 @@ extends Node
 ##     altura inteira do jogo: a mira chega na borda junto com a seta (sem o
 ##     salto de quando a seta parava antes). Calibrável atirando em 4 alvos.
 ## Tipo ABSOLUTA força a mira na seta; GIROSCÓPIO força o movimento.
+## A SENSIBILIDADE (CONFIGURAÇÃO) vale nos dois: no giroscópio multiplica o
+## movimento; na seta, AUTO é a própria seta e um número faz a mira andar
+## mais ou menos que ela (ver `_com_ganho`).
 ##
 ## A SETA DO SISTEMA: no Android 7.1 o Godot 3.6 não esconde o ponteiro (só
 ## do Android 8 em diante); ela vira uma imagem transparente (cursor
@@ -195,7 +198,7 @@ func _input(event: InputEvent) -> void:
 		p = Tela.hdmi_para_jogo_direto(event.global_position)
 	else:
 		p = event.position
-	_alvo = Vector2(clamp(p.x, 0.0, tela.x), clamp(p.y, 0.0, tela.y))
+	_alvo = _com_ganho(Vector2(clamp(p.x, 0.0, tela.x), clamp(p.y, 0.0, tela.y)))
 	if event is InputEventMouseButton:
 		# o clique vale onde a seta está: a mira vai junto na hora
 		pos = _alvo
@@ -204,6 +207,29 @@ func _input(event: InputEvent) -> void:
 		_segue = 0.0
 	else:
 		_segue = FILTRO_SEGUE
+
+
+## A seta com a sensibilidade escolhida (AUTO: a mira é a própria seta). No
+## meio da tela a mira anda `sensibilidade` vezes o que a seta anda; perto
+## da borda ela acerta o passo para chegar na borda junto com a seta (abaixo
+## de 1) ou para na borda antes (acima de 1). É sempre a mesma conta da
+## posição da seta: a mira nunca escorrega para longe dela.
+func _com_ganho(p: Vector2) -> Vector2:
+	if _sens_auto:
+		return p
+	var meio = Tela.TELA * 0.5
+	return Vector2(meio.x * (1.0 + _curva((p.x - meio.x) / meio.x)), meio.y * (1.0 + _curva((p.y - meio.y) / meio.y)))
+
+
+func _curva(u: float) -> float:
+	var a = abs(u)
+	var r: float
+	if sensibilidade >= 1.0:
+		r = min(1.0, a * sensibilidade)
+	else:
+		var u0 = 0.85
+		r = a * sensibilidade if a <= u0 else lerp(u0 * sensibilidade, 1.0, (a - u0) / (1.0 - u0))
+	return r * sign(u)
 
 
 ## A mira na seta, pelo filtro 1€ (um passo por quadro).
@@ -371,6 +397,11 @@ func _ritmo_salvar() -> void:
 ## A tela atual já ficou leve nesta TV Box? (as fases perguntam ao montar)
 func tela_leve(caminho: String) -> bool:
 	return _telas_leves.has(caminho) or Maquina.efeitos_leves()
+
+
+## O ritmo automático já achou esta tela pesada nesta TV Box?
+func tela_pesada(caminho: String) -> bool:
+	return _telas_leves.has(caminho)
 
 
 func _ritmo() -> void:

@@ -467,13 +467,31 @@ func luz_sprite(nome: String, pai: Node, pos: Vector2, tam: float, c: Color) -> 
 	return s
 
 
-## Clarão redondo que cresce e some (luz somada).
+## Clarão redondo que cresce e some (luz somada). São poucos, reaproveitados
+## em rodízio: tiro atrás de tiro não cria nó novo.
+var _luzes_breves = []
+var _luz_breve_i = 0
+
 func luz_sprite_breve(pos: Vector2, tam: float, c: Color, dur: float = 0.35) -> void:
-	var s = luz_sprite("fx_brilho", luz, pos, tam * 0.6, c)
+	var s: Sprite
+	if _luzes_breves.size() < 10:
+		s = luz_sprite("fx_brilho", luz, pos, tam * 0.6, c)
+		_luzes_breves.append(s)
+	else:
+		s = _luzes_breves[_luz_breve_i]
+		_luz_breve_i = (_luz_breve_i + 1) % _luzes_breves.size()
+		var antes = s.get_meta("tw")
+		if antes != null and antes.is_valid():
+			antes.kill()
+		s.position = pos
+		s.scale = Vector2.ONE * (tam * 0.6 / s.texture.get_width())
+		s.modulate = c
+		s.visible = true
 	var tw = create_tween().set_parallel(true)
 	tw.tween_property(s, "scale", s.scale * 1.7, dur)
 	tw.tween_property(s, "modulate:a", 0.0, dur)
-	tw.chain().tween_callback(s, "queue_free")
+	tw.chain().tween_callback(s, "set_visible", [false])
+	s.set_meta("tw", tw)
 
 
 # ------------------------------------------------------------ alvos

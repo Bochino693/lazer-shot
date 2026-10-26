@@ -1,8 +1,23 @@
-# Lazer Shot 2.2 — TV Box Mali-450
+# Lazer Shot 2.3 — TV Box Mali-450
 
 Esta pasta é o **Lazer Shot para a TV Box da placa Mali-450** (S905L / S905W, Android 7.1). A placa de vídeo dela só tem OpenGL ES 2.0, por isso este jogo é feito no **Godot 3.6.2 (GLES2)**. A versão 4.6 (Pro Ultra / TX9) é outro projeto, na branch `tvbox-ultra-pro`.
 
-## Novidades da 2.2
+## Novidades da 2.3
+
+- **Bar com profundidade.** As garrafas pisam nas prateleiras de verdade: nas duas de cima ficam atrás da beirada da tábua; nas duas de baixo, no meio do tampo. Antes a de cima ficava na frente da tábua e a de 80 flutuava.
+  - Sombra macia de cada garrafa na parede (a luz vem da janela) e sombra no tampo das prateleiras de baixo.
+  - O facho de sol passa na frente das garrafas, com a poeira, e as que estão dentro dele brilham em contraluz. De vez em quando um reflexo corre no vidro.
+  - Quando uma garrafa estoura ou a tábua leva tiro, as vizinhas balançam. A bebida molha a parede e o tampo e seca devagar. O lugar da garrafa estourada fica vazio um instante.
+- **Tiro atrás de tiro sem travar.** Testado com 8 tiros por segundo a partida inteira nas 4 fases e com as 4 fases seguidas, várias vezes: a memória fica igual de uma partida para outra.
+  - A caixa-preta grava em segundo plano. A escrita na memória da TV Box podia travar o jogo por um instante a cada 15 s.
+  - Os clarões e os furos do Bar são reaproveitados, e tudo o que o tiro deixa (cacos, furos, marcas) tem limite.
+  - No Mar, os furos no navio não tinham limite (agora no máximo 14) e o rastro de bolhas do laser ficou bem mais leve.
+  - Na tela que a TV Box acha pesada, os tiros soltam menos estilhaços, além de os enfeites sumirem.
+- **Sensibilidade da mira na CONFIGURAÇÃO principal:** ARMA E BOTÕES → **Sensibilidade da mira** (− AUTO + e o AJUSTAR ao lado).
+  - **AUTO:** a mira acompanha a arma (em cima da seta quando o Android gira a tela).
+  - **Um número:** a mira anda mais (+) ou menos (−) que a arma e ainda chega nas bordas.
+
+## Da 2.2
 
 - **Mira coerente com a arma, sem pular.**
   - O app abre deitado e pede ao Android a tela em pé. Se a TV Box girar de verdade, a **seta do mouse anda junto com a arma** e a mira fica em cima dela, com um filtro leve que tira o tremor da mão parada.
@@ -19,7 +34,7 @@ Esta pasta é o **Lazer Shot para a TV Box da placa Mali-450** (S905L / S905W, A
 ## Da 2.1 (continua valendo)
 
 - **Ajuste da arma na própria TV Box:** CONFIGURAÇÃO → BOTÕES → **Arma e mira** → AJUSTAR.
-  - Tipo de arma (AUTO, SETA ou GIROSCÓPIO), sensibilidade (AUTO ou um número) e a compensação da aceleração do Android.
+  - Tipo de arma (AUTO, SETA ou GIROSCÓPIO), sensibilidade (AUTO ou um número; também na página principal) e a compensação da aceleração do Android.
   - **CALIBRAR** (quando o jogo gira por dentro): atire nos 4 alvos que aparecem. O jogo mede quanto a arma anda e acerta a sensibilidade sozinho.
   - Alvos de teste nos cantos e no meio: atire neles para conferir.
 - **Abertura sem o símbolo do Godot:** ao abrir o jogo aparece o logo da Lazer & Sport, já em pé no monitor.
@@ -74,7 +89,7 @@ Esta pasta é o **Lazer Shot para a TV Box da placa Mali-450** (S905L / S905W, A
 
    Tudo aparece na janela na hora e fica gravado em `build\android\GERACAO-COMPLETA.log`. A janela termina sozinha.
 
-3. O APK fica em **`APK-Pronto\LazerShot-Mali450-2.2.0.apk`** (a versão vai no nome do arquivo). Copie para o pendrive, use **Ejetar** no Windows antes de tirar o pendrive e instale na TV Box.
+3. O APK fica em **`APK-Pronto\LazerShot-Mali450-2.3.0.apk`** (a versão vai no nome do arquivo). Copie para o pendrive, use **Ejetar** no Windows antes de tirar o pendrive e instale na TV Box.
 
    No fim aparece **APK PRONTO E CONFERIDO**, com a linha **Assinatura: v1 + v2**. Antes disso o gerador confere o APK por dentro: o motor ARM 32 e 64 bits, os scripts e as imagens em ETC1. As mensagens técnicas do Godot que não são problema (PC sem placa de som, por exemplo) não aparecem na janela; ficam só no histórico.
 
@@ -120,7 +135,7 @@ O giro e quem gira também se trocam **na própria TV Box**, na CONFIGURAÇÃO d
   - Para a TV Box girar: se ela tiver **Configurações → Tela → Rotação da tela** (o nome muda de uma para outra), escolha **Original** (ou "seguir o app"). Nas TV Box Amlogic, as opções do tipo "retrato no meio" (middle_port) e "forçar paisagem" (force_land) não giram. Depois, na CONFIGURAÇÃO do jogo, toque em **AUTO** em "Quem gira a tela" para ele tentar de novo.
   - **Imagem de cabeça para baixo:** CONFIGURAÇÃO → "Giro da tela" → troque ESQUERDA por DIREITA.
 - A **arma** é o mouse: o **gatilho** atira; o **clique direito** (o botão perto do gatilho) recarrega; os **outros botões do lado** dão START (na partida, também recarregam).
-- **Mira correndo demais ou de menos** (quando o jogo gira por dentro): use CALIBRAR (CONFIGURAÇÃO → BOTÕES → Arma e mira). Se ainda correr demais, diminua a **Velocidade do ponteiro** nas configurações do Android (Idioma e entrada) e calibre de novo.
+- **Mira correndo demais ou de menos:** mude a **Sensibilidade da mira** (CONFIGURAÇÃO → ARMA E BOTÕES, − e +; AUTO volta ao normal). Quando o jogo gira por dentro dá para CALIBRAR também (AJUSTAR → CALIBRAR). Se ainda correr demais, diminua a **Velocidade do ponteiro** nas configurações do Android (Idioma e entrada).
 - **Zero Delay:** START = botão 0, RECARGA = 1, TIRO = 2, SELECT = 4.
   - O SELECT soma crédito no modo crédito.
   - Os botões podem ser aprendidos de novo na CONFIGURAÇÃO.
@@ -134,6 +149,7 @@ O giro e quem gira também se trocam **na própria TV Box**, na CONFIGURAÇÃO d
 
 - O jogo está em `scripts/` e `scenes/`, em GDScript do Godot 3.
 - `scripts/fase.gd` é a base das quatro fases. Cada fase está em `deserto.gd`, `mar.gd`, `bar.gd` e `arena.gd`.
+- A estante do Bar (onde cada garrafa pisa, as beiradas desenhadas por cima e a luz) está no começo de `scripts/bar.gd`, medida no `fundo_bar`. As sombras das garrafas (`sprites/bar_sombra_*.png`) saem de `tools/preparar_mali.py` (`SO_BAR=1`).
 - A arte de `sprites/` sai de `tools/preparar_mali.py`, a partir de `arte_original/` (as imagens da versão 4.6, que o Godot ignora):
   - fundos em JPG 1080x1920, que o Godot comprime em ETC1;
   - alvos em PNG sem compressão e sem mipmaps;

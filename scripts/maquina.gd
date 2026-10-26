@@ -136,9 +136,17 @@ func efeitos_leves() -> bool:
 	return str(valor("video/efeitos")) == "leve"
 
 
-## Quantidade de partículas (1 = completo; a TV Box mais fraca usa metade).
+## Quantidade de partículas e cacos (1 = completo; a TV Box mais fraca usa
+## metade). Na tela que o ritmo automático já achou pesada nesta TV Box
+## (MiraGlobal), os estilhaços dos tiros também saem menos: tiro atrás de
+## tiro sem tranco.
 func fator_efeitos() -> float:
-	return 0.5 if efeitos_leves() else 1.0
+	if efeitos_leves():
+		return 0.5
+	var cena = get_tree().current_scene
+	if cena != null and MiraGlobal.tela_pesada(cena.filename):
+		return 0.65
+	return 1.0
 
 
 func restaurar_padrao() -> void:

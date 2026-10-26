@@ -411,6 +411,30 @@ def raios_bar():
     print("raios do bar")
 
 
+# A sombra de cada garrafa do bar: o contorno do quadro parado, em 1/4 do
+# tamanho, com 6 px de folga em volta e desfocado. O jogo estica 4x (fica
+# macia) e tinge de escuro (a sombra na parede) ou soma luz (o contraluz do
+# sol pela janela). bar.gd: SOMBRA_RED e SOMBRA_FOLGA.
+SOMBRA_RED = 4
+SOMBRA_FOLGA = 6
+
+
+def sombras_bar():
+    texto = (RAIZ / "scripts" / "dados_arte.gd").read_text(encoding="utf-8")
+    for tipo in ["gin", "rum", "vodka", "whisky", "falsa"]:
+        # a célula da folha (scripts/dados_arte.gd)
+        i = texto.index('"garrafa_%s": {' % tipo)
+        cw, ch = [int(x) for x in texto[i:i + 400].split('"celula": [', 1)[1].split("]", 1)[0].replace(",", " ").split()]
+        folha = Image.open(SAIDA / ("alvo_garrafa_%s.png" % tipo)).convert("RGBA")
+        a = folha.crop((0, 0, cw, ch)).getchannel("A")
+        w, h = round(cw / SOMBRA_RED), round(ch / SOMBRA_RED)
+        a = a.resize((w, h), Image.LANCZOS)
+        caixa = Image.new("L", (w + 2 * SOMBRA_FOLGA, h + 2 * SOMBRA_FOLGA), 0)
+        caixa.paste(a, (SOMBRA_FOLGA, SOMBRA_FOLGA))
+        caixa = caixa.filter(ImageFilter.GaussianBlur(2.2))
+        salvar_alfa("bar_sombra_" + tipo, np.asarray(caixa).astype(np.float32) / 255.0)
+
+
 # ------------------------------------------------------------------ Arena
 # o logo (com o LED do alto) e o furo do meio, em px do fundo 1080x1920
 ARENA_LOGO = (52, 148, 1048, 604)
@@ -709,6 +733,7 @@ def main():
     texto = "\n".join(linhas).replace('"arquivo"', '"arquivo"')
     (RAIZ / "scripts" / "dados_arte.gd").write_text(texto, encoding="utf-8")
     print("scripts/dados_arte.gd")
+    sombras_bar()
     escrever_imports()
 
 
@@ -871,6 +896,7 @@ if __name__ == "__main__":
         escrever_imports()
     elif os.environ.get("SO_BAR") == "1":
         raios_bar()
+        sombras_bar()
         escrever_imports()
     elif os.environ.get("SO_ICONES") == "1":
         icones_android()

@@ -5,9 +5,11 @@ class_name Cacos
 ## giram, caem e somem (garrafa, brasão, lanterna, cristal, vidraça...).
 ## A rachadura nasce no ponto do tiro: os pedaços perto dele são pequenos e
 ## os de longe, grandes. Todos os pedaços saem num desenho só (triângulos
-## com a textura do alvo); parado, o nó não desenha nada.
+## com a textura do alvo); parado, o nó não desenha nada. Cada pedaço guarda
+## os próprios pontos e cor: a cada quadro só muda onde ele está e o giro
+## (nada de lista nova por pedaço, para aguentar tiro atrás de tiro).
 
-const MAX = 90
+const MAX = 72
 
 var _lista = []
 var _rng = RandomNumberGenerator.new()
@@ -84,7 +86,7 @@ func _pedaco(pts: Array, tex: Texture, ts: Vector2, regiao: Rect2, xf: Transform
 	var v = dir * _rng.randf_range(160.0, 460.0) * forca + Vector2(_rng.randf_range(-60, 60), -sobe * _rng.randf_range(0.5, 1.2))
 	_lista.append({"pts": locais, "uv": uvs, "tex": tex, "pos": mundo, "vel": v, "rot": 0.0,
 		"giro": _rng.randf_range(-giro, giro), "t": 0.0, "vida": vida * _rng.randf_range(0.75, 1.25),
-		"grav": grav, "chao": chao, "cor": cor})
+		"grav": grav, "chao": chao, "cor": cor, "cores": PoolColorArray([cor])})
 
 
 func vazio() -> bool:
@@ -119,13 +121,12 @@ func _process(delta: float) -> void:
 
 func _draw() -> void:
 	for c in _lista:
-		var k: float = c["t"] / c["vida"]
-		var cor: Color = c["cor"]
-		cor.a *= clamp((1.0 - k) * 3.0, 0.0, 1.0)
-		var cores = PoolColorArray()
-		var pts = PoolVector2Array()
-		var rot = Transform2D(c["rot"], c["pos"])
-		for p in c["pts"]:
-			pts.append(rot.xform(p))
-			cores.append(cor)
-		draw_polygon(pts, cores, c["uv"], c["tex"])
+		var a = (1.0 - c["t"] / c["vida"]) * 3.0
+		if a < 1.0:
+			# o último terço da vida: some aos poucos
+			var cor: Color = c["cor"]
+			cor.a *= max(0.0, a)
+			c["cores"] = PoolColorArray([cor])
+		draw_set_transform(c["pos"], c["rot"], Vector2.ONE)
+		draw_polygon(c["pts"], c["cores"], c["uv"], c["tex"])
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)

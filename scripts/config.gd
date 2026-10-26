@@ -152,9 +152,8 @@ func _montar_principal() -> void:
 	_volume("Música", "audio/volume_musica")
 	_volume("Efeitos", "audio/volume_fx")
 
-	_secao("BOTÕES")
-	_linha("Arma e mira", "sensibilidade, calibragem, START e RECARGA da arma")
-	_botao("AJUSTAR", Vector2(X0 + LARG - 12 - 190, _y - ALT_LINHA - 4 + Y_BOTAO), Vector2(190, ALT_BOTAO), 22, "_ir_para", ["arma"], COR_DESTAQUE.darkened(0.35))
+	_secao("ARMA E BOTÕES")
+	_linha_sensibilidade()
 	_aprender("START na Zero Delay", "", "start")
 	_aprender("SELECT na Zero Delay", "ficha / crédito", "select")
 	_ultimo = Estilo.rotulo(_raiz, "Último botão recebido: —", 18, COR_APAGADO, 0, false)
@@ -193,7 +192,7 @@ func _montar_arma() -> void:
 
 	_secao("MIRA")
 	_opcoes("Tipo de arma", "AUTO: a mira é a seta quando o Android gira a tela", "arma/modo", [["auto", "AUTO"], ["absoluta", "SETA"], ["giroscopio", "GIROSCÓPIO"]])
-	_passos_real("Sensibilidade", "do giroscópio (AUTO: de borda a borda)", "arma/sensibilidade", MiraGlobal.SENS_MIN, MiraGlobal.SENS_MAX, 0.05)
+	_passos_real("Sensibilidade", "AUTO: a mira acompanha a arma (também na tela principal)", "arma/sensibilidade", MiraGlobal.SENS_MIN, MiraGlobal.SENS_MAX, 0.05)
 	_opcoes("Aceleração do Android", "desfaz o \"rápido anda mais\" do ponteiro", "arma/compensar_aceleracao", [[true, "COMPENSAR"], [false, "DEIXAR"]])
 	_linha("Calibrar a arma", "aponte no centro de 4 alvos e atire (sem a mira)")
 	_botao("CALIBRAR", Vector2(X0 + LARG - 12 - 190, _y - ALT_LINHA - 4 + Y_BOTAO), Vector2(190, ALT_BOTAO), 22, "_calibrar", [], COR_DESTAQUE.darkened(0.35))
@@ -206,7 +205,7 @@ func _montar_arma() -> void:
 	_y += 34.0
 
 	_secao("TESTE")
-	var dica = Estilo.rotulo(_raiz, "Atire nos alvos dos cantos e no do meio: a mira tem que chegar em todos e o tiro tem que cair onde a arma aponta. Se a mira andar demais ou de menos, ajuste a VELOCIDADE DO PONTEIRO nas configurações do Android (Idioma e entrada); no giroscópio, calibre de novo.", 18, COR_APAGADO, 0, false, Label.ALIGN_LEFT)
+	var dica = Estilo.rotulo(_raiz, "Atire nos alvos dos cantos e no do meio: a mira tem que chegar em todos e o tiro tem que cair onde a arma aponta. Se a mira andar demais ou de menos, mude a SENSIBILIDADE (ou a velocidade do ponteiro nas configurações do Android, Idioma e entrada); no giroscópio dá para CALIBRAR.", 18, COR_APAGADO, 0, false, Label.ALIGN_LEFT)
 	dica.autowrap = true
 	Estilo.colocar(dica, Vector2(X0, _y), Vector2(LARG, 104))
 
@@ -230,6 +229,24 @@ func _ir_para(pagina: String) -> void:
 	_pagina = pagina
 	MiraGlobal.ativa = true
 	_reconstruir()
+
+
+## A sensibilidade da mira na página principal (a mesma da página ARMA E
+## MIRA), com o AJUSTAR (calibragem, START e RECARGA da arma) ao lado.
+func _linha_sensibilidade() -> void:
+	var y = _y
+	var d = _linha("Sensibilidade da mira", "AUTO: a mira acompanha a arma  ·  + anda mais, − anda menos")
+	if d != null:
+		d.rect_size.x = 520.0
+	var xd = X0 + LARG - 12.0
+	_botao("AJUSTAR", Vector2(xd - 150, y + Y_BOTAO), Vector2(150, ALT_BOTAO), 20, "_ir_para", ["arma"], COR_DESTAQUE.darkened(0.35))
+	xd -= 160.0
+	var lim = [MiraGlobal.SENS_MIN, MiraGlobal.SENS_MAX]
+	_botao("+", Vector2(xd - 64, y + Y_BOTAO), Vector2(64, ALT_BOTAO), 34, "_mudar_real", ["arma/sensibilidade", 0.05, lim[0], lim[1]])
+	var valor = Estilo.rotulo(_raiz, "", 28, COR_TEXTO, 0, true)
+	Estilo.colocar(valor, Vector2(xd - 64 - 116, y), Vector2(116, ALT_LINHA))
+	_botao("−", Vector2(xd - 64 - 116 - 64, y + Y_BOTAO), Vector2(64, ALT_BOTAO), 34, "_mudar_real", ["arma/sensibilidade", -0.05, lim[0], lim[1]])
+	_atualizadores.append([self, "_mostrar_real", [valor, "arma/sensibilidade"]])
 
 
 ## Como `_passos`, para número com casas (sensibilidade).

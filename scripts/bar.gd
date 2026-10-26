@@ -15,6 +15,14 @@ extends "res://scripts/fase.gd"
 ## mais forte. Os 5 primeiros tiros na janela valem +50 cada; no 5º o que
 ## sobrou do vidro desaba e a janela não dá mais pontos. O sol pela janela é
 ## um feixe que respira, com poeira brilhando dentro.
+##
+## PROFUNDIDADE (sem 3D, barato para a Mali-450): cada garrafa pisa no tampo
+## da tábua dela; nas duas tábuas de cima (na altura do olho, só se vê a
+## frente delas) a beirada é desenhada de novo por cima do pé, então a
+## garrafa fica atrás dela. A luz vem da janela: sombra macia na parede (para
+## a direita e para baixo), sombra de contato no tampo das tábuas de baixo,
+## contraluz quente nas garrafas dentro do feixe de sol (que passa na frente
+## delas, com a poeira) e reflexos no vidro. Tiro balança as vizinhas.
 
 const JANELA = 2.2
 const X_COLUNAS = {
@@ -23,14 +31,28 @@ const X_COLUNAS = {
 	50: [190.0, 355.0, 520.0, 685.0],
 	20: [110.0, 220.0, 330.0, 440.0, 550.0, 660.0],
 }
-const Y_PRATELEIRA = {100: 575.0, 80: 815.0, 50: 1100.0, 20: 1400.0}
+# A ESTANTE na tela, medida no fundo_bar: onde o pé da garrafa pisa. Nas duas
+# de baixo o tampo aparece (1128-1158 e 1390-1449) e o pé fica no meio dele;
+# nas duas de cima só se vê a frente da tábua e o pé fica atrás da beirada.
+const PE_PRATELEIRA = {100: 589.0, 80: 853.0, 50: 1146.0, 20: 1424.0}
+# a frente das duas tábuas de cima (topo e base na tela), por cima do pé
+const BEIRADAS = [Vector2(583.0, 621.0), Vector2(847.0, 890.0)]
+# a base da frente de cada tábua (de onde a bebida pinga)
+const BASE_TABUA = {100: 621.0, 80: 890.0, 50: 1202.0, 20: 1480.0}
 const ESCALA_GARRAFA = {100: 0.50, 80: 0.56, 50: 0.62, 20: 0.58}
 const ESCALA_FALSA = {100: 0.81, 80: 0.85, 50: 0.96, 20: 1.00}
-const PE = 26.0                         # o pé da garrafa abaixo da linha da prateleira
 # px vazios embaixo do desenho (a garrafa verde parada tem 28; no estouro, 7):
 # descontados, toda garrafa pisa na tábua em vez de flutuar acima dela
 const VAZIO_EMBAIXO = {"falsa": 28.0}
 const VAZIO_ESTOURO_FALSA = 7.0
+# a sombra de cada garrafa (tools/preparar_mali.py, sombras_bar): o contorno
+# em 1/4 com 6 px de folga, desfocado
+const SOMBRA_RED = 4.0
+const SOMBRA_FOLGA = 6.0
+# a luz da janela joga a sombra na parede para a direita e para baixo (px)
+const SOMBRA_PAREDE = Vector2(19.0, 10.0)
+const COR_SOMBRA = Color(0.06, 0.02, 0.0, 0.62)
+const COR_CONTRALUZ = Color(1.0, 0.72, 0.36)
 const NOMES = {100: "whisky", 80: "vodka", 50: "rum", 20: "gin"}
 const LIQUIDO = {"gin": Color(0.85, 0.95, 1.0, 0.85), "rum": Color(0.78, 0.40, 0.10, 0.9), "vodka": Color(0.9, 0.97, 1.0, 0.85),
 	"whisky": Color(0.80, 0.50, 0.12, 0.9), "falsa": Color(0.35, 0.85, 0.25, 0.9)}
@@ -57,9 +79,14 @@ const PONTOS_POEIRA = [Vector2(400, 590), Vector2(656, 1139), Vector2(703, 1164)
 
 
 class Garrafa:
-	var no: Node2D
+	var no: Node2D             # no pé da garrafa (gira em volta dele no balanço)
 	var spr: Sprite
-	var sombra: Sprite
+	var sombra: Sprite         # de contato, no tampo (só nas tábuas de baixo)
+	var parede: Sprite         # na parede, pela luz da janela
+	var contraluz: Sprite      # o sol atravessando o vidro (só dentro do feixe)
+	var luz = 0.0              # quanto do feixe de sol pega nela (0 a 1)
+	var balanco = 0.0          # força do balanço (rad)
+	var balanco_t = 0.0
 	var tipo = "gin"           # gin, rum, vodka, whisky, falsa
 	var prateleira = 20
 	var x = 0.0
@@ -72,6 +99,7 @@ class Garrafa:
 
 var garrafas = []
 var _slots = {}
+var _vago_ate = {}      # o lugar da garrafa estourada fica vazio um pouco
 var spawn_t = 0.4
 var troca_t = 2.5
 var erros_seguidos = 0
@@ -86,9 +114,17 @@ var _feixe_b: Polygon2D
 var _poeira_sol: Particulas
 var _janela: Node2D             # JanelaBar
 var _janela_pagos = 0
-var _furos: Node2D
+var _furos: Node2D              # na parede (atrás das garrafas)
+var _frente: Node2D             # por cima das garrafas: beiradas, sol e poeira
+var _furos_frente: Node2D       # furos na frente das tábuas de cima
+var _manchas: Node2D            # bebida espirrada na parede e no tampo
+var _poli_feixe = PoolVector2Array()
+var _poli_cartaz = PoolVector2Array()
+var _poli_barril = PoolVector2Array()
 var _t = 0.0
 var _sol_forca = 1.0
+var _forca_sol = 0.5
+var _n_furo = 0
 
 var _som_vidro: AudioStream
 var _som_falsa: AudioStream
@@ -128,8 +164,12 @@ func _montar_cenario() -> void:
 	_som_madeira = load("res://songs/madeira_tiro.wav")
 	_som_papel = load("res://songs/papel_tiro.wav")
 	fundo_sprite("fundo_bar")
+	_poli_cartaz = poligono(CARTAZ)
+	_poli_barril = poligono(BARRIL)
 	_furos = Node2D.new()
 	cenario.add_child(_furos)
+	_manchas = Node2D.new()
+	cenario.add_child(_manchas)
 	# vinho do barril (jato, fio escorrendo e a poça)
 	_vinho = Node2D.new()
 	_vinho.connect("draw", self, "_desenhar_vinho")
@@ -145,14 +185,43 @@ func _montar_cenario() -> void:
 	cenario.add_child(_janela)
 	_janela.configurar(vidracas, Estilo.tex("fundo_bar"), Tela.TELA.x / 1080.0, K_FUNDO, tela(Vector2(0, 279)).y,
 		Vector3(tela(Vector2(58, 0)).x, tela(Vector2(338, 0)).x, tela(Vector2(0, 205)).y))
+	_montar_frente()
 	# o sol pela janela: o feixe com listras de poeira (duas imagens somadas,
-	# o peso troca devagar e as listras andam) e a poeira brilhando
+	# o peso troca devagar e as listras andam) e a poeira brilhando. Ficam na
+	# frente das garrafas: a luz passa no ar entre elas e quem olha.
+	for q in CONTORNO_FEIXE:
+		_poli_feixe.append(tela(q * 4.0))
 	_feixe_a = _feixe("bar_raios_a")
 	_feixe_b = _feixe("bar_raios_b")
 	_poeira_sol = Particulas.new()
 	_poeira_sol.somar = true
 	_poeira_sol.add_to_group("efeito_opcional")
-	cenario.add_child(_poeira_sol)
+	_frente.add_child(_poeira_sol)
+
+
+## A frente das duas tábuas de cima de novo, por cima do pé das garrafas (o
+## mesmo pedaço do fundo, no mesmo lugar): a garrafa fica EM CIMA da tábua,
+## atrás da beirada. Os furos de bala nessa frente ficam por cima também.
+func _montar_frente() -> void:
+	_frente = Node2D.new()
+	_frente.name = "FrenteDasTabuas"
+	mundo.add_child_below_node(alvos, _frente)
+	var fundo: Texture = Estilo.tex("fundo_bar")
+	var k = Tela.TELA.x / fundo.get_width()
+	for b in BEIRADAS:
+		var y0 = floor(b.x / k)
+		var y1 = ceil(b.y / k)
+		var s = Sprite.new()
+		s.texture = fundo
+		s.centered = false
+		s.region_enabled = true
+		s.region_filter_clip = true
+		s.region_rect = Rect2(0, y0, fundo.get_width(), y1 - y0)
+		s.position = Vector2(0, y0 * k)
+		s.scale = Vector2(k, k)
+		_frente.add_child(s)
+	_furos_frente = Node2D.new()
+	_frente.add_child(_furos_frente)
 
 
 func _feixe(nome: String) -> Polygon2D:
@@ -160,16 +229,23 @@ func _feixe(nome: String) -> Polygon2D:
 	f.texture = Estilo.tex(nome)
 	f.material = Estilo.material_soma()
 	var tam_tex: Vector2 = f.texture.get_size()
-	var pontos = PoolVector2Array()
 	var uv = PoolVector2Array()
 	for q in CONTORNO_FEIXE:
-		pontos.append(tela(q * 4.0))
 		uv.append(q * tam_tex / Vector2(256, 384))
-	f.polygon = pontos
+	f.polygon = _poli_feixe
 	f.uv = uv
 	f.modulate.a = 0.0
-	cenario.add_child(f)
+	_frente.add_child(f)
 	return f
+
+
+## Quanto do feixe de sol pega numa garrafa (0 a 1), pelo meio dela.
+func _luz_do_feixe(x: float, y: float) -> float:
+	var dentro = 0
+	for dx in [-36.0, -18.0, 0.0, 18.0, 36.0]:
+		if Geometry.is_point_in_polygon(Vector2(x + dx, y), _poli_feixe):
+			dentro += 1
+	return dentro / 5.0
 
 
 # ------------------------------------------------------------ partida
@@ -241,7 +317,7 @@ func _spawnar() -> bool:
 	opcoes.shuffle()
 	for op in opcoes:
 		var chave = "%d|%d" % [op[0], int(op[1])]
-		if _slots.has(chave):
+		if _slots.has(chave) or _vago_ate.get(chave, 0.0) > _t:
 			continue
 		_criar_garrafa(op[0], op[1], NOMES[op[0]])
 		return true
@@ -256,36 +332,89 @@ func _criar_garrafa(prat: int, x: float, tipo: String) -> Garrafa:
 	g.pontos = prat if tipo != "falsa" else 0
 	g.f = _f[tipo]
 	g.no = Node2D.new()
-	g.no.position = Vector2(x, Y_PRATELEIRA[prat] + PE)
+	g.no.position = Vector2(x, PE_PRATELEIRA[prat])
 	alvos.add_child(g.no)
-	# sombra no fundo da prateleira
-	g.sombra = Sprite.new()
-	g.sombra.texture = Estilo.tex("fx_brilho")
-	g.sombra.modulate = Color(0, 0, 0, 0.45)
-	g.sombra.scale = Vector2(0.9, 0.22)
-	g.no.add_child(g.sombra)
+	var cel: Vector2 = g.f["cel"]
+	var esc: float = (ESCALA_FALSA if tipo == "falsa" else ESCALA_GARRAFA)[prat]
+	if prat <= 50:
+		# sombra de contato no tampo (a luz vem da esquerda: um pouco à direita)
+		g.sombra = Sprite.new()
+		g.sombra.texture = Estilo.tex("fx_brilho")
+		g.sombra.modulate = Color(0.05, 0.02, 0.0, 0.0)
+		g.sombra.position = Vector2(5.0, 1.0)
+		g.sombra.scale = Vector2(cel.x * esc * 1.5 / 128.0, 0.2)
+		g.no.add_child(g.sombra)
 	g.spr = Sprite.new()
 	g.spr.texture = g.f["tex"]
 	g.spr.hframes = g.f["quadros"]
 	g.spr.frame = 0
 	g.spr.centered = false
-	var cel: Vector2 = g.f["cel"]
 	g.spr.offset = Vector2(-cel.x * 0.5, -cel.y + VAZIO_EMBAIXO.get(tipo, 0.0))
-	var esc: float = (ESCALA_FALSA if tipo == "falsa" else ESCALA_GARRAFA)[prat]
 	g.spr.scale = Vector2.ONE * esc
 	g.no.add_child(g.spr)
+	# a sombra na parede e o contraluz do sol: o contorno macio da garrafa
+	# atrás dela (filhos do desenho: caem e somem junto)
+	g.parede = _contorno(g, COR_SOMBRA, false)
+	g.parede.position = SOMBRA_PAREDE / esc
+	g.luz = _luz_do_feixe(x, PE_PRATELEIRA[prat] - cel.y * esc * 0.45)
+	if g.luz > 0.0:
+		g.contraluz = _contorno(g, Color(COR_CONTRALUZ.r, COR_CONTRALUZ.g, COR_CONTRALUZ.b, 0.0), true)
 	g.vida = _vida(g)
 	_slots["%d|%d" % [prat, int(x)]] = g
 	garrafas.append(g)
-	# cai do alto na tábua e assenta (um quique de leve)
+	# cai do alto na tábua e assenta (um quique de leve); a sombra do tampo
+	# aparece quando ela chega
 	g.spr.position = Vector2(0, -70)
 	g.spr.modulate.a = 0.0
 	var tw = create_tween().set_parallel(true)
 	tw.tween_property(g.spr, "position", Vector2.ZERO, 0.22).set_trans(Tween.TRANS_BOUNCE).set_ease(Tween.EASE_OUT)
 	tw.tween_property(g.spr, "modulate:a", 1.0, 0.1)
+	if g.sombra != null:
+		tw.tween_property(g.sombra, "modulate:a", 0.65, 0.22).set_delay(0.08)
+	tw.chain().tween_callback(self, "_pousou", [g])
 	if randf() < 0.5:
 		Maquina.efeito(_som_pousa, -12.0, rand_range(0.9, 1.15))
 	return g
+
+
+## O contorno macio da garrafa (bar_sombra_*), atrás dela, no lugar do quadro
+## parado: escuro é a sombra; somado (luz) é o contraluz.
+func _contorno(g: Garrafa, c: Color, somar: bool) -> Sprite:
+	var s = Sprite.new()
+	s.texture = Estilo.tex("bar_sombra_" + g.tipo)
+	s.centered = false
+	s.show_behind_parent = true
+	s.scale = Vector2.ONE * SOMBRA_RED
+	s.offset = g.spr.offset / SOMBRA_RED - Vector2.ONE * SOMBRA_FOLGA
+	s.modulate = c
+	if somar:
+		# um pouco maior que a garrafa, em volta do meio dela: a luz vaza
+		# pelas bordas do vidro
+		s.material = Estilo.material_soma()
+		s.scale *= 1.06
+		var meio = g.spr.offset + g.f["cel"] * 0.5
+		s.position = meio * (1.0 - 1.06)
+	g.spr.add_child(s)
+	return s
+
+
+## A garrafa assentou na tábua: balança um pouco.
+func _pousou(g: Garrafa) -> void:
+	if not g.saindo and abs(g.balanco) < 0.045:
+		g.balanco = 0.045
+		g.balanco_t = 0.0
+
+
+## Tiro perto: as garrafas da mesma tábua balançam (mais forte quanto mais
+## perto), girando no pé.
+func _balancar(prat: int, x: float, forca: float) -> void:
+	for g in garrafas:
+		if g.saindo or g.prateleira != prat:
+			continue
+		var f = forca * (1.0 - abs(g.x - x) / 210.0)
+		if f > abs(g.balanco):
+			g.balanco = f if randf() < 0.5 else -f
+			g.balanco_t = 0.0
 
 
 func _vida(g: Garrafa) -> float:
@@ -427,9 +556,8 @@ func _tiro(p: Vector2) -> void:
 	if g != null:
 		_acertar(g, p)
 		return
-	var q = imagem(p)
-	var em_cartaz = Geometry.is_point_in_polygon(q, PoolVector2Array(CARTAZ))
-	var no_barril = em_cartaz or Geometry.is_point_in_polygon(q, PoolVector2Array(BARRIL))
+	var em_cartaz = Geometry.is_point_in_polygon(p, _poli_cartaz)
+	var no_barril = em_cartaz or Geometry.is_point_in_polygon(p, _poli_barril)
 	if no_barril and _barril_furos < BARRIL_FUROS:
 		_tiro_no_barril(p, em_cartaz)
 		return
@@ -448,7 +576,9 @@ func _tiro(p: Vector2) -> void:
 func _acertar(g: Garrafa, p: Vector2) -> void:
 	g.saindo = true
 	garrafas.erase(g)
-	_slots.erase("%d|%d" % [g.prateleira, int(g.x)])
+	var chave = "%d|%d" % [g.prateleira, int(g.x)]
+	_slots.erase(chave)
+	_vago_ate[chave] = _t + 1.3
 	if g.tipo == "falsa":
 		erros_seguidos += 1
 		var perda = PENA_FALSA + 20 * erros_seguidos
@@ -460,6 +590,12 @@ func _acertar(g: Garrafa, p: Vector2) -> void:
 		particulas.explosao(g.no.position + Vector2(0, -70), {"n": 6, "tex": Estilo.tex("fx_fumaca"), "vel": [30.0, 110.0], "ang": [200.0, 340.0],
 			"vida": [0.9, 1.5], "tam": [50.0, 80.0], "fim": 2.0, "cor": Color(0.3, 0.75, 0.25, 0.6), "grav": -40.0})
 		g.spr.offset.y = -g.f["cel"].y + VAZIO_ESTOURO_FALSA
+		g.parede.visible = false
+		if g.contraluz != null:
+			g.contraluz.visible = false
+		if g.sombra != null:
+			g.sombra.visible = false
+		_balancar(g.prateleira, g.x, 0.07)
 		var tw = create_tween()
 		for q in g.f["acerto"]:
 			tw.tween_callback(g.spr, "set_frame", [q])
@@ -479,24 +615,29 @@ func _acertar(g: Garrafa, p: Vector2) -> void:
 func _estourar(g: Garrafa, p: Vector2) -> void:
 	var cel: Vector2 = g.f["cel"]
 	var xf = g.no.get_transform() * g.spr.get_transform() * Transform2D(0.0, g.spr.offset + cel * 0.5)
-	var prat_y: float = Y_PRATELEIRA[g.prateleira] + PE - 2.0
-	cacos.estourar(g.f["tex"], Rect2(Vector2.ZERO, cel), xf, p, {"n": 14, "forca": 1.0, "grav": 1700.0, "chao": prat_y, "vida": 1.4, "sobe": 240.0})
+	var prat_y: float = PE_PRATELEIRA[g.prateleira] - 2.0
+	cacos.estourar(g.f["tex"], Rect2(Vector2.ZERO, cel), xf, p, {"n": 10, "forca": 1.0, "grav": 1700.0, "chao": prat_y, "vida": 1.3, "sobe": 240.0})
 	var liq: Color = LIQUIDO[g.tipo]
-	particulas.explosao(p, {"n": 22, "tex": Estilo.tex("fx_ponto"), "vel": [120.0, 460.0], "vida": [0.5, 1.0], "tam": [8.0, 18.0], "fim": 0.6,
+	particulas.explosao(p, {"n": 16, "tex": Estilo.tex("fx_ponto"), "vel": [120.0, 460.0], "vida": [0.5, 1.0], "tam": [8.0, 18.0], "fim": 0.6,
 		"cor": liq, "grav": 1300.0, "chao": prat_y, "arrasto": 0.6})
 	particulas.explosao(p, {"n": 3, "tex": Estilo.tex("fx_nuvem"), "vel": [20.0, 80.0], "vida": [0.4, 0.7], "tam": [60.0, 90.0], "fim": 1.5,
 		"cor": Color(liq.r, liq.g, liq.b, 0.35)})
-	particulas_luz.explosao(p, {"n": 12, "vel": [150.0, 420.0], "vida": [0.25, 0.5], "tam": [6.0, 12.0], "cor": Color(1.0, 0.95, 0.85),
+	particulas_luz.explosao(p, {"n": 9, "vel": [150.0, 420.0], "vida": [0.25, 0.5], "tam": [6.0, 12.0], "cor": Color(1.0, 0.95, 0.85),
 		"grav": 500.0, "estica": 0.03})
 	luz_sprite_breve(p, 220.0, Color(1.0, 0.92, 0.75, 0.75), 0.25)
-	# pingos escorrendo para a prateleira de baixo
-	var baixo = prat_y + 260.0
+	# pingos escorrendo da beirada da tábua para a de baixo (ou o chão)
+	var baixo = CHAO_BAR
 	for prat in [80, 50, 20]:
-		if Y_PRATELEIRA[prat] > Y_PRATELEIRA[g.prateleira]:
-			baixo = Y_PRATELEIRA[prat] + PE
+		if PE_PRATELEIRA[prat] > PE_PRATELEIRA[g.prateleira]:
+			baixo = PE_PRATELEIRA[prat]
 			break
-	particulas.explosao(Vector2(g.x, prat_y + 4.0), {"n": 5, "tex": Estilo.tex("fx_ponto"), "vel": [0.0, 30.0], "ang": [80.0, 100.0],
+	particulas.explosao(Vector2(g.x, BASE_TABUA[g.prateleira] + 2.0), {"n": 5, "tex": Estilo.tex("fx_ponto"), "vel": [0.0, 30.0], "ang": [80.0, 100.0],
 		"vida": [1.0, 1.6], "tam": [6.0, 9.0], "fim": 0.8, "cor": liq, "grav": 900.0, "chao": baixo, "espalha": 30.0})
+	# a bebida espirrada fica na parede atrás e (nas tábuas de baixo) no tampo
+	_manchar(Vector2(g.x + rand_range(-10, 10), PE_PRATELEIRA[g.prateleira] - 70.0 * g.spr.scale.y * 2.0), liq, Vector2(1.1, 1.3))
+	if g.prateleira <= 50:
+		_manchar(Vector2(g.x + 6.0, PE_PRATELEIRA[g.prateleira] + 2.0), liq, Vector2(1.4, 0.22))
+	_balancar(g.prateleira, g.x, 0.09)
 	g.no.queue_free()
 
 
@@ -528,6 +669,10 @@ func _tiro_na_janela(p: Vector2) -> void:
 
 func _lascar(p: Vector2, material: String) -> void:
 	_furo(p, "bar_furo_papel" if material == "papel" else "bar_furo_madeira")
+	# tiro na tábua sacode as garrafas que estão em cima dela
+	for prat in PE_PRATELEIRA:
+		if p.y > PE_PRATELEIRA[prat] - 10.0 and p.y < BASE_TABUA[prat] + 4.0:
+			_balancar(prat, p.x, 0.06)
 	if material == "papel":
 		particulas.explosao(p, {"n": 7, "tex": Estilo.tex("fx_caco"), "vel": [60.0, 180.0], "vida": [0.9, 1.6], "tam": [10.0, 18.0],
 			"cor": Color(0.92, 0.85, 0.66), "grav": 260.0, "giro": [-6.0, 6.0], "arrasto": 2.0})
@@ -540,15 +685,52 @@ func _lascar(p: Vector2, material: String) -> void:
 		Maquina.efeito(_som_madeira, -5.0, rand_range(0.9, 1.1))
 
 
+## O furo da bala (madeira ou papel): na frente das tábuas de cima ele fica
+## por cima das garrafas. Os furos mais velhos são reaproveitados (nada de nó
+## novo a cada tiro).
 func _furo(p: Vector2, tex: String) -> void:
-	var s = Sprite.new()
+	var pai = _furos
+	for b in BEIRADAS:
+		if p.y >= b.x and p.y <= b.y:
+			pai = _furos_frente
+	var s: Sprite
+	if _furos.get_child_count() + _furos_frente.get_child_count() >= 24:
+		# o mais velho dos dois lados
+		var a: Sprite = _furos.get_child(0) if _furos.get_child_count() > 0 else null
+		var b2: Sprite = _furos_frente.get_child(0) if _furos_frente.get_child_count() > 0 else null
+		s = a if b2 == null or (a != null and int(a.get_meta("n")) < int(b2.get_meta("n"))) else b2
+		if s.get_parent() != pai:
+			s.get_parent().remove_child(s)
+			pai.add_child(s)
+		else:
+			pai.move_child(s, pai.get_child_count() - 1)
+	else:
+		s = Sprite.new()
+		pai.add_child(s)
+	_n_furo += 1
+	s.set_meta("n", _n_furo)
 	s.texture = Estilo.tex(tex)
 	s.position = p
 	s.scale = Vector2.ONE * rand_range(0.42, 0.55)
 	s.rotation = randf() * TAU
-	_furos.add_child(s)
-	if _furos.get_child_count() > 24:
-		_furos.get_child(0).queue_free()
+
+
+## A bebida espirrada: uma mancha que seca devagar (poucas, reaproveitadas).
+func _manchar(p: Vector2, c: Color, esc: Vector2) -> void:
+	var s: Sprite
+	if _manchas.get_child_count() >= 8:
+		s = _manchas.get_child(0)
+		_manchas.move_child(s, _manchas.get_child_count() - 1)
+	else:
+		s = Sprite.new()
+		s.texture = Estilo.tex("fx_nuvem")
+		_manchas.add_child(s)
+	s.position = p
+	s.rotation = rand_range(-0.3, 0.3)
+	s.scale = esc * rand_range(0.85, 1.15) * 0.55
+	# madeira molhada escurece (a cor da bebida só tinge)
+	s.modulate = Color(0.16 + c.r * 0.14, 0.07 + c.g * 0.08, 0.02 + c.b * 0.05, 0.5)
+	s.set_meta("t", 0.0)
 
 
 func _encerrou() -> void:
@@ -558,6 +740,7 @@ func _encerrou() -> void:
 		tw.tween_callback(g.no, "queue_free")
 	garrafas.clear()
 	_slots.clear()
+	_vago_ate.clear()
 
 
 # ------------------------------------------------------------ vida do bar
@@ -571,8 +754,8 @@ func _sempre(delta: float) -> void:
 	var w = 0.5 + 0.5 * sin(_t * 0.55)
 	_feixe_a.modulate.a = forca_sol * w
 	_feixe_b.modulate.a = forca_sol * (1.0 - w)
-	# poeira brilhando dentro do feixe
-	if randf() < delta * 7.0 * Maquina.fator_efeitos():
+	# poeira brilhando dentro do feixe (some com a tela leve)
+	if _poeira_sol.visible and randf() < delta * 7.0 * Maquina.fator_efeitos():
 		var q: Vector2 = PONTOS_POEIRA[randi() % PONTOS_POEIRA.size()]
 		var p = tela(q) + Vector2(rand_range(-12, 12), rand_range(-12, 12))
 		_poeira_sol.soltar(p, Vector2(rand_range(-4, 8), rand_range(-2, 9)), rand_range(3.0, 5.0), rand_range(4.0, 7.0), 2.0,
@@ -583,6 +766,39 @@ func _sempre(delta: float) -> void:
 			j["t"] += delta
 		_poca = min(1.0, _poca + delta * 0.05 * _jatos.size())
 		_vinho.update()
+	_forca_sol = forca_sol
+	_vida_das_garrafas(delta)
+	# a bebida espirrada seca devagar
+	for m in _manchas.get_children():
+		if m.modulate.a > 0.0:
+			var tm: float = m.get_meta("t") + delta
+			m.set_meta("t", tm)
+			if tm > 4.0:
+				m.modulate.a = max(0.0, m.modulate.a - delta * 0.12)
+
+
+## Cada quadro: o balanço (gira no pé, amortecido), o contraluz no ritmo do
+## sol e, de vez em quando, um reflexo correndo no vidro.
+func _vida_das_garrafas(delta: float) -> void:
+	for g in garrafas:
+		if g.balanco != 0.0:
+			g.balanco_t += delta
+			var am = exp(-g.balanco_t * 5.5)
+			if am < 0.03:
+				g.balanco = 0.0
+				g.no.rotation = 0.0
+			else:
+				g.no.rotation = g.balanco * am * sin(g.balanco_t * 23.0)
+		if g.contraluz != null:
+			g.contraluz.modulate.a = clamp(g.luz * _forca_sol * 0.75, 0.0, 0.55)
+	if not garrafas.empty() and randf() < delta * 0.9 * Maquina.fator_efeitos():
+		var g: Garrafa = garrafas[randi() % garrafas.size()]
+		if not g.saindo and g.spr.position == Vector2.ZERO:
+			var cel: Vector2 = g.f["cel"]
+			var esc: float = g.spr.scale.y
+			var p = g.no.position + Vector2(-cel.x * esc * rand_range(0.05, 0.2), -cel.y * esc * rand_range(0.45, 0.7))
+			particulas_luz.soltar(p, Vector2(0, rand_range(-10, -4)), rand_range(0.35, 0.55), rand_range(16.0, 26.0), 2.0,
+				Color(1.0, 0.95, 0.82, 0.85 * (0.6 + 0.6 * g.luz)), Color(1.0, 0.9, 0.7, 0.0), Estilo.tex("fx_estrela"), 0.0, 0.0, 2.5)
 
 
 ## O vinho do barril: jato forte logo depois do tiro, que vira um fio
