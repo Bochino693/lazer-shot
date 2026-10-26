@@ -1,8 +1,20 @@
-# Lazer Shot 2.3 — TV Box Mali-450
+# Lazer Shot 2.4 — TV Box Mali-450
 
 Esta pasta é o **Lazer Shot para a TV Box da placa Mali-450** (S905L / S905W, Android 7.1). A placa de vídeo dela só tem OpenGL ES 2.0, por isso este jogo é feito no **Godot 3.6.2 (GLES2)**. A versão 4.6 (Pro Ultra / TX9) é outro projeto, na branch `tvbox-ultra-pro`.
 
-## Novidades da 2.3
+## Novidades da 2.4
+
+- **Só a mira na tela, sem a seta do mouse.** No Android 7 o Godot 3.6 não esconde a seta, e muitas TV Box ignoram a seta transparente que o jogo punha no lugar. Por isso a seta aparecia junto com a mira e, com a tela girada, andava ao contrário.
+  - Agora o gerador faz uma cópia dos modelos do Godot (em `build\android\modelos`) em que todos os formatos de seta viram o "nenhum" do Android. É o mesmo jeito que os outros jogos de tiro usam.
+  - Os modelos originais não mudam. A cópia é feita uma vez (cerca de 1 minuto) e refeita só se os modelos mudarem.
+  - **Precisa gerar o APK de novo** com este gerador. Na janela aparece "Seta do mouse: escondida pelo Android".
+- **Som firme no Mar e em todas as fases.** Muitos tiros, recargas e estouros juntos não cortam mais o som do jogo.
+  - Os efeitos passam por um limitador antes de somar com a música, e a saída também tem um limitador. O estouro da mistura é que cortava o som todo.
+  - No máximo 10 efeitos tocam ao mesmo tempo. O mesmo som repetido em menos de 45 ms toca uma vez só.
+  - A folga do som é maior (100 ms), para a TV Box não engasgar.
+- **Nada bate no chão e quebra.** Pote, baú e bomba do Mar, cacos de garrafa, cacos da janela do Bar, gotas e lascas passam reto pela tela. Assim que saem da tela, somem e param de gastar processamento.
+
+## Da 2.3
 
 - **Bar com profundidade.** As garrafas pisam nas prateleiras de verdade: nas duas de cima ficam atrás da beirada da tábua; nas duas de baixo, no meio do tampo. Antes a de cima ficava na frente da tábua e a de 80 flutuava.
   - Sombra macia de cada garrafa na parede (a luz vem da janela) e sombra no tampo das prateleiras de baixo.
@@ -89,7 +101,7 @@ Esta pasta é o **Lazer Shot para a TV Box da placa Mali-450** (S905L / S905W, A
 
    Tudo aparece na janela na hora e fica gravado em `build\android\GERACAO-COMPLETA.log`. A janela termina sozinha.
 
-3. O APK fica em **`APK-Pronto\LazerShot-Mali450-2.3.0.apk`** (a versão vai no nome do arquivo). Copie para o pendrive, use **Ejetar** no Windows antes de tirar o pendrive e instale na TV Box.
+3. O APK fica em **`APK-Pronto\LazerShot-Mali450-2.4.0.apk`** (a versão vai no nome do arquivo). Copie para o pendrive, use **Ejetar** no Windows antes de tirar o pendrive e instale na TV Box.
 
    No fim aparece **APK PRONTO E CONFERIDO**, com a linha **Assinatura: v1 + v2**. Antes disso o gerador confere o APK por dentro: o motor ARM 32 e 64 bits, os scripts e as imagens em ETC1. As mensagens técnicas do Godot que não são problema (PC sem placa de som, por exemplo) não aparecem na janela; ficam só no histórico.
 
@@ -125,6 +137,7 @@ O giro e quem gira também se trocam **na própria TV Box**, na CONFIGURAÇÃO d
   - Desde esta versão o gerador monta o APK sem desenhar nada (`--disable-render-loop`): a placa só abre o OpenGL e fica parada. O APK sai igual, arquivo por arquivo.
   - Se ainda acontecer: reinicie o PC, feche jogos e navegadores e rode de novo. Se continuar, reinstale o driver da placa (para a 8400GS, o último é o 342.01) ou gere o APK em outro PC.
   - Quando falha, o gerador mostra as últimas linhas do Godot e o motivo da saída.
+- **"AVISO: nao deu para preparar os modelos sem a seta":** o APK sai, mas com a seta transparente antiga, que algumas TV Box ainda mostram. Apague a pasta `build\android\modelos` e rode de novo. Se continuar, apague também a pasta dos modelos do Godot (`%APPDATA%\Godot\templates\3.6.2.stable`) para eles baixarem de novo.
 
 ### Se a TV Box não instalar
 
@@ -138,7 +151,7 @@ O giro e quem gira também se trocam **na própria TV Box**, na CONFIGURAÇÃO d
 - O HDMI sai **deitado** e o monitor fica **em pé**. Deixe a TV Box em **1080p** (Configurações → Tela → Resolução): em 720p tudo fica menos nítido.
 - **Quem gira a imagem:** ao abrir, o jogo pede ao Android a tela em pé.
   - Se a TV Box girar, a **seta do mouse anda junto com a arma** e a mira fica em cima dela. É o melhor jeito.
-  - Se não girar, o jogo gira por dentro sozinho e esconde a seta (algumas TV Box com Android 7 ainda mostram a seta; ela anda de lado, mas quem vale é a mira do jogo).
+  - Se não girar, o jogo gira por dentro sozinho. A seta do mouse fica escondida nos dois casos (desde a 2.4, gerando o APK com este gerador).
   - Para a TV Box girar: se ela tiver **Configurações → Tela → Rotação da tela** (o nome muda de uma para outra), escolha **Original** (ou "seguir o app"). Nas TV Box Amlogic, as opções do tipo "retrato no meio" (middle_port) e "forçar paisagem" (force_land) não giram. Depois, na CONFIGURAÇÃO do jogo, toque em **AUTO** em "Quem gira a tela" para ele tentar de novo.
   - **Imagem de cabeça para baixo:** CONFIGURAÇÃO → "Giro da tela" → troque ESQUERDA por DIREITA.
 - A **arma** é o mouse: o **gatilho** atira; o **clique direito** (o botão perto do gatilho) recarrega; os **outros botões do lado** dão START (na partida, também recarregam).

@@ -16,6 +16,9 @@ class_name Particulas
 ##   p.explosao(pos, {"n": 20, "tex": Estilo.tex("fx_ponto"), "vel": [200, 600], ...})
 
 const MAX = 260
+const FORA = 80.0                       # px além da borda: saiu de cena
+const FORA_X = 1024.0 + FORA
+const FORA_Y = 1820.0 + FORA
 
 var somar = false setget _set_somar
 
@@ -40,7 +43,6 @@ const P_ROT = 12
 const P_GIRO = 13
 const P_TEX = 14
 const P_ESTICA = 15
-const P_CHAO = 16
 
 
 func _init() -> void:
@@ -72,13 +74,13 @@ func _tex_indice(t: Texture) -> int:
 
 ## Uma partícula. Use explosao() para muitas de uma vez.
 func soltar(pos: Vector2, vel: Vector2, vida: float, tam0: float, tam1: float, cor0: Color, cor1: Color,
-		tex: Texture, grav: float = 0.0, arrasto: float = 0.0, giro: float = 0.0, estica: float = 0.0, chao: float = 1.0e9) -> void:
+		tex: Texture, grav: float = 0.0, arrasto: float = 0.0, giro: float = 0.0, estica: float = 0.0) -> void:
 	if not visible:
 		return    # enfeite escondido (tela leve): nem nasce
 	if _lista.size() >= MAX:
 		_lista.pop_front()
 	_lista.append([pos.x, pos.y, vel.x, vel.y, 0.0, max(0.05, vida), tam0, tam1, cor0, cor1, grav, arrasto,
-		_rng.randf() * TAU, giro, _tex_indice(tex), estica, chao])
+		_rng.randf() * TAU, giro, _tex_indice(tex), estica])
 	set_process(true)
 
 
@@ -86,7 +88,7 @@ func soltar(pos: Vector2, vel: Vector2, vida: float, tam0: float, tam1: float, c
 ##   n, tex, vel [min, max], ang [graus de, graus até] (padrão: em volta),
 ##   vida [min, max], tam [min, max] (tamanho inicial em px), fim (fator do
 ##   tamanho no fim), cor, cor_fim, grav, arrasto, giro [min, max] (rad/s),
-##   estica, espalha (raio de nascimento), chao (y onde param), vel_base
+##   estica, espalha (raio de nascimento), vel_base
 func explosao(pos: Vector2, o: Dictionary) -> void:
 	var n = int(round(float(o.get("n", 12)) * Maquina.fator_efeitos()))
 	var tex: Texture = o.get("tex", null)
@@ -104,7 +106,6 @@ func explosao(pos: Vector2, o: Dictionary) -> void:
 	var giro: Array = o.get("giro", [0.0, 0.0])
 	var estica: float = o.get("estica", 0.0)
 	var espalha: float = o.get("espalha", 0.0)
-	var chao: float = o.get("chao", 1.0e9)
 	var vel_base: Vector2 = o.get("vel_base", Vector2.ZERO)
 	for i in n:
 		var a = deg2rad(_rng.randf_range(ang[0], ang[1]))
@@ -113,7 +114,7 @@ func explosao(pos: Vector2, o: Dictionary) -> void:
 		var t0 = _rng.randf_range(tam[0], tam[1])
 		var p0 = pos + dir * _rng.randf_range(0.0, espalha)
 		soltar(p0, v, _rng.randf_range(vida[0], vida[1]), t0, t0 * fim, cor, cor_fim, tex, grav, arrasto,
-			_rng.randf_range(giro[0], giro[1]), estica, chao)
+			_rng.randf_range(giro[0], giro[1]), estica)
 
 
 func _process(delta: float) -> void:
@@ -135,12 +136,10 @@ func _process(delta: float) -> void:
 		p[P_VY] += p[P_GRAV] * delta
 		p[P_X] += p[P_VX] * delta
 		p[P_Y] += p[P_VY] * delta
-		if p[P_Y] > p[P_CHAO]:
-			# bateu no chão: quica baixo e desliza até parar
-			p[P_Y] = p[P_CHAO]
-			p[P_VY] = -abs(p[P_VY]) * 0.25
-			p[P_VX] *= 0.6
-			p[P_GIRO] *= 0.5
+		# nada quica: o que cai passa reto e, fora da tela, some na hora
+		if p[P_Y] > FORA_Y or p[P_Y] < -FORA or p[P_X] < -FORA or p[P_X] > FORA_X:
+			_lista.remove(i)
+			continue
 		p[P_ROT] += p[P_GIRO] * delta
 		i += 1
 	update()

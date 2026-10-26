@@ -983,7 +983,7 @@ func _furar_areia(p: Vector2) -> void:
 	_furo(p, "fx_furo_areia", 0.9)
 	var c = Color(0.92, 0.72, 0.42).linear_interpolate(Color(0.50, 0.48, 0.56), _noite)
 	particulas.explosao(p, {"n": 10, "tex": Estilo.tex("fx_ponto"), "vel": [60.0, 220.0], "ang": [200.0, 340.0], "vida": [0.4, 0.8],
-		"tam": [4.0, 8.0], "cor": c, "grav": 700.0, "chao": p.y + 6.0})
+		"tam": [4.0, 8.0], "cor": c, "grav": 700.0})
 	particulas.explosao(p, {"n": 3, "tex": Estilo.tex("fx_nuvem"), "vel": [10.0, 40.0], "ang": [220.0, 320.0], "vida": [0.8, 1.4],
 		"tam": [40.0, 60.0], "fim": 2.0, "cor": Color(c.r, c.g, c.b, 0.55), "grav": -20.0})
 	Maquina.efeito(_som_areia, -6.0, rand_range(0.9, 1.1))

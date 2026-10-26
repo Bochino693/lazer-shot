@@ -115,7 +115,7 @@ config/icon="res://sprites/icone_app.png"
 [audio]
 
 default_bus_layout=""
-output_latency=40
+output_latency=100
 
 [autoload]
 
@@ -175,6 +175,7 @@ input_select={
 tela/giro=1
 tela/mira_direta=true
 tela/rotacao="android"
+tela/seta_nula=false
 
 [physics]
 

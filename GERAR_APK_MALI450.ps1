@@ -35,6 +35,7 @@ $ProgressPreference = "SilentlyContinue"
 $Projeto = $PSScriptRoot
 $Saida = Join-Path $Projeto "build\android"
 New-Item -ItemType Directory -Path $Saida -Force | Out-Null
+Add-Type -AssemblyName System.IO.Compression
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $Utf8 = New-Object System.Text.UTF8Encoding($false)
 $SegundosSemSaida = 30
@@ -447,6 +448,85 @@ if (-not (Test-Path (Join-Path $PastaModelos "android_release.apk"))) {
     Diz "      Modelos de exportacao $VersaoModelos confirmados." "Green"
 }
 
+# A SETA DO ANDROID. No Android 7 o Godot 3.6 nao esconde a seta do mouse e
+# muitas TV Box nao aceitam a seta transparente: a seta ficava junto com a
+# mira (andando ao contrario com a tela girada). Este gerador faz uma copia
+# dos modelos (build\android\modelos) em que todos os formatos de seta do
+# Godot viram o "nenhum" do Android (o mesmo que os outros jogos de tiro
+# usam), e o jogo pede esse formato. Os modelos originais nao mudam; a copia
+# so e refeita quando os originais mudam.
+function Modelo-Sem-Seta([string]$Origem, [string]$Destino) {
+    $Latin = [System.Text.Encoding]::GetEncoding(28591)
+    $Valores = @(1000, 1008, 1002, 1007, 1004, 1004, 1021, 1021, 1000, 1015, 1014, 1017, 1016, 1020, 1015, 1014, 1003)
+    $Tabela = New-Object byte[] ($Valores.Count * 4)
+    for ($i = 0; $i -lt $Valores.Count; $i++) { [BitConverter]::GetBytes([int]$Valores[$i]).CopyTo($Tabela, $i * 4) }
+    $Procura = $Latin.GetString($Tabela)
+    Copy-Item -LiteralPath $Origem -Destination $Destino -Force
+    $Certo = $true
+    $Zip = [System.IO.Compression.ZipFile]::Open($Destino, [System.IO.Compression.ZipArchiveMode]::Update)
+    try {
+        foreach ($Nome in @("lib/armeabi-v7a/libgodot_android.so", "lib/arm64-v8a/libgodot_android.so")) {
+            $Entrada = $Zip.GetEntry($Nome)
+            if (-not $Entrada) { $Certo = $false; break }
+            $Memoria = New-Object System.IO.MemoryStream
+            $Fluxo = $Entrada.Open()
+            try { $Fluxo.CopyTo($Memoria) } finally { $Fluxo.Dispose() }
+            $Bytes = $Memoria.ToArray()
+            $Memoria.Dispose()
+            $Texto = $Latin.GetString($Bytes)
+            $Pos = $Texto.IndexOf($Procura, [StringComparison]::Ordinal)
+            # a tabela tem de estar la uma vez so; senao a copia nao vale
+            if ($Pos -lt 0 -or $Texto.IndexOf($Procura, $Pos + 1, [StringComparison]::Ordinal) -ge 0) { $Certo = $false; break }
+            $Texto = $null
+            [Array]::Clear($Bytes, $Pos, $Tabela.Length)
+            $Entrada.Delete()
+            $Nova = $Zip.CreateEntry($Nome, [System.IO.Compression.CompressionLevel]::Optimal)
+            $Fluxo = $Nova.Open()
+            try { $Fluxo.Write($Bytes, 0, $Bytes.Length) } finally { $Fluxo.Dispose() }
+        }
+    } finally {
+        $Zip.Dispose()
+    }
+    if (-not $Certo) { Remove-Item -LiteralPath $Destino -Force -ErrorAction SilentlyContinue }
+    return $Certo
+}
+
+$PastaSemSeta = Join-Path $Saida "modelos"
+$ModeloRelease = Join-Path $PastaSemSeta "android_release.apk"
+$ModeloDebug = Join-Path $PastaSemSeta "android_debug.apk"
+$SetaNula = $false
+try {
+    $Originais = @(Get-Item -LiteralPath (Join-Path $PastaModelos "android_release.apk"), (Join-Path $PastaModelos "android_debug.apk"))
+    $Assinatura = ($Originais | ForEach-Object { "{0} {1} {2}" -f $_.Name, $_.Length, $_.LastWriteTimeUtc.Ticks }) -join "`n"
+    $MarcaSemSeta = Join-Path $PastaSemSeta "sem_seta.txt"
+    if ((Test-Path -LiteralPath $MarcaSemSeta) -and (Test-Path -LiteralPath $ModeloRelease) -and (Test-Path -LiteralPath $ModeloDebug) -and
+        ([IO.File]::ReadAllText($MarcaSemSeta).Trim() -eq $Assinatura)) {
+        $SetaNula = $true
+    } else {
+        Diz "      Preparando os modelos sem a seta do mouse (primeira vez: ~1 min)..." "Cyan"
+        New-Item -ItemType Directory -Path $PastaSemSeta -Force | Out-Null
+        Remove-Item -LiteralPath $MarcaSemSeta -Force -ErrorAction SilentlyContinue
+        if ((Modelo-Sem-Seta $Originais[0].FullName $ModeloRelease) -and (Modelo-Sem-Seta $Originais[1].FullName $ModeloDebug)) {
+            [IO.File]::WriteAllText($MarcaSemSeta, $Assinatura, $Utf8)
+            $SetaNula = $true
+        }
+    }
+} catch {
+    Diz ("      (modelos sem a seta: {0})" -f $_.Exception.Message)
+    $SetaNula = $false
+}
+if ($SetaNula) {
+    Diz "      Seta do mouse: escondida pelo Android (formato 'nenhum')." "Green"
+    $ProjetoAgora = [IO.File]::ReadAllText($ProjectGodot)
+    $ProjetoSemSeta = [Regex]::Replace($ProjetoAgora, '(?m)^tela/seta_nula=.*$', 'tela/seta_nula=true')
+    if ($ProjetoSemSeta -ne $ProjetoAgora) {
+        if (-not $ProjetoParaVoltar) { $ProjetoParaVoltar = $ProjetoAgora }
+        [IO.File]::WriteAllText($ProjectGodot, $ProjetoSemSeta, $Utf8)
+    }
+} else {
+    Diz "      AVISO: nao deu para preparar os modelos sem a seta; o APK sai com a seta transparente do jogo." "Yellow"
+}
+
 # ------------------------------------------------------------------
 # [2/4] ANDROID SDK, JAVA E A CHAVE. Quem assina o APK e este gerador (veja
 # "A ASSINATURA", mais abaixo), com o apksigner.jar do build-tools mais novo.
@@ -560,6 +640,11 @@ if ($PresetTexto -notmatch 'name="Android"') { throw "export_presets.cfg sem o p
 $PresetNovo = [Regex]::Replace($PresetTexto, '(?m)^package/signed=.*$', 'package/signed=false')
 foreach ($Campo in @("keystore/release", "keystore/release_user", "keystore/release_password")) {
     $PresetNovo = [Regex]::Replace($PresetNovo, '(?m)^' + [Regex]::Escape($Campo) + '=.*$', "$Campo=`"`"")
+}
+# Os modelos sem a seta do mouse (veja "A SETA DO ANDROID"), so nesta geracao.
+if ($SetaNula) {
+    $PresetNovo = [Regex]::Replace($PresetNovo, '(?m)^custom_template/release=.*$', "custom_template/release=`"$($ModeloRelease.Replace('\', '/'))`"")
+    $PresetNovo = [Regex]::Replace($PresetNovo, '(?m)^custom_template/debug=.*$', "custom_template/debug=`"$($ModeloDebug.Replace('\', '/'))`"")
 }
 if ($PresetNovo -ne $PresetTexto) {
     $PresetParaVoltar = $PresetTexto

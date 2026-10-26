@@ -4,9 +4,8 @@ extends Node2D
 ## destrói o vidro de verdade.
 ##   - a vidraça estoura: o vidro racha do furo para fora em raios e dois
 ##     anéis; o miolo e o meio caem em cacos recortados do próprio vidro, que
-##     giram piscando na luz, quicam na tábua de baixo (ou no peitoril), os
-##     grandes se partem e ficam deitados um pouco; pó de vidro brilhando e
-##     lascas do caixilho;
+##     giram piscando na luz e passam reto até sair da tela (lá somem na
+##     hora); pó de vidro brilhando e lascas do caixilho;
 ##   - fica o buraco, com a luz de fora entrando, e as pontas de vidro presas
 ##     na moldura (as bordas cortadas brilham);
 ##   - as vidraças do lado trincam com o tranco;
@@ -34,6 +33,7 @@ var _k = 1.0             # pontos do jogo por pixel da imagem da 4.6 (medidas)
 var _tabua = 0.0         # y da tábua embaixo da janela
 var _peitoril = Vector3.ZERO   # x de, x até e y do tampo do peitoril
 var _grav = 1250.0
+var _fora = 1900.0       # y abaixo da tela: o que cai passou daqui, some
 var _estado = []
 var _trincas = []        # por vidraça: linhas (PoolVector2Array)
 var _pontas = []         # por vidraça: [{poly, livres}] (vidro preso na moldura)
@@ -64,6 +64,7 @@ func configurar(rects: Array, tex: Texture, px_tex: float, k: float, tabua: floa
 	_grav = 1250.0 * k
 	_tabua = tabua
 	_peitoril = peitoril
+	_fora = Tela.TELA.y + 80.0
 	for i in _rects.size():
 		_estado.append(INTEIRA)
 		_trincas.append([])
@@ -280,11 +281,8 @@ func _novo_caco(poly: PoolVector2Array, furo: Vector2, forca: float) -> void:
 	sai = sai.normalized() if sai.length() > 0.5 else Vector2(cos(randf() * TAU), sin(randf() * TAU))
 	# o miolo voa mais rápido; os grandes caem mais reto
 	var vel = sai * rand_range(50.0, 170.0) * forca * _k + Vector2(rand_range(-25, 25), rand_range(-70, 10)) * _k
-	var chao = _tabua
-	if centro.x > _peitoril.x and centro.x < _peitoril.y and centro.y < _peitoril.z and randf() < 0.35:
-		chao = _peitoril.z
 	_cacos.append({"pos": centro, "vel": vel, "ang": 0.0, "giro": rand_range(-7.0, 7.0) / max(0.6, sqrt(area) / (8.0 * _k)),
-		"rel": rel, "uvs": uvs, "area": area, "t": 0.0, "chao": chao, "toques": 0, "frente": 0.0, "deitado": 0.0, "fase": randf() * TAU})
+		"rel": rel, "uvs": uvs, "area": area, "t": 0.0, "frente": 0.0, "deitado": 0.0, "fase": randf() * TAU})
 	while _cacos.size() > MAX_CACOS:
 		_cacos.pop_front()
 
@@ -403,12 +401,9 @@ func _process(delta: float) -> void:
 		c["pos"] += c["vel"] * delta
 		c["ang"] += c["giro"] * delta
 		c["frente"] = min(1.0, c["frente"] + delta * 3.0)
-		if c["pos"].y >= c["chao"] and c["vel"].y > 0.0:
-			c["pos"].y = c["chao"]
-			c["toques"] += 1
-			_bater(c)
+	# nada quica: o caco passa reto e, fora da tela, some na hora
 	for i in range(_cacos.size() - 1, -1, -1):
-		if _cacos[i]["t"] > VIDA_CACO:
+		if _cacos[i]["t"] > VIDA_CACO or _cacos[i]["pos"].y > _fora:
 			_cacos.remove(i)
 	for m in _miudos:
 		m["t"] += delta
@@ -416,12 +411,8 @@ func _process(delta: float) -> void:
 			continue
 		m["vel"] = m["vel"] * pow(0.35, delta) + Vector2(0, _grav * 0.7) * delta
 		m["pos"] += m["vel"] * delta
-		if m["pos"].y >= _tabua and m["vel"].y > 0.0:
-			m["pos"].y = _tabua
-			m["deitado"] = true
-			m["vida"] = m["t"] + rand_range(1.2, 2.4)
 	for i in range(_miudos.size() - 1, -1, -1):
-		if _miudos[i]["t"] >= _miudos[i]["vida"]:
+		if _miudos[i]["t"] >= _miudos[i]["vida"] or _miudos[i]["pos"].y > _fora:
 			_miudos.remove(i)
 	for p in _po:
 		p["t"] += delta
@@ -436,53 +427,12 @@ func _process(delta: float) -> void:
 		l["pos"] += l["vel"] * delta
 		l["ang"] += l["giro"] * delta
 	for i in range(_lascas.size() - 1, -1, -1):
-		if _lascas[i]["t"] >= _lascas[i]["vida"]:
+		if _lascas[i]["t"] >= _lascas[i]["vida"] or _lascas[i]["pos"].y > _fora:
 			_lascas.remove(i)
 	update()
 	_luz.update()
 	if _cacos.empty() and _miudos.empty() and _po.empty() and _lascas.empty() and _fila.empty() and _clarao <= 0.0:
 		set_process(false)
-
-
-## O caco bateu na tábua: quica mais baixo, o grande se parte e no fim fica
-## deitado (achatado de frente) brilhando um pouco antes de sumir.
-func _bater(c: Dictionary) -> void:
-	var v: Vector2 = c["vel"]
-	for k in 2 + randi() % 3:
-		_miudos.append({"pos": c["pos"], "vel": Vector2(rand_range(-110, 110), rand_range(-150, -50)) * _k,
-			"t": 0.0, "vida": rand_range(0.6, 1.4), "fase": randf() * TAU, "deitado": false})
-	if c["toques"] >= 3 or abs(v.y) < 120.0 * _k:
-		c["vel"] = Vector2.ZERO
-		c["giro"] = 0.0
-		c["deitado"] = 1.0
-		c["t"] = max(c["t"], 1.4)
-		return
-	if c["toques"] == 1 and c["area"] > 70.0 * _k * _k:
-		# o grande se parte em dois na batida (cada metade sai do lugar dela
-		# no caco, com o mesmo giro)
-		var original = PoolVector2Array()
-		for uv in c["uvs"]:
-			original.append(uv / _uv)
-		var centro0 = _centro(original)
-		var pedacos = _partir(original)
-		if pedacos.size() >= 2:
-			c["t"] = 99.0
-			var esc = 1.0 + 0.25 * c["frente"]
-			for q in pedacos:
-				var antes = _cacos.size()
-				_novo_caco(q, centro0, 0.0)
-				if _cacos.size() > antes:
-					var n: Dictionary = _cacos[_cacos.size() - 1]
-					n["pos"] = c["pos"] + (n["pos"] - centro0).rotated(c["ang"]) * esc
-					n["ang"] = c["ang"]
-					n["vel"] = Vector2(v.x * 0.5 + rand_range(-60, 60) * _k, -abs(v.y) * rand_range(0.2, 0.35))
-					n["giro"] = rand_range(-6.0, 6.0)
-					n["chao"] = c["chao"]
-					n["toques"] = 1
-					n["frente"] = c["frente"]
-			return
-	c["vel"] = Vector2(v.x * 0.55, -abs(v.y) * rand_range(0.22, 0.32))
-	c["giro"] = c["giro"] * 0.5 + rand_range(-4.0, 4.0)
 
 
 # ───────────────────────────────────────────── desenho

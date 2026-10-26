@@ -82,6 +82,7 @@ var _android = false
 var _seta: ImageTexture
 var _seta_cena = 0
 var _seta_ms = 0               # quando a seta transparente foi reaplicada
+var _seta_nula = false         # o APK traz os modelos com a seta "nenhum"
 var _ultimo = Vector2(INF, INF)
 var _quadro_d = Vector2.ZERO   # o quanto o ponteiro andou neste quadro (pixels da janela)
 var _na_borda = Vector2.ZERO   # borda do jogo para onde a arma passou (-1, 0, 1 em cada eixo)
@@ -103,6 +104,8 @@ func _ready() -> void:
 	pause_mode = Node.PAUSE_MODE_PROCESS
 	process_priority = -100     # atualiza antes das telas lerem
 	_android = OS.get_name() == "Android"
+	_seta_nula = ProjectSettings.has_setting("lazer/tela/seta_nula") \
+			and bool(ProjectSettings.get_setting("lazer/tela/seta_nula"))
 	OS.vsync_enabled = true
 	Engine.target_fps = 0
 	Engine.iterations_per_second = 30
@@ -153,10 +156,20 @@ func sensibilidade_cobertura() -> float:
 
 
 ## A seta do sistema some: no PC o modo escondido; no Android 7 (onde o Godot
-## 3.6 não esconde o ponteiro) uma seta transparente própria. O Godot 3.6
-## aplica a imagem no formato ATUAL e depois troca para o pedido: com
-## `todos`, duas chamadas por formato deixam todos transparentes.
+## 3.6 não esconde o ponteiro) o formato "nenhum" do Android, quando o APK
+## saiu do gerador com os modelos sem seta (todos os formatos do Godot viram
+## "nenhum": basta tirar a imagem própria); senão uma seta transparente
+## própria. O Godot 3.6 aplica a imagem no formato ATUAL e depois troca para
+## o pedido: com `todos`, duas chamadas por formato deixam todos
+## transparentes.
 func _esconder_seta(todos: bool = false) -> void:
+	if _android and _seta_nula:
+		if _seta_ms == 0:
+			Tela.marca("seta do sistema: formato nenhum")
+		Input.set_custom_mouse_cursor(null, Input.CURSOR_ARROW)
+		Input.set_mouse_mode(Input.MOUSE_MODE_HIDDEN)
+		_seta_ms = OS.get_ticks_msec()
+		return
 	if _seta == null:
 		var img = Image.new()
 		img.create(16, 16, false, Image.FORMAT_RGBA8)

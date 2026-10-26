@@ -23,7 +23,7 @@ func _init() -> void:
 ## tex/regiao: a imagem do alvo e o retângulo dela (px da textura) que está
 ## na tela; xf: a transformação do alvo na tela (posição, giro, escala) com o
 ## centro da região na origem; tiro: o ponto do tiro (coords deste nó).
-## opções: n (pedaços, padrão 14), forca, grav, chao, vida, cor, sobe (empurrão
+## opções: n (pedaços, padrão 14), forca, grav, vida, cor, sobe (empurrão
 ## para cima), giro.
 func estourar(tex: Texture, regiao: Rect2, xf: Transform2D, tiro: Vector2, o: Dictionary = {}) -> void:
 	if tex == null:
@@ -31,7 +31,6 @@ func estourar(tex: Texture, regiao: Rect2, xf: Transform2D, tiro: Vector2, o: Di
 	var n = int(max(6, round(float(o.get("n", 14)) * Maquina.fator_efeitos())))
 	var forca: float = o.get("forca", 1.0)
 	var grav: float = o.get("grav", 1500.0)
-	var chao: float = o.get("chao", 1.0e9)
 	var vida: float = o.get("vida", 1.1)
 	var cor: Color = o.get("cor", Color.white)
 	var sobe: float = o.get("sobe", 260.0)
@@ -59,15 +58,15 @@ func estourar(tex: Texture, regiao: Rect2, xf: Transform2D, tiro: Vector2, o: Di
 		var k = _rng.randf_range(0.30, 0.50)
 		var a2 = tiro_local.linear_interpolate(a, k)
 		var b2 = tiro_local.linear_interpolate(b, k)
-		_pedaco([tiro_local, a2, b2], tex, ts, regiao, xf, tiro, forca * 1.25, grav, chao, vida, cor, sobe, giro)
-		_pedaco([a2, a, b, b2], tex, ts, regiao, xf, tiro, forca, grav, chao, vida, cor, sobe, giro)
+		_pedaco([tiro_local, a2, b2], tex, ts, regiao, xf, tiro, forca * 1.25, grav, vida, cor, sobe, giro)
+		_pedaco([a2, a, b, b2], tex, ts, regiao, xf, tiro, forca, grav, vida, cor, sobe, giro)
 	while _lista.size() > MAX:
 		_lista.pop_front()
 	set_process(true)
 
 
 func _pedaco(pts: Array, tex: Texture, ts: Vector2, regiao: Rect2, xf: Transform2D, tiro: Vector2,
-		forca: float, grav: float, chao: float, vida: float, cor: Color, sobe: float, giro: float) -> void:
+		forca: float, grav: float, vida: float, cor: Color, sobe: float, giro: float) -> void:
 	var centro = Vector2.ZERO
 	for p in pts:
 		centro += p
@@ -86,7 +85,7 @@ func _pedaco(pts: Array, tex: Texture, ts: Vector2, regiao: Rect2, xf: Transform
 	var v = dir * _rng.randf_range(160.0, 460.0) * forca + Vector2(_rng.randf_range(-60, 60), -sobe * _rng.randf_range(0.5, 1.2))
 	_lista.append({"pts": locais, "uv": uvs, "tex": tex, "pos": mundo, "vel": v, "rot": 0.0,
 		"giro": _rng.randf_range(-giro, giro), "t": 0.0, "vida": vida * _rng.randf_range(0.75, 1.25),
-		"grav": grav, "chao": chao, "cor": cor, "cores": PoolColorArray([cor])})
+		"grav": grav, "cor": cor, "cores": PoolColorArray([cor])})
 
 
 func vazio() -> bool:
@@ -108,10 +107,10 @@ func _process(delta: float) -> void:
 		var v: Vector2 = c["vel"]
 		v.y += c["grav"] * delta
 		var p: Vector2 = c["pos"] + v * delta
-		if p.y > c["chao"]:
-			p.y = c["chao"]
-			v = Vector2(v.x * 0.5, -abs(v.y) * 0.22)
-			c["giro"] *= 0.4
+		# nada quica: o caco passa reto e, fora da tela, some na hora
+		if p.y > 1900.0 or p.x < -120.0 or p.x > 1144.0:
+			_lista.remove(i)
+			continue
 		c["vel"] = v
 		c["pos"] = p
 		c["rot"] += c["giro"] * delta

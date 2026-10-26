@@ -3,8 +3,8 @@ extends "res://scripts/fase.gd"
 ## FUNDO DO MAR (Atlântida), em 2D para a Mali-450.
 ##
 ## Água-viva +20, pote +80, baú +100. BOMBA: não atire! A terceira bomba
-## acertada encerra a partida. O que cai de cima (pote, baú, bomba) para no
-## chão do mar: o pote e o baú espatifam, a bomba só sai de cena.
+## acertada encerra a partida. O que cai de cima (pote, baú, bomba) passa
+## reto pela tela e, saindo dela, some na hora (nada processa fora de cena).
 ## De tempos em tempos um CARDUME DOURADO atravessa: cada peixe +40, o
 ## cardume inteiro +200 ("POSEIDON'S TREASURE!").
 ## Aos 9 s de partida o NAVIO afunda de cima, de proa, balançando, e pousa lá
@@ -43,10 +43,11 @@ class Obj:
 	var rot0 = 0.0
 	var rot1 = 0.0
 	var pulsos = 0
-	var ate_chao = false
+	var de_cima = false
 	var atingido = false
 	var anim_t = 0.0
 	var bolha_t = 0.3
+	var visto = false       # já entrou na tela
 
 
 var objs = []
@@ -347,14 +348,10 @@ func _spawnar(tipo: String) -> void:
 			break
 	if not achou:
 		return
-	# o que cai de cima para no chão (e espatifa)
+	# o que cai de cima passa reto pela tela e some lá embaixo (sem bater
+	# no chão: nada fica processando fora de cena)
 	if tipo != "aguaviva" and o.ini.y < 0.0 and o.fim.y > tela_v.y:
-		var meia: float = o.f["cel"].y * o.esc * 0.5
-		var chao = CHAO - meia * 0.75 + rand_range(-10.0, 24.0)
-		var s: float = clamp((chao - o.ini.y) / max(o.fim.y - o.ini.y, 1.0), 0.1, 1.0)
-		o.fim = o.ini.linear_interpolate(o.fim, s)
-		o.dur *= s
-		o.ate_chao = true
+		o.de_cima = true
 	if tipo == "aguaviva":
 		o.pulsos = int(max(2, round(o.dur / AGUAVIVA_PERIODO)))
 		o.rot0 = rand_range(-8.0, 8.0)
@@ -391,10 +388,7 @@ func _mover(delta: float) -> void:
 			continue
 		o.t += delta / max(o.dur, 0.1)
 		if o.t >= 1.0:
-			if o.ate_chao:
-				_bater_no_chao(o)
-			else:
-				o.no.queue_free()
+			o.no.queue_free()
 			objs.remove(i)
 			i -= 1
 			continue
@@ -404,9 +398,21 @@ func _mover(delta: float) -> void:
 			k = o.t + AGUAVIVA_TRANCO * sin(TAU * o.pulsos * o.t) / (TAU * o.pulsos)
 			var fase = fmod(o.t * o.pulsos, 1.0)
 			o.no.scale = Vector2(o.esc * (1.0 + 0.06 * sin(fase * TAU)), o.esc * (1.0 - 0.06 * sin(fase * TAU)))
-		elif o.ate_chao:
+		elif o.de_cima:
 			k = o.t * o.t * (3.0 - 2.0 * o.t) * 0.35 + o.t * o.t * 0.65
 		o.no.position = o.ini.linear_interpolate(o.fim, k)
+		# o que já passou pela tela e saiu some na hora (nada processa fora
+		# de cena)
+		var meio: float = max(o.f["cel"].x, o.f["cel"].y) * o.esc * 0.6
+		var p_o: Vector2 = o.no.position
+		var dentro = p_o.x > -meio and p_o.x < Tela.TELA.x + meio and p_o.y > -meio and p_o.y < Tela.TELA.y + meio
+		if dentro:
+			o.visto = true
+		elif o.visto:
+			o.no.queue_free()
+			objs.remove(i)
+			i -= 1
+			continue
 		o.no.rotation_degrees = lerp(o.rot0, o.rot1, o.t)
 		o.anim_t += delta
 		var parado: Array = o.f["parado"]
@@ -418,24 +424,6 @@ func _mover(delta: float) -> void:
 				"vel": [10.0, 40.0], "ang": [240.0, 300.0], "vida": [0.8, 1.4], "tam": [6.0, 14.0], "fim": 1.0,
 				"cor": Color(0.85, 0.97, 1.0, 0.7), "grav": -120.0, "arrasto": 1.0})
 		i -= 1
-
-
-## Pote ou baú que chegou no chão espatifa (sem ponto e sem castigo); a
-## bomba só sai de cena.
-func _bater_no_chao(o: Obj) -> void:
-	if o.tipo == "bomba":
-		var tw = create_tween()
-		tw.tween_property(o.no, "modulate:a", 0.0, 0.25)
-		tw.tween_callback(o.no, "queue_free")
-		return
-	var p = o.no.position
-	var xf = o.no.get_transform() * o.spr.get_transform()
-	var cel: Vector2 = o.f["cel"]
-	cacos.estourar(o.f["tex"], Rect2(Vector2.ZERO, cel), xf, p + Vector2(0, 30), {"n": 10, "forca": 0.6, "chao": CHAO + 10.0, "vida": 1.2, "sobe": 160.0})
-	particulas.explosao(p + Vector2(0, 30), {"n": 3, "tex": Estilo.tex("fx_nuvem"), "vel": [20.0, 60.0], "ang": [200.0, 340.0], "vida": [0.8, 1.4],
-		"tam": [50.0, 80.0], "fim": 1.8, "cor": Color(0.62, 0.78, 0.82, 0.5), "grav": -20.0})
-	Maquina.efeito(_som_vaso if o.tipo == "vaso" else _som_bau, -9.0, rand_range(0.85, 0.95))
-	o.no.queue_free()
 
 
 # ------------------------------------------------------------ tiro
@@ -509,7 +497,7 @@ func _acertar(o: Obj, p: Vector2) -> void:
 			clarao(Color(1.0, 0.95, 0.70, 0.12), 0.2)
 			tremer(3.5, 0.12)
 			var xf = o.no.get_transform() * o.spr.get_transform()
-			cacos.estourar(o.f["tex"], Rect2(Vector2.ZERO, o.f["cel"]), xf, p, {"n": 12, "forca": 1.0, "vida": 1.0, "chao": CHAO + 10.0})
+			cacos.estourar(o.f["tex"], Rect2(Vector2.ZERO, o.f["cel"]), xf, p, {"n": 12, "forca": 1.0, "vida": 1.0})
 			_cavalo(o.no.position)
 		"bau":
 			Maquina.efeito(_som_bau, -0.2, rand_range(1.0, 1.02))
@@ -518,7 +506,7 @@ func _acertar(o: Obj, p: Vector2) -> void:
 			particulas_luz.explosao(o.no.position, {"n": 24, "vel": [180.0, 460.0], "ang": [200.0, 340.0], "vida": [0.5, 0.9], "tam": [8.0, 14.0],
 				"cor": Color(1.0, 0.82, 0.3), "grav": 900.0, "estica": 0.02})
 			particulas.explosao(o.no.position, {"n": 14, "tex": Estilo.tex("fx_ponto"), "vel": [120.0, 380.0], "ang": [200.0, 340.0], "vida": [0.8, 1.3],
-				"tam": [10.0, 16.0], "fim": 1.0, "cor": Color(1.0, 0.78, 0.2), "grav": 1100.0, "chao": CHAO + 20.0, "giro": [-10.0, 10.0]})
+				"tam": [10.0, 16.0], "fim": 1.0, "cor": Color(1.0, 0.78, 0.2), "grav": 1100.0, "giro": [-10.0, 10.0]})
 	# a animação de acerto da folha (estoura, abre, desfaz) e some
 	_animar_acerto(o, 9.0)
 
@@ -761,7 +749,7 @@ func _navio_tick(delta: float) -> void:
 		particulas.explosao(pe, {"n": 8, "tex": Estilo.tex("fx_nuvem"), "vel": [40.0, 140.0], "ang": [190.0, 350.0], "vida": [1.4, 2.4],
 			"tam": [60.0, 110.0], "fim": 2.2, "cor": Color(0.62, 0.74, 0.80, 0.55), "grav": -30.0, "arrasto": 1.2, "espalha": 90.0})
 		particulas.explosao(pe, {"n": 12, "tex": Estilo.tex("mar_farpa"), "vel": [120.0, 300.0], "ang": [200.0, 340.0], "vida": [0.8, 1.4],
-			"tam": [18.0, 30.0], "cor": Color(0.55, 0.42, 0.30), "grav": 400.0, "giro": [-10.0, 10.0], "chao": pe.y + 10.0})
+			"tam": [18.0, 30.0], "cor": Color(0.55, 0.42, 0.30), "grav": 400.0, "giro": [-10.0, 10.0]})
 		_bolhas.explosao(pe, {"n": 16, "tex": Estilo.tex("mar_bolha"), "vel": [60.0, 200.0], "ang": [210.0, 330.0], "vida": [1.0, 1.8],
 			"tam": [8.0, 22.0], "fim": 1.0, "cor": Color(0.85, 0.95, 1.0, 0.8), "grav": -260.0, "espalha": 120.0})
 
